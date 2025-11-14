@@ -1,0 +1,28 @@
+{
+    "data-share":
+    {
+        "shares":
+        [
+            {
+                "name": "techfunway.bookmarks",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "techfunway.bookmarks"
+                    ]
+                }
+            },
+            {
+                "name": "techfunway.bookmarks/data",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "techfunway.bookmarks"
+                    ]
+                }
+            }
+        ]
+    }
+}

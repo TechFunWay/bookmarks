@@ -1,0 +1,10 @@
+appname               = techfunway.bookmarks
+version               = 0.1.0
+display_name          = 网址收藏夹
+desc                  = 收藏自己的网址功能，支持多级文件夹，文件夹下添加网址，支持自动识别网址名称和网址图标。支持排序和增删改
+arch                  = x86_64
+source                = thirdparty
+maintainer            = 科技智趣坊
+distributor           = 科技智趣坊
+desktop_uidir         = ui
+desktop_applaunchname = techfunway.bookmarks.Application
