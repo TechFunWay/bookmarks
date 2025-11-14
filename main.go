@@ -95,7 +95,7 @@ func main() {
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/*", fileServer)
 
-	addr := ":8080"
+	addr := ":8901"
 	log.Printf("Bookmark server running on %s", addr)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server exited: %v", err)
