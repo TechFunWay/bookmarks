@@ -6,11 +6,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,8 +22,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/html"
+	_ "modernc.org/sqlite"
 )
 
 const (
@@ -46,7 +50,17 @@ type node struct {
 }
 
 func main() {
-	db, err := sql.Open("sqlite3", "./data.db?_foreign_keys=on")
+	dataUrl := flag.String("dataUrl", "./", "数据存储路径") // 定义字符串参数
+	flag.Parse()                                      // 缺少此行将导致获取默认值
+	fmt.Println("url:", *dataUrl)
+	// 创建目录
+	if _, err := os.Stat(*dataUrl); os.IsNotExist(err) {
+		if err := os.Mkdir(*dataUrl, 0755); err != nil {
+			log.Fatalf("failed to create directory: %v", err)
+		}
+	}
+
+	db, err := sql.Open("sqlite", *dataUrl+"data.db?_foreign_keys=on")
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
@@ -872,52 +886,157 @@ func (s *server) getNode(ctx context.Context, id int64) (*node, error) {
 }
 
 func (s *server) fetchMetadata(rawURL string) (string, string, error) {
-	req, err := http.NewRequest("GET", rawURL, nil)
-	if err != nil {
-		return "", "", err
-	}
-	req.Header.Set("User-Agent", "BookmarkCollector/1.0")
+	// 解析URL以获取主机名作为备用标题
+	parsedURL, parseErr := url.Parse(rawURL)
+	var hostname string
+	var baseIconURL string
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return "", "", fmt.Errorf("remote status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", "", err
-	}
-
-	doc, err := html.Parse(bytes.NewReader(body))
-	if err != nil {
-		return "", "", err
-	}
-
-	title := extractTitle(doc)
-	iconHref := extractIconHref(doc)
-
-	if title == "" {
-		title = rawURL
-	}
-
-	iconURL := ""
-	if iconHref != "" {
-		resolved, resolveErr := resolveURL(rawURL, iconHref)
-		if resolveErr == nil {
-			iconURL = resolved
+	if parseErr == nil && parsedURL != nil {
+		// 确保parsedURL正确初始化
+		if parsedURL.Scheme == "" {
+			parsedURL.Scheme = "https"
+		}
+		if parsedURL.Host != "" {
+			hostname = parsedURL.Hostname()
+			// 预构建基础图标URL
+			baseIconURL = parsedURL.Scheme + "://" + parsedURL.Host + "/favicon.ico"
 		}
 	}
-	if iconURL == "" {
-		if fallback, err := buildFaviconFallback(rawURL); err == nil {
-			iconURL = fallback
+
+	// 重试机制配置
+	maxRetries := 2
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// 每次重试添加一些延迟
+		if attempt > 0 {
+			jitter := time.Duration(rand.Intn(500)) * time.Millisecond
+			time.Sleep(time.Second + jitter)
 		}
+
+		req, err := http.NewRequest("GET", rawURL, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		// 使用更完整的用户代理和HTTP头，更像真实浏览器
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+		req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+		req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set("Upgrade-Insecure-Requests", "1")
+		req.Header.Set("Sec-Fetch-Dest", "document")
+		req.Header.Set("Sec-Fetch-Mode", "navigate")
+		req.Header.Set("Sec-Fetch-Site", "none")
+		req.Header.Set("Sec-Fetch-User", "?1")
+
+		// 设置超时上下文
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		req = req.WithContext(ctx)
+
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			// 网络错误时继续重试
+			lastErr = err
+			continue
+		}
+
+		defer resp.Body.Close()
+
+		// 对于403错误，尝试不同的策略
+		if resp.StatusCode == 403 {
+			// 记录错误但继续到下一个重试
+			log.Printf("Received 403 Forbidden for URL: %s, attempt: %d", rawURL, attempt+1)
+			lastErr = fmt.Errorf("remote status 403 Forbidden")
+			continue
+		}
+
+		// 对于其他错误状态码，直接使用URL信息作为备选
+		if resp.StatusCode >= 400 {
+			log.Printf("Received status %d for URL: %s", resp.StatusCode, rawURL)
+			// 即使状态码错误，也尝试从URL获取基本信息
+			if hostname != "" {
+				return hostname, baseIconURL, nil
+			}
+			return rawURL, baseIconURL, nil
+		}
+
+		// 确保我们只读取HTML内容
+		contentType := resp.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "text/html") {
+			// 对于非HTML内容，使用已解析的主机名
+			if hostname != "" {
+				return hostname, baseIconURL, nil
+			}
+			return rawURL, baseIconURL, nil
+		}
+
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		// 首先尝试简单的正则表达式提取标题，作为备份方法
+		titleRegex := regexp.MustCompile(`<title[^>]*>(.*?)</title>`)
+		matches := titleRegex.FindSubmatch(body)
+		var title string
+		if len(matches) > 1 {
+			title = strings.TrimSpace(string(matches[1]))
+			// 移除HTML实体
+			title = strings.ReplaceAll(title, "&nbsp;", " ")
+			title = strings.ReplaceAll(title, "&lt;", "<")
+			title = strings.ReplaceAll(title, "&gt;", ">\n")
+			title = strings.ReplaceAll(title, "&amp;", "&")
+			title = strings.ReplaceAll(title, "&quot;", "\"")
+			title = strings.ReplaceAll(title, "&#39;", "'")
+		}
+
+		// 解析HTML文档用于标题和图标提取
+		var doc *html.Node
+		doc, err = html.Parse(bytes.NewReader(body))
+
+		// 如果正则表达式没有找到标题，尝试使用html包解析
+		if title == "" && err == nil {
+			title = extractTitle(doc)
+		}
+
+		// 如果仍然没有标题，使用已解析的主机名
+		if title == "" {
+			if hostname != "" {
+				title = hostname
+			} else {
+				title = rawURL
+			}
+		}
+
+		// 优先使用预构建的默认图标URL
+		iconURL := baseIconURL
+
+		// 然后尝试从页面提取更具体的图标
+		if err == nil && doc != nil {
+			iconHref := extractIconHref(doc)
+			if iconHref != "" {
+				// 使用resolveURL函数解析相对URL
+				resolved, resolveErr := resolveURL(rawURL, iconHref)
+				if resolveErr == nil {
+					iconURL = resolved
+				}
+			}
+		}
+
+		return title, iconURL, nil
 	}
-	return title, iconURL, nil
+
+	// 如果所有重试都失败，返回URL信息作为备选
+	log.Printf("All %d attempts failed for URL: %s, last error: %v", maxRetries+1, rawURL, lastErr)
+	if hostname != "" {
+		return hostname, baseIconURL, nil
+	}
+	return rawURL, baseIconURL, nil
 }
 
 func extractTitle(n *html.Node) string {
