@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -70,10 +72,26 @@ func main() {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 
+	// 创建支持自签名证书的HTTP客户端
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			// 允许自签名证书和不安全的TLS连接（主要用于内网环境）
+			InsecureSkipVerify: true,
+		},
+	}
+
 	s := &server{
 		db: db,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Transport: transport,
+			Timeout:   10 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// 允许最多10次重定向
+				if len(via) >= 10 {
+					return errors.New("too many redirects")
+				}
+				return nil
+			},
 		},
 	}
 
@@ -145,11 +163,38 @@ func (s *server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, errors.New("missing url parameter"))
 		return
 	}
-	normalized, err := normalizeURL(rawURL)
+
+	// 处理双重URL编码
+	targetURL := rawURL
+	if strings.Contains(rawURL, "%253A") || strings.Contains(rawURL, "%2F") {
+		// 双重编码检测，尝试解码两次
+		if decoded, err := url.QueryUnescape(rawURL); err == nil {
+			if strings.Contains(decoded, "%3A") || strings.Contains(decoded, "%2F") {
+				// 可能还是编码的，再次解码
+				if doubleDecoded, err := url.QueryUnescape(decoded); err == nil {
+					targetURL = doubleDecoded
+					log.Printf("双重URL编码检测，原始: %s", rawURL)
+					log.Printf("双重解码后: %s", targetURL)
+				} else {
+					targetURL = decoded
+					log.Printf("单次URL解码: %s", targetURL)
+				}
+			} else {
+				targetURL = decoded
+				log.Printf("单次URL解码: %s", targetURL)
+			}
+		}
+	}
+
+	normalized, err := normalizeURL(targetURL)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid url: %w", err))
 		return
 	}
+
+	// 特殊处理内网地址
+	normalized = handleIntranetURL(normalized)
+
 	title, icon, err := s.fetchMetadata(normalized)
 	if err != nil {
 		respondError(w, http.StatusBadGateway, fmt.Errorf("metadata fetch failed: %w", err))
@@ -920,6 +965,9 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 			continue
 		}
 
+		// 创建跟踪重定向的响应
+		var finalURL string = rawURL
+
 		// 使用更完整的用户代理和HTTP头，更像真实浏览器
 		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
@@ -944,7 +992,26 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 			continue
 		}
 
+		// 获取最终的URL（跟随重定向后）
+		finalURL = resp.Request.URL.String()
+		if finalURL != rawURL {
+			log.Printf("URL重定向: %s -> %s", rawURL, finalURL)
+		}
+
 		defer resp.Body.Close()
+
+		// 处理gzip压缩内容
+		var bodyReader io.Reader = resp.Body
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			gz, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				log.Printf("无法创建gzip读取器: %v", err)
+				lastErr = err
+				continue
+			}
+			defer gz.Close()
+			bodyReader = gz
+		}
 
 		// 对于403错误，尝试不同的策略
 		if resp.StatusCode == 403 {
@@ -974,25 +1041,33 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 			return rawURL, baseIconURL, nil
 		}
 
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		body, err := io.ReadAll(io.LimitReader(bodyReader, 1<<20))
 		if err != nil {
 			lastErr = err
 			continue
 		}
 
+		// 调试：检查原始HTML内容（前1000字符）
+		log.Printf("原始HTML内容预览: %s", string(body[:min(1000, len(body))]))
+
 		// 首先尝试简单的正则表达式提取标题，作为备份方法
-		titleRegex := regexp.MustCompile(`<title[^>]*>(.*?)</title>`)
+		// 修复正则表达式，确保能正确匹配标题（包括换行情况）
+		titleRegex := regexp.MustCompile(`(?i)<title[^>]*>(.*?)</title>`)
 		matches := titleRegex.FindSubmatch(body)
 		var title string
 		if len(matches) > 1 {
-			title = strings.TrimSpace(string(matches[1]))
-			// 移除HTML实体
-			title = strings.ReplaceAll(title, "&nbsp;", " ")
-			title = strings.ReplaceAll(title, "&lt;", "<")
-			title = strings.ReplaceAll(title, "&gt;", ">\n")
-			title = strings.ReplaceAll(title, "&amp;", "&")
-			title = strings.ReplaceAll(title, "&quot;", "\"")
-			title = strings.ReplaceAll(title, "&#39;", "'")
+			title = strings.TrimSpace(html.UnescapeString(string(matches[1])))
+			// 移除多余的空白字符
+			title = strings.Join(strings.Fields(title), " ")
+			log.Printf("正则表达式提取到标题: %s", title)
+		} else {
+			log.Printf("正则表达式未找到标题，尝试多种模式...")
+			// 尝试更宽松的正则表达式
+			altRegex := regexp.MustCompile(`<title[^>]*>(.*?)</title>`)
+			altMatches := altRegex.FindSubmatch(body)
+			if len(altMatches) > 1 {
+				log.Printf("备用正则匹配到内容: %s", string(altMatches[1][:min(100, len(altMatches[1]))]))
+			}
 		}
 
 		// 解析HTML文档用于标题和图标提取
@@ -1002,14 +1077,19 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 		// 如果正则表达式没有找到标题，尝试使用html包解析
 		if title == "" && err == nil {
 			title = extractTitle(doc)
+			if title != "" {
+				log.Printf("HTML解析提取到标题: %s", title)
+			}
 		}
 
 		// 如果仍然没有标题，使用已解析的主机名
 		if title == "" {
 			if hostname != "" {
 				title = hostname
+				log.Printf("使用主机名作为标题: %s", title)
 			} else {
-				title = rawURL
+				title = finalURL
+				log.Printf("使用最终URL作为标题: %s", title)
 			}
 		}
 
@@ -1040,9 +1120,30 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 }
 
 func extractTitle(n *html.Node) string {
-	if n.Type == html.ElementNode && n.Data == "title" && n.FirstChild != nil {
-		return strings.TrimSpace(n.FirstChild.Data)
+	// 递归查找title标签
+	if n.Type == html.ElementNode && n.Data == "title" {
+		// 获取title标签内的所有文本内容
+		var titleText strings.Builder
+		var getText func(*html.Node)
+		getText = func(node *html.Node) {
+			if node.Type == html.TextNode {
+				titleText.WriteString(node.Data)
+			}
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				getText(child)
+			}
+		}
+		getText(n)
+		title := strings.TrimSpace(titleText.String())
+		if title != "" {
+			// 处理HTML实体
+			title = html.UnescapeString(title)
+			// 清理多余的空白字符
+			title = strings.Join(strings.Fields(title), " ")
+			return title
+		}
 	}
+	// 递归搜索子节点
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if title := extractTitle(c); title != "" {
 			return title
@@ -1131,4 +1232,47 @@ func respondError(w http.ResponseWriter, status int, err error) {
 	respondJSON(w, status, map[string]string{
 		"error": err.Error(),
 	})
+}
+
+// 辅助函数：获取最小值
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// handleIntranetURL 处理内网地址的特殊逻辑
+func handleIntranetURL(urlStr string) string {
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return urlStr
+	}
+
+	host := strings.ToLower(parsed.Host)
+
+	// 检测是否为内网地址
+	if strings.Contains(host, "127.0.0.1") ||
+		strings.Contains(host, "localhost") ||
+		strings.HasPrefix(host, "192.168.") ||
+		strings.HasPrefix(host, "10.") ||
+		strings.HasPrefix(host, "172.") {
+
+		// 如果是API端点，重定向到正确的内部API调用
+		if strings.Contains(urlStr, "/api/metadata") {
+			log.Printf("检测到内网API调用: %s", urlStr)
+
+			// 提取URL参数中的URL
+			apiURL := parsed.Query().Get("url")
+			if apiURL != "" {
+				log.Printf("提取的原始URL: %s", apiURL)
+				return apiURL
+			}
+		}
+
+		// 对于内网地址，添加更详细的日志
+		log.Printf("内网地址处理: %s", urlStr)
+	}
+
+	return urlStr
 }
