@@ -75,74 +75,78 @@
             暂无收藏的网址。
           </div>
           <div v-else>
-            <div v-if="bookmarkEditMode" class="bookmark-toolbar">
-              <div class="toolbar-info">
-                <span class="toolbar-text">已选择 {{ selectedBookmarks.size }} 个项目</span>
+            <div class="bookmark-content-container">
+              <div v-if="bookmarkEditMode" class="bookmark-toolbar">
+                <div class="toolbar-info">
+                  <span class="toolbar-text">已选择 {{ selectedBookmarks.size }} 个项目</span>
+                </div>
+                <div class="toolbar-actions">
+                  <button class="tertiary small" @click="selectAllBookmarks">
+                    {{ selectedBookmarks.size === displayBookmarks.length ? '取消全选' : '全选' }}
+                  </button>
+                  <button class="tertiary small" @click="deleteSelectedBookmarks" :disabled="selectedBookmarks.size === 0">
+                    <span class="action-icon">🗑️</span>
+                    删除选中
+                  </button>
+                  <button class="tertiary small" @click="moveSelectedBookmarks('up')" :disabled="selectedBookmarks.size === 0">
+                    <span class="action-icon">⬆️</span>
+                    上移
+                  </button>
+                  <button class="tertiary small" @click="moveSelectedBookmarks('down')" :disabled="selectedBookmarks.size === 0">
+                    <span class="action-icon">⬇️</span>
+                    下移
+                  </button>
+                </div>
               </div>
-              <div class="toolbar-actions">
-                <button class="tertiary small" @click="selectAllBookmarks">
-                  {{ selectedBookmarks.size === displayBookmarks.length ? '取消全选' : '全选' }}
-                </button>
-                <button class="tertiary small" @click="deleteSelectedBookmarks" :disabled="selectedBookmarks.size === 0">
-                  <span class="action-icon">🗑️</span>
-                  删除选中
-                </button>
-                <button class="tertiary small" @click="moveSelectedBookmarks('up')" :disabled="selectedBookmarks.size === 0">
-                  <span class="action-icon">⬆️</span>
-                  上移
-                </button>
-                <button class="tertiary small" @click="moveSelectedBookmarks('down')" :disabled="selectedBookmarks.size === 0">
-                  <span class="action-icon">⬇️</span>
-                  下移
-                </button>
+              <div class="bookmark-scroll-container">
+                <ul class="bookmark-list">
+                  <li 
+                    v-for="item in displayBookmarks" 
+                    :key="item.id" 
+                    class="bookmark-item"
+                    :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }"
+                    @contextmenu.prevent="showBookmarkActions(item.raw, $event)"
+                  >
+                    <div class="bookmark-edit-checkbox" v-if="bookmarkEditMode">
+                      <input 
+                        type="checkbox" 
+                        :checked="selectedBookmarks.has(item.id)"
+                        @change="toggleBookmarkSelection(item.id)"
+                      />
+                    </div>
+                    <div class="bookmark-main">
+                      <span class="node-icon">
+                        <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
+                        <span v-else>🔖</span>
+                      </span>
+                      <div class="bookmark-info">
+                        <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
+                          {{ item.title }}
+                        </a>
+                        <span class="bookmark-url">{{ item.url }}</span>
+                        <span class="bookmark-path" v-if="item.path">
+                          {{ item.path }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="bookmark-actions" v-if="bookmarkEditMode">
+                      <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'up')" title="上移">
+                        <span class="action-icon">⬆️</span>
+                      </button>
+                      <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'down')" title="下移">
+                        <span class="action-icon">⬇️</span>
+                      </button>
+                      <button class="tertiary small" @click="editBookmark(item.raw)" title="编辑">
+                        <span class="action-icon">✏️</span>
+                      </button>
+                      <button class="tertiary small danger" @click="deleteBookmark(item.raw)" title="删除">
+                        <span class="action-icon">🗑️</span>
+                      </button>
+                    </div>
+                  </li>
+                </ul>
               </div>
             </div>
-            <ul class="bookmark-list">
-              <li 
-                v-for="item in displayBookmarks" 
-                :key="item.id" 
-                class="bookmark-item"
-                :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }"
-                @contextmenu.prevent="showBookmarkActions(item.raw, $event)"
-              >
-                <div class="bookmark-edit-checkbox" v-if="bookmarkEditMode">
-                  <input 
-                    type="checkbox" 
-                    :checked="selectedBookmarks.has(item.id)"
-                    @change="toggleBookmarkSelection(item.id)"
-                  />
-                </div>
-                <div class="bookmark-main">
-                  <span class="node-icon">
-                    <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
-                    <span v-else>🔖</span>
-                  </span>
-                  <div class="bookmark-info">
-                    <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
-                      {{ item.title }}
-                    </a>
-                    <span class="bookmark-url">{{ item.url }}</span>
-                    <span class="bookmark-path" v-if="item.path">
-                      {{ item.path }}
-                    </span>
-                  </div>
-                </div>
-                <div class="bookmark-actions" v-if="bookmarkEditMode">
-                  <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'up')" title="上移">
-                    <span class="action-icon">⬆️</span>
-                  </button>
-                  <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'down')" title="下移">
-                    <span class="action-icon">⬇️</span>
-                  </button>
-                  <button class="tertiary small" @click="editBookmark(item.raw)" title="编辑">
-                    <span class="action-icon">✏️</span>
-                  </button>
-                  <button class="tertiary small danger" @click="deleteBookmark(item.raw)" title="删除">
-                    <span class="action-icon">🗑️</span>
-                  </button>
-                </div>
-              </li>
-            </ul>
           </div>
         </section>
       </main>
