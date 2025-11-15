@@ -57,7 +57,10 @@ const BookmarkNode = {
       <div :class="['tree-row', { selected: isSelected }]" :style="indentStyle" @contextmenu.prevent="onContextMenu">
         <button class="node-main" type="button" @click="onSelect">
           <span class="node-icon">
-            <template v-if="isFolder">📁</template>
+            <template v-if="isFolder">
+              <span v-if="level === 0">📁</span>
+              <span v-else>🗂️</span>
+            </template>
             <template v-else>
               <img v-if="getFaviconUrl && getFaviconUrl(node)" :src="getFaviconUrl(node)" alt="favicon" />
               <span v-else>🔖</span>
@@ -143,6 +146,8 @@ const app = createApp({
         type: "success",
         timer: null,
       },
+      bookmarkEditMode: false,
+      selectedBookmarks: new Set(),
     };
   },
   computed: {
@@ -262,8 +267,20 @@ const app = createApp({
       if (this.isIntranetUrl(item.url)) {
         return '';
       }
-      // 正常返回favicon_url
-      return item.favicon_url || '';
+      
+      // 如果有明确的favicon_url，优先使用
+      if (item.favicon_url && item.favicon_url.trim()) {
+        return item.favicon_url.trim();
+      }
+      
+      // 如果没有favicon_url，则使用默认的 /favicon.ico 路径
+      try {
+        const url = new URL(item.url);
+        return `${url.protocol}//${url.host}/favicon.ico`;
+      } catch (error) {
+        // 如果URL解析失败，返回空字符串
+        return '';
+      }
     },
     async loadTree() {
       this.loading = true;
@@ -699,6 +716,131 @@ const app = createApp({
         this.toast.visible = false;
         this.toast.timer = null;
       }, 2200);
+    },
+    // 编辑模式相关方法
+    toggleBookmarkEdit() {
+      if (this.bookmarkEditMode) {
+        // 退出编辑模式，清除选择状态
+        this.bookmarkEditMode = false;
+        this.selectedBookmarks.clear();
+      } else {
+        // 进入编辑模式
+        this.bookmarkEditMode = true;
+        this.hideContextMenu();
+      }
+    },
+    toggleBookmarkSelection(id) {
+      if (this.selectedBookmarks.has(id)) {
+        this.selectedBookmarks.delete(id);
+      } else {
+        this.selectedBookmarks.add(id);
+      }
+    },
+    selectAllBookmarks() {
+      if (this.selectedBookmarks.size === this.displayBookmarks.length) {
+        // 取消全选
+        this.selectedBookmarks.clear();
+      } else {
+        // 全选
+        this.selectedBookmarks.clear();
+        this.displayBookmarks.forEach(bookmark => {
+          this.selectedBookmarks.add(bookmark.id);
+        });
+      }
+    },
+    async deleteSelectedBookmarks() {
+      if (this.selectedBookmarks.size === 0) {
+        return;
+      }
+      const count = this.selectedBookmarks.size;
+      const ok = window.confirm(`确定删除选中的 ${count} 个网址吗？该操作不可撤销。`);
+      if (!ok) return;
+      
+      try {
+        const promises = Array.from(this.selectedBookmarks).map(id => 
+          fetch(`/api/nodes/${id}`, { method: "DELETE" })
+        );
+        const results = await Promise.all(promises);
+        
+        // 检查是否有失败的请求
+        const failedRequests = results.filter(res => !res.ok);
+        if (failedRequests.length > 0) {
+          throw new Error(`${failedRequests.length} 个删除操作失败`);
+        }
+        
+        // 清理状态
+        this.selectedBookmarks.clear();
+        this.bookmarkEditMode = false;
+        await this.loadTree();
+        this.showToast(`成功删除 ${count} 个网址`, "success");
+      } catch (error) {
+        this.showToast(error.message || "批量删除失败", "error");
+      }
+    },
+    async moveSelectedBookmarks(direction) {
+      if (this.selectedBookmarks.size === 0) return;
+      
+      // 获取选中的书签并按当前显示顺序排列
+      const selectedItems = this.displayBookmarks.filter(bookmark => 
+        this.selectedBookmarks.has(bookmark.id)
+      );
+      
+      try {
+        let successCount = 0;
+        const totalCount = selectedItems.length;
+        
+        // 上移：从上到下依次移动每个选中的项目
+        if (direction === 'up') {
+          for (const item of selectedItems) {
+            try {
+              await this.reorderNode({ node: item.raw, direction: 'up' });
+              successCount++;
+            } catch (error) {
+              console.warn(`移动项目 ${item.id} 失败:`, error);
+              // 单个项目移动失败不影响其他项目
+            }
+          }
+        } 
+        // 下移：从下到上依次移动每个选中的项目
+        else if (direction === 'down') {
+          for (const item of [...selectedItems].reverse()) {
+            try {
+              await this.reorderNode({ node: item.raw, direction: 'down' });
+              successCount++;
+            } catch (error) {
+              console.warn(`移动项目 ${item.id} 失败:`, error);
+              // 单个项目移动失败不影响其他项目
+            }
+          }
+        }
+        
+        // 重新加载树结构
+        await this.loadTree();
+        
+        if (successCount === 0) {
+          this.showToast("无法移动选中的项目", "error");
+        } else if (successCount === totalCount) {
+          this.showToast(`已${direction === 'up' ? '上移' : '下移'} ${successCount} 个项目`, "success");
+        } else {
+          this.showToast(`成功移动 ${successCount}/${totalCount} 个项目`, "warning");
+        }
+      } catch (error) {
+        this.showToast(error.message || "批量移动操作失败", "error");
+      }
+    },
+    editBookmark(node) {
+      this.openEdit(node);
+    },
+    deleteBookmark(node) {
+      this.confirmDelete(node);
+    },
+    async moveSingleBookmark(node, direction) {
+      try {
+        await this.reorderNode({ node, direction });
+        this.showToast(`已${direction === 'up' ? '上移' : '下移'}该项目`, "success");
+      } catch (error) {
+        this.showToast(error.message || "移动操作失败", "error");
+      }
     },
   },
 });
