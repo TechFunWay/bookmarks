@@ -43,7 +43,7 @@ const BookmarkNode = {
     },
     onContextMenu(event) {
       if (this.isFolder) {
-        this.$emit("select", this.node);
+        // 防止右键时触发选择事件
         this.$emit("context", {
           node: this.node,
           x: event.clientX,
@@ -59,7 +59,7 @@ const BookmarkNode = {
           <span class="node-icon">
             <template v-if="isFolder">📁</template>
             <template v-else>
-              <img v-if="node.favicon_url" :src="node.favicon_url" alt="favicon" />
+              <img v-if="getFaviconUrl && getFaviconUrl(node)" :src="getFaviconUrl(node)" alt="favicon" />
               <span v-else>🔖</span>
             </template>
           </span>
@@ -94,6 +94,7 @@ const BookmarkNode = {
           :level="level + 1"
           :selected-id="selectedId"
           :global-actions-visible="globalActionsVisible"
+          :get-favicon-url="getFaviconUrl"
           @add-folder="$emit('add-folder', $event)"
           @add-bookmark="$emit('add-bookmark', $event)"
           @edit="$emit('edit', $event)"
@@ -207,6 +208,7 @@ const app = createApp({
     },
   },
   mounted() {
+    this.loadSavedTheme(); // 加载保存的主题
     this.loadTree();
     window.addEventListener("scroll", this.hideContextMenu, true);
     window.addEventListener("resize", this.hideContextMenu);
@@ -216,6 +218,53 @@ const app = createApp({
     window.removeEventListener("resize", this.hideContextMenu);
   },
   methods: {
+    toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      
+      // 保存主题到localStorage
+      localStorage.setItem('bookmark-manager-theme', newTheme);
+      
+      // 应用新主题
+      html.setAttribute('data-theme', newTheme);
+    },
+    loadSavedTheme() {
+      const savedTheme = localStorage.getItem('bookmark-manager-theme');
+      if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      }
+    },
+    isIntranetUrl(url) {
+      if (!url) return false;
+      
+      try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.toLowerCase();
+        
+        // 检测内网地址模式
+        const intranetPatterns = [
+          /^localhost$/,
+          /^127\.0\.0\.1$/,
+          /^::1$/,
+          /^192\.168\./,
+          /^10\./,
+          /^172\.(1[6-9]|2[0-9]|3[01])\./
+        ];
+        
+        return intranetPatterns.some(pattern => pattern.test(hostname));
+      } catch (e) {
+        return false;
+      }
+    },
+    getFaviconUrl(item) {
+      // 如果是内网地址，不显示favicon，返回空字符串让前端显示默认图标
+      if (this.isIntranetUrl(item.url)) {
+        return '';
+      }
+      // 正常返回favicon_url
+      return item.favicon_url || '';
+    },
     async loadTree() {
       this.loading = true;
       try {
@@ -310,6 +359,40 @@ const app = createApp({
       this.modal.form.url = node.url || "";
       this.modal.form.favicon_url = node.favicon_url || "";
       this.metadataError = "";
+    },
+    async lookupMetadata() {
+      const url = this.modal.form.url.trim();
+      if (!url) return;
+      this.metadataLoading = true;
+      this.metadataError = "";
+      try {
+        const res = await fetch(`/api/metadata?url=${encodeURIComponent(url)}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "获取失败");
+        }
+        const data = await res.json();
+        
+        // 区分添加和编辑模式
+        const isEditMode = this.modal.type === "edit-bookmark";
+        
+        if (data.title) {
+          // 编辑模式下总是更新title，添加模式下只有title为空时才更新
+          if (isEditMode || !this.modal.form.title) {
+            this.modal.form.title = data.title;
+          }
+        }
+        if (data.favicon_url) {
+          this.modal.form.favicon_url = data.favicon_url;
+        }
+        if (data.url) {
+          this.modal.form.url = data.url;
+        }
+      } catch (error) {
+        this.metadataError = error.message || "无法获取网站信息";
+      } finally {
+        this.metadataLoading = false;
+      }
     },
     closeModal() {
       this.modal.visible = false;
@@ -476,9 +559,17 @@ const app = createApp({
       if (!node || node.type !== "folder") {
         return;
       }
+      this.showContextMenu(node, x, y);
+    },
+    showBookmarkActions(node, event) {
+      this.treeActionsVisible = false;
+      this.showContextMenu(node, event.clientX, event.clientY);
+    },
+    showContextMenu(node, x, y) {
       const padding = 16;
       const menuWidth = 220;
-      const menuHeight = 240;
+      // 根据节点类型动态计算菜单高度
+      const menuHeight = node.type === 'folder' ? 240 : 180;
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
@@ -502,7 +593,36 @@ const app = createApp({
       this.contextMenu.nodeId = null;
     },
     handleRootClick() {
-      if (!this.treeActionsVisible) {
+      // 点击根元素时总是隐藏右键菜单
+      this.hideContextMenu();
+    },
+    handleHeaderClick(event) {
+      // 处理头部区域的点击事件，避免意外隐藏右键菜单
+      // 点击按钮时正常执行按钮功能，但不隐藏菜单
+      // 只有点击空白区域时才隐藏菜单
+      const isButtonClick = event.target.closest('button');
+      if (!isButtonClick && event.target === event.currentTarget) {
+        // 点击的是头部空白区域，隐藏菜单
+        this.hideContextMenu();
+      }
+    },
+    handleTreePanelClick(event) {
+      // 专门处理左边结构面板的点击
+      // 如果点击的是树节点相关的元素，不隐藏菜单
+      const isTreeNodeClick = event.target.closest('.tree-node') || 
+                             event.target.closest('.tree-toggle') || 
+                             event.target.closest('.tree-actions');
+      if (!isTreeNodeClick) {
+        this.hideContextMenu();
+      }
+    },
+    handleListPanelClick(event) {
+      // 处理右边网址列表面板的点击
+      // 如果点击的是书签项，不隐藏菜单
+      const isBookmarkItemClick = event.target.closest('.bookmark-item') || 
+                                 event.target.closest('.bookmark-title') ||
+                                 event.target.closest('.bookmark-url');
+      if (!isBookmarkItemClick) {
         this.hideContextMenu();
       }
     },
@@ -567,33 +687,6 @@ const app = createApp({
         }
       }
       return result;
-    },
-    async lookupMetadata() {
-      const url = this.modal.form.url.trim();
-      if (!url) return;
-      this.metadataLoading = true;
-      this.metadataError = "";
-      try {
-        const res = await fetch(`/api/metadata?url=${encodeURIComponent(url)}`);
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "获取失败");
-        }
-        const data = await res.json();
-        if (data.title && !this.modal.form.title) {
-          this.modal.form.title = data.title;
-        }
-        if (data.favicon_url) {
-          this.modal.form.favicon_url = data.favicon_url;
-        }
-        if (data.url) {
-          this.modal.form.url = data.url;
-        }
-      } catch (error) {
-        this.metadataError = error.message || "无法获取网站信息";
-      } finally {
-        this.metadataLoading = false;
-      }
     },
     showToast(message, type = "success") {
       this.toast.visible = true;
