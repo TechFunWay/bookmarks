@@ -10,22 +10,31 @@
   </head>
   <body>
     <div id="app" @click="handleRootClick">
-      <header class="app-header">
+      <header class="app-header" @click="handleHeaderClick">
         <h1>网址收藏夹</h1>
         <div class="header-actions">
-          <button class="primary" @click="openAddFolder(null)">新建文件夹</button>
-          <button class="secondary" @click="openAddBookmark(null)">添加网址</button>
+          <div class="theme-toggle">
+            <span class="theme-toggle-icon moon-icon">🌙</span>
+            <div class="theme-toggle-btn" @click="toggleTheme"></div>
+            <span class="theme-toggle-icon sun-icon">☀️</span>
+          </div>
         </div>
       </header>
 
       <main class="app-main">
-        <section class="tree-panel">
+        <section class="tree-panel" @click="handleTreePanelClick">
           <div class="panel-header">
             <div class="panel-title horizontal">
               <h2>结构</h2>
-              <button class="tertiary small" @click="toggleTreeActions">
-                {{ treeActionsVisible ? '完成' : '编辑' }}
-              </button>
+              <div class="panel-actions">
+                <button class="tertiary" @click="openAddFolder(null)">
+                  <span>📁</span>
+                  <span>新建文件夹</span>
+                </button>
+                <button class="tertiary small" @click="toggleTreeActions">
+                  {{ treeActionsVisible ? '完成' : '编辑' }}
+                </button>
+              </div>
             </div>
           </div>
           <ul class="tree-root">
@@ -36,6 +45,7 @@
               :level="0"
               :selected-id="selectedNodeId"
               :global-actions-visible="treeActionsVisible"
+              :get-favicon-url="getFaviconUrl"
               @add-folder="openAddFolder"
               @add-bookmark="openAddBookmark"
               @edit="openEdit"
@@ -47,7 +57,7 @@
           </ul>
         </section>
 
-        <section class="list-panel">
+        <section class="list-panel" @click="handleListPanelClick">
           <div class="panel-header">
             <div class="panel-title">
               <h2>网址列表</h2>
@@ -60,10 +70,15 @@
             暂无收藏的网址。
           </div>
           <ul v-else class="bookmark-list">
-            <li v-for="item in displayBookmarks" :key="item.id" class="bookmark-item">
+            <li 
+              v-for="item in displayBookmarks" 
+              :key="item.id" 
+              class="bookmark-item"
+              @contextmenu.prevent="showBookmarkActions(item.raw, $event)"
+            >
               <div class="bookmark-main">
                 <span class="node-icon">
-                  <img v-if="item.favicon_url" :src="item.favicon_url" alt="favicon" />
+                  <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
                   <span v-else>🔖</span>
                 </span>
                 <div class="bookmark-info">
@@ -75,10 +90,6 @@
                     {{ item.path }}
                   </span>
                 </div>
-              </div>
-              <div class="bookmark-actions">
-                <button class="tertiary" @click="openEdit(item.raw)">编辑</button>
-                <button class="secondary" @click="confirmDelete(item.raw)">删除</button>
               </div>
             </li>
           </ul>
@@ -92,15 +103,17 @@
           :style="contextMenuStyle"
           @click.stop
         >
-          <button type="button" @click="contextAddFolder">
-            <span class="action-icon">📂</span>
-            <span class="action-text">新建子文件夹</span>
-          </button>
-          <button type="button" @click="contextAddBookmark">
-            <span class="action-icon">➕</span>
-            <span class="action-text">添加网址</span>
-          </button>
-          <hr />
+          <template v-if="contextNode.type === 'folder'">
+            <button type="button" @click="contextAddFolder">
+              <span class="action-icon">📂</span>
+              <span class="action-text">新建子文件夹</span>
+            </button>
+            <button type="button" @click="contextAddBookmark">
+              <span class="action-icon">➕</span>
+              <span class="action-text">添加网址</span>
+            </button>
+            <hr />
+          </template>
           <button type="button" @click="contextReorder('up')">
             <span class="action-icon">⬆️</span>
             <span class="action-text">上移</span>
@@ -126,15 +139,6 @@
           <div class="modal">
             <h3 class="modal-title">{{ modalTitle }}</h3>
             <form @submit.prevent="submitModal">
-              <div class="form-group">
-                <label>名称</label>
-                <input
-                  v-model="modal.form.title"
-                  type="text"
-                  required
-                  placeholder="请输入名称"
-                />
-              </div>
               <div class="form-group" v-if="modal.type.includes('bookmark')">
                 <label>网址</label>
                 <div class="url-input">
@@ -149,6 +153,15 @@
                   </button>
                 </div>
                 <p v-if="metadataError" class="form-error">{{ metadataError }}</p>
+              </div>
+              <div class="form-group">
+                <label>名称</label>
+                <input
+                  v-model="modal.form.title"
+                  type="text"
+                  required
+                  placeholder="请输入名称"
+                />
               </div>
               <div class="form-group" v-if="modal.type.includes('bookmark')">
                 <label>图标地址</label>
