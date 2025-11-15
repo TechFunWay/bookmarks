@@ -13,6 +13,21 @@
   overflow: hidden;
 }
 
+/* 深色主题下右键菜单完全不透明 */
+[data-theme="dark"] .context-menu,
+.context-menu:not([data-theme]) {
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(8px);
+}
+
+/* 浅色主题下右键菜单优化 */
+[data-theme="light"] .context-menu {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12), 0 0 30px rgba(59, 130, 246, 0.1);
+}
+
 .context-menu::before {
   content: '';
   position: absolute;
@@ -39,6 +54,13 @@
 
 .context-menu button:hover {
   background: var(--card-bg-hover);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+/* 浅色主题下右键菜单按钮悬停优化 */
+[data-theme="light"] .context-menu button:hover {
+  background: rgba(59, 130, 246, 0.08);
   color: var(--primary);
   box-shadow: inset 0 0 0 1px var(--primary);
 }
@@ -77,9 +99,9 @@
   /* 深色主题变量 */
   --bg-dark: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 25%, #16213e 50%, #0f3460 75%, #533483 100%);
   --bg-attachment-dark: fixed;
-  --card-bg-dark: rgba(255, 255, 255, 0.08);
-  --card-bg-hover-dark: rgba(255, 255, 255, 0.12);
-  --card-bg-active-dark: rgba(255, 255, 255, 0.16);
+  --card-bg-dark: rgba(0, 0, 0, 0.35);
+  --card-bg-hover-dark: rgba(0, 0, 0, 0.45);
+  --card-bg-active-dark: rgba(0, 0, 0, 0.4);
   --border-dark: rgba(255, 255, 255, 0.12);
   --border-hover-dark: rgba(255, 255, 255, 0.18);
   --text-dark: #f8fafc;
@@ -91,12 +113,18 @@
   --danger-dark: #ef4444;
   --success-dark: #10b981;
   --warning-dark: #f59e0b;
-  --shadow-dark: rgba(0, 0, 0, 0.4);
-  --shadow-lg-dark: rgba(0, 0, 0, 0.6);
+  --shadow-dark: rgba(0, 0, 0, 0.3);
+  --shadow-lg-dark: rgba(0, 0, 0, 0.4);
   --glow-dark: rgba(59, 130, 246, 0.3);
+  --header-bg-dark: rgba(0, 0, 0, 0.2);
   
-  /* 浅色主题变量 */
-  --bg-light: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 25%, #cbd5e1 50%, #94a3b8 75%, #64748b 100%);
+  /* 深色主题变量 - 调整文字颜色，提高可读性 */
+  --text-dark: #e2e8f0;
+  --text-secondary-dark: #94a3b8;
+  --text-muted-dark: #64748b;
+  
+  /* 浅色主题变量 - 调整背景色，让灰色更浅 */
+  --bg-light: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 25%, #e2e8f0 50%, #cbd5e1 75%, #94a3b8 100%);
   --bg-attachment-light: fixed;
   --card-bg-light: rgba(255, 255, 255, 0.9);
   --card-bg-hover-light: rgba(255, 255, 255, 0.95);
@@ -115,6 +143,7 @@
   --shadow-light: rgba(0, 0, 0, 0.1);
   --shadow-lg-light: rgba(0, 0, 0, 0.15);
   --glow-light: rgba(59, 130, 246, 0.2);
+  --header-bg-light: rgba(255, 255, 255, 0.8);
   
   /* 默认使用深色主题 */
   --bg: var(--bg-dark);
@@ -132,11 +161,27 @@
   --primary-text: #ffffff;
   --secondary: var(--secondary-dark);
   --danger: var(--danger-dark);
+  --danger-color: var(--danger-dark);
   --success: var(--success-dark);
   --warning: var(--warning-dark);
   --shadow: var(--shadow-dark);
   --shadow-lg: var(--shadow-lg-dark);
   --glow: var(--glow-dark);
+}
+
+/* 深色主题下网址列表优化 */
+[data-theme="dark"] .bookmark-title {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .bookmark-url {
+  color: #94a3b8;
+  opacity: 0.9;
+}
+
+[data-theme="dark"] .bookmark-path {
+  color: #64748b;
+  opacity: 0.8;
 }
 
 /* 浅色主题 */
@@ -161,6 +206,24 @@
   --shadow: var(--shadow-light);
   --shadow-lg: var(--shadow-lg-light);
   --glow: var(--glow-light);
+  --header-bg: var(--header-bg-light);
+  /* 浅色主题下网址列表优化 */
+  --bookmark-title-light: #2d3748;
+}
+
+/* 浅色主题下网址列表优化 */
+[data-theme="light"] .bookmark-title {
+  color: #2d3748;
+}
+
+[data-theme="light"] .bookmark-url {
+  color: #718096;
+  opacity: 0.9;
+}
+
+[data-theme="light"] .bookmark-path {
+  color: #a0aec0;
+  opacity: 0.8;
 }
 
 * {
@@ -197,11 +260,11 @@ button {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--header-bg);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   z-index: 100;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 .app-title {
@@ -317,6 +380,57 @@ button {
   background-clip: text;
 }
 
+.subtitle-artistic {
+  margin-left: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  animation: sparkle 3s ease-in-out infinite alternate;
+  letter-spacing: 1px;
+  position: relative;
+}
+
+.subtitle-artistic::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
+  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+  border-radius: 6px;
+  opacity: 0.2;
+  z-index: -1;
+  filter: blur(4px);
+  animation: pulse 4s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  from {
+    filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.2));
+    transform: scale(1);
+  }
+  to {
+    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+    transform: scale(1.01);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.02);
+  }
+}
+
 .header-actions button + button {
   margin-left: 12px;
 }
@@ -410,6 +524,7 @@ button {
   background: var(--card-bg-active);
   border-color: var(--primary);
   box-shadow: 0 0 20px var(--glow);
+  padding-left: 10px !important; /* 调整选中状态左边距（基础10px + 选中额外16px） */
 }
 
 .tree-row.selected::before {
@@ -656,6 +771,150 @@ button {
   box-shadow: 0 24px 48px var(--shadow-lg), 0 0 40px var(--glow);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
+}
+
+/* 编辑模式工具栏样式 */
+.bookmark-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.toolbar-info {
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 编辑模式书签项样式 */
+.bookmark-item.editing {
+  padding: 12px 16px 12px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.bookmark-item.editing:hover {
+  background: var(--card-bg-hover);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.bookmark-item.selected {
+  background: var(--card-bg-hover);
+  box-shadow: inset 0 0 0 2px var(--accent-color);
+}
+
+/* 编辑模式复选框样式 */
+.bookmark-edit-checkbox {
+  display: flex;
+  align-items: center;
+  margin-right: 12px;
+}
+
+.bookmark-edit-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  accent-color: var(--accent-color);
+  transition: all 0.2s ease;
+}
+
+.bookmark-edit-checkbox input[type="checkbox"]:checked {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.bookmark-edit-checkbox input[type="checkbox"]:hover {
+  border-color: var(--accent-color);
+}
+
+/* 编辑模式操作按钮样式 */
+.bookmark-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.bookmark-item.editing .bookmark-actions {
+  opacity: 1;
+}
+
+.bookmark-actions .tertiary.small {
+  padding: 6px;
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.bookmark-actions .tertiary.small.danger {
+  color: var(--danger-color);
+}
+
+.bookmark-actions .tertiary.small.danger:hover {
+  background: rgba(220, 53, 69, 0.1);
+}
+
+/* 面板头部水平布局样式 */
+.panel-title.horizontal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 深色主题下的编辑模式样式 */
+[data-theme="dark"] .bookmark-toolbar {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .bookmark-edit-checkbox input[type="checkbox"] {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="dark"] .bookmark-edit-checkbox input[type="checkbox"]:hover {
+  border-color: var(--accent-color);
+}
+
+[data-theme="dark"] .bookmark-actions .tertiary.small.danger {
+  color: #ff6b7a;
+}
+
+[data-theme="dark"] .bookmark-actions .tertiary.small.danger:hover {
+  background: rgba(255, 107, 122, 0.15);
 }
 
 .modal-title {
