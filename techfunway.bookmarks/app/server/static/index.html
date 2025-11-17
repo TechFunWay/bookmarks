@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>网址收藏夹</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <div id="app" @click="handleRootClick">
+      <header class="app-header" @click="handleHeaderClick">
+        <h1>网址收藏夹<span class="subtitle-artistic">每天都很哇塞</span></h1>
+        <div class="header-actions">
+          <div class="theme-toggle">
+            <span class="theme-toggle-icon moon-icon">🌙</span>
+            <div class="theme-toggle-btn" @click="toggleTheme"></div>
+            <span class="theme-toggle-icon sun-icon">☀️</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section class="tree-panel" @click="handleTreePanelClick">
+          <div class="panel-header">
+            <div class="panel-title horizontal">
+              <h2>结构</h2>
+              <div class="panel-actions">
+                <button class="tertiary" @click="openAddFolder(null)">
+                <span>📁+</span>
+                <span>新建文件夹</span>
+              </button>
+                <button class="tertiary small" @click="toggleTreeActions">
+                  {{ treeActionsVisible ? '完成' : '编辑' }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <ul class="tree-root">
+            <bookmark-node
+              v-for="node in tree"
+              :key="node.id"
+              :node="node"
+              :level="0"
+              :selected-id="selectedNodeId"
+              :global-actions-visible="treeActionsVisible"
+              :get-favicon-url="getFaviconUrl"
+              @add-folder="openAddFolder"
+              @add-bookmark="openAddBookmark"
+              @edit="openEdit"
+              @delete="confirmDelete"
+              @select="selectNode"
+              @move="reorderNode"
+              @context="showFolderActions"
+            ></bookmark-node>
+          </ul>
+        </section>
+
+        <section class="list-panel" @click="handleListPanelClick">
+          <div class="panel-header">
+            <div class="panel-title horizontal">
+              <div>
+                <h2>网址列表</h2>
+                <span class="panel-tip">{{ listTitle }}</span>
+              </div>
+              <div class="panel-actions">
+                <button class="tertiary small" @click="toggleBookmarkEdit" v-if="displayBookmarks.length > 0">
+                  {{ bookmarkEditMode ? '完成' : '编辑' }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-if="displayBookmarks.length === 0" class="placeholder">
+            暂无收藏的网址。
+          </div>
+          <div v-else>
+            <div class="bookmark-content-container">
+              <div v-if="bookmarkEditMode" class="bookmark-toolbar">
+                <div class="toolbar-info">
+                  <span class="toolbar-text">已选择 {{ selectedBookmarks.size }} 个项目</span>
+                </div>
+                <div class="toolbar-actions">
+                  <button class="tertiary small" @click="selectAllBookmarks">
+                    {{ selectedBookmarks.size === displayBookmarks.length ? '取消全选' : '全选' }}
+                  </button>
+                  <button class="tertiary small" @click="deleteSelectedBookmarks" :disabled="selectedBookmarks.size === 0">
+                    <span class="action-icon">🗑️</span>
+                    删除选中
+                  </button>
+                  <button class="tertiary small" @click="moveSelectedBookmarks('up')" :disabled="selectedBookmarks.size === 0">
+                    <span class="action-icon">⬆️</span>
+                    上移
+                  </button>
+                  <button class="tertiary small" @click="moveSelectedBookmarks('down')" :disabled="selectedBookmarks.size === 0">
+                    <span class="action-icon">⬇️</span>
+                    下移
+                  </button>
+                </div>
+              </div>
+              <div class="bookmark-scroll-container">
+                <ul class="bookmark-list">
+                  <li 
+                    v-for="item in displayBookmarks" 
+                    :key="item.id" 
+                    class="bookmark-item"
+                    :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }"
+                    @contextmenu.prevent="showBookmarkActions(item.raw, $event)"
+                  >
+                    <div class="bookmark-edit-checkbox" v-if="bookmarkEditMode">
+                      <input 
+                        type="checkbox" 
+                        :checked="selectedBookmarks.has(item.id)"
+                        @change="toggleBookmarkSelection(item.id)"
+                      />
+                    </div>
+                    <div class="bookmark-main">
+                      <span class="node-icon">
+                        <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
+                        <span v-else>🔖</span>
+                      </span>
+                      <div class="bookmark-info">
+                        <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
+                          {{ item.title }}
+                        </a>
+                        <span class="bookmark-url">{{ item.url }}</span>
+                        <span class="bookmark-path" v-if="item.path">
+                          {{ item.path }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="bookmark-actions" v-if="bookmarkEditMode">
+                      <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'up')" title="上移">
+                        <span class="action-icon">⬆️</span>
+                      </button>
+                      <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'down')" title="下移">
+                        <span class="action-icon">⬇️</span>
+                      </button>
+                      <button class="tertiary small" @click="editBookmark(item.raw)" title="编辑">
+                        <span class="action-icon">✏️</span>
+                      </button>
+                      <button class="tertiary small danger" @click="deleteBookmark(item.raw)" title="删除">
+                        <span class="action-icon">🗑️</span>
+                      </button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <transition name="fade">
+        <div
+          v-if="contextMenu.visible && contextNode"
+          class="context-menu"
+          :style="contextMenuStyle"
+          @click.stop
+        >
+          <template v-if="contextNode.type === 'folder'">
+            <button type="button" @click="contextAddFolder">
+              <span class="action-icon">🗂️</span>
+              <span class="action-text">新建子文件夹</span>
+            </button>
+            <button type="button" @click="contextAddBookmark">
+              <span class="action-icon">➕</span>
+              <span class="action-text">添加网址</span>
+            </button>
+            <hr />
+          </template>
+          <button type="button" @click="contextReorder('up')">
+            <span class="action-icon">⬆️</span>
+            <span class="action-text">上移</span>
+          </button>
+          <button type="button" @click="contextReorder('down')">
+            <span class="action-icon">⬇️</span>
+            <span class="action-text">下移</span>
+          </button>
+          <hr />
+          <button type="button" @click="contextEdit">
+            <span class="action-icon">✏️</span>
+            <span class="action-text">编辑</span>
+          </button>
+          <button type="button" class="danger" @click="contextDelete">
+            <span class="action-icon">🗑️</span>
+            <span class="action-text">删除</span>
+          </button>
+        </div>
+      </transition>
+
+      <transition name="fade">
+        <div v-if="modal.visible" class="modal-backdrop">
+          <div class="modal">
+            <h3 class="modal-title">{{ modalTitle }}</h3>
+            <form @submit.prevent="submitModal">
+              <div class="form-group" v-if="modal.type.includes('bookmark')">
+                <label>网址</label>
+                <div class="url-input">
+                  <input
+                    v-model="modal.form.url"
+                    type="url"
+                    required
+                    placeholder="https://example.com"
+                  />
+                  <button type="button" class="tertiary" @click="lookupMetadata" :disabled="metadataLoading || !modal.form.url">
+                    {{ metadataLoading ? '获取中...' : '获取信息' }}
+                  </button>
+                </div>
+                <p v-if="metadataError" class="form-error">{{ metadataError }}</p>
+              </div>
+              <div class="form-group">
+                <label>名称</label>
+                <input
+                  v-model="modal.form.title"
+                  type="text"
+                  required
+                  placeholder="请输入名称"
+                />
+              </div>
+              <div class="form-group" v-if="modal.type.includes('bookmark')">
+                <label>图标地址</label>
+                <input
+                  v-model="modal.form.favicon_url"
+                  type="url"
+                  placeholder="自动获取或手动输入"
+                />
+              </div>
+              <div class="modal-actions">
+                <button type="submit" class="primary">确认</button>
+                <button type="button" class="secondary" @click="closeModal">取消</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </transition>
+
+      <transition name="toast">
+        <div v-if="toast.visible" :class="['toast', toast.type]">
+          {{ toast.message }}
+        </div>
+      </transition>
+    </div>
+  </body>
+</html>
+
