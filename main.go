@@ -174,15 +174,11 @@ func (s *server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 				// 可能还是编码的，再次解码
 				if doubleDecoded, err := url.QueryUnescape(decoded); err == nil {
 					targetURL = doubleDecoded
-					log.Printf("双重URL编码检测，原始: %s", rawURL)
-					log.Printf("双重解码后: %s", targetURL)
 				} else {
 					targetURL = decoded
-					log.Printf("单次URL解码: %s", targetURL)
 				}
 			} else {
 				targetURL = decoded
-				log.Printf("单次URL解码: %s", targetURL)
 			}
 		}
 	}
@@ -1055,9 +1051,6 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 			continue
 		}
 
-		// 调试：检查原始HTML内容（前1000字符）
-		log.Printf("原始HTML内容预览: %s", string(body[:min(1000, len(body))]))
-
 		// 初始化标题变量
 		var title string
 
@@ -1073,7 +1066,6 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 			// 确保标题不为空
 			if titleContent != "" {
 				title = titleContent
-				log.Printf("正则表达式提取到标题: %s", title)
 			}
 		}
 
@@ -1086,7 +1078,6 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 				metaTitle = strings.Join(strings.Fields(metaTitle), " ")
 				if metaTitle != "" {
 					title = metaTitle
-					log.Printf("从meta标签提取到标题: %s", title)
 				}
 			}
 		}
@@ -1100,7 +1091,6 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 			htmlTitle := extractTitle(doc)
 			if htmlTitle != "" {
 				title = htmlTitle
-				log.Printf("HTML解析提取到标题: %s", title)
 			}
 		}
 
@@ -1112,10 +1102,8 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 		if title == "" {
 			if hostname != "" {
 				title = hostname
-				log.Printf("使用主机名作为标题: %s", title)
 			} else {
 				title = finalURL
-				log.Printf("使用最终URL作为标题: %s", title)
 			}
 		}
 
@@ -1286,18 +1274,13 @@ func handleIntranetURL(urlStr string) string {
 
 		// 如果是API端点，重定向到正确的内部API调用
 		if strings.Contains(urlStr, "/api/metadata") {
-			log.Printf("检测到内网API调用: %s", urlStr)
 
 			// 提取URL参数中的URL
 			apiURL := parsed.Query().Get("url")
 			if apiURL != "" {
-				log.Printf("提取的原始URL: %s", apiURL)
 				return apiURL
 			}
 		}
-
-		// 对于内网地址，添加更详细的日志
-		log.Printf("内网地址处理: %s", urlStr)
 	}
 
 	return urlStr
