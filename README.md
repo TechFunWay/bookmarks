@@ -49,18 +49,53 @@
    ```
 
 2. **运行应用**
+   - 使用默认端口8901启动：
    ```bash
    go run main.go
    ```
+   
+   - 自定义端口启动：
+   ```bash
+   go run main.go -port 3000
+   ```
+   
+   - 自定义数据路径和端口：
+   ```bash
+   go run main.go -dataUrl /path/to/data -port 8080
+   ```
 
 3. **访问应用**
-   - 打开浏览器访问：http://localhost:8901
-   - 应用将在8901端口启动
+   - 默认访问地址：http://localhost:8901
+   - 或访问您指定的端口地址
+   - 查看所有可用选项：`go run main.go -h`
 
-### 自定义数据路径
+### 自定义配置
+
+启动时可以通过命令行参数自定义配置：
+
+#### 数据路径
 ```bash
 go run main.go -dataUrl=/path/to/your/data/
 ```
+
+#### 端口配置
+```bash
+go run main.go -port 3000
+```
+
+#### 组合配置
+```bash
+go run main.go -dataUrl=/path/to/data -port 8080
+```
+
+#### 查看所有选项
+```bash
+go run main.go -h
+```
+
+**可用参数：**
+- `-dataUrl`：数据存储路径（默认："./"）
+- `-port`：服务器监听端口（默认："8901"）
 
 ## 使用说明
 
