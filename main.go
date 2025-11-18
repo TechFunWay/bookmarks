@@ -2,7 +2,8 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
+	"compress/flate"
+	"compress
 	"context"
 	"crypto/tls"
 	"database/sql"
@@ -1002,15 +1003,22 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 
 		// 处理gzip压缩内容
 		var bodyReader io.Reader = resp.Body
-		if resp.Header.Get("Content-Encoding") == "gzip" {
+		if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
 			gz, err := gzip.NewReader(resp.Body)
 			if err != nil {
 				log.Printf("无法创建gzip读取器: %v", err)
-				lastErr = err
-				continue
+				// 尝试作为普通内容继续处理，不立即放弃
+				bodyReader = resp.Body
+			} else {
+				defer gz.Close()
+				bodyReader = gz
 			}
-			defer gz.Close()
-			bodyReader = gz
+		}
+		// 也处理deflate压缩
+		if strings.Contains(resp.Header.Get("Content-Encoding"), "deflate") {
+			zl := flate.NewReader(resp.Body)
+			defer zl.Close()
+			bodyReader = zl
 		}
 
 		// 对于403错误，尝试不同的策略
@@ -1050,39 +1058,70 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 		// 调试：检查原始HTML内容（前1000字符）
 		log.Printf("原始HTML内容预览: %s", string(body[:min(1000, len(body))]))
 
-		// 首先尝试简单的正则表达式提取标题，作为备份方法
-		// 修复正则表达式，确保能正确匹配标题（包括换行情况）
-		titleRegex := regexp.MustCompile(`(?i)<title[^>]*>(.*?)</title>`)
-		matches := titleRegex.FindSubmatch(body)
+		// 初始化标题变量
 		var title string
+
+		// 1. 首先尝试增强的正则表达式提取标题
+		// 使用更宽松的正则表达式，添加DOTALL模式支持换行符
+		titleRegex := regexp.MustCompile(`(?si)<title[^>]*>(.*?)</title>`)
+		matches := titleRegex.FindSubmatch(body)
 		if len(matches) > 1 {
-			title = strings.TrimSpace(html.UnescapeString(string(matches[1])))
-			// 移除多余的空白字符
-			title = strings.Join(strings.Fields(title), " ")
-			log.Printf("正则表达式提取到标题: %s", title)
-		} else {
-			log.Printf("正则表达式未找到标题，尝试多种模式...")
-			// 尝试更宽松的正则表达式
-			altRegex := regexp.MustCompile(`<title[^>]*>(.*?)</title>`)
-			altMatches := altRegex.FindSubmatch(body)
-			if len(altMatches) > 1 {
-				log.Printf("备用正则匹配到内容: %s", string(altMatches[1][:min(100, len(altMatches[1]))]))
+			// 提取标题并清理
+			titleContent := strings.TrimSpace(html.UnescapeString(string(matches[1])))
+			// 移除多余的空白字符和HTML标签
+			titleContent = strings.Join(strings.Fields(titleContent), " ")
+			// 确保标题不为空
+			if titleContent != "" {
+				title = titleContent
+				log.Printf("正则表达式提取到标题: %s", title)
 			}
 		}
 
-		// 解析HTML文档用于标题和图标提取
+		// 2. 如果正则没找到，尝试从meta标签获取og:title
+		if title == "" {
+			metaTitleRegex := regexp.MustCompile(`(?si)<meta[^>]*property=["']og:title["'][^>]*content=["'](.*?)["']`)
+			metaMatches := metaTitleRegex.FindSubmatch(body)
+			if len(metaMatches) > 1 {
+				metaTitle := strings.TrimSpace(html.UnescapeString(string(metaMatches[1])))
+				metaTitle = strings.Join(strings.Fields(metaTitle), " ")
+				if metaTitle != "" {
+					title = metaTitle
+					log.Printf("从meta标签提取到标题: %s", title)
+				}
+			}
+		}
+
+		// 3. 尝试解析HTML文档（即使正则已经找到标题，也进行解析以获取图标）
 		var doc *html.Node
 		doc, err = html.Parse(bytes.NewReader(body))
 
-		// 如果正则表达式没有找到标题，尝试使用html包解析
+		// 如果正则表达式没有找到标题，但HTML解析成功，尝试使用html包解析
 		if title == "" && err == nil {
-			title = extractTitle(doc)
-			if title != "" {
+			htmlTitle := extractTitle(doc)
+			if htmlTitle != "" {
+				title = htmlTitle
 				log.Printf("HTML解析提取到标题: %s", title)
 			}
 		}
 
-		// 如果仍然没有标题，使用已解析的主机名
+		// 4. 尝试从页面文本中提取第一个有意义的文本作为标题
+		if title == "" {
+			// 移除HTML标签
+			textContent := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(string(body), " ")
+			// 分割成行
+			lines := strings.Split(textContent, "\n")
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				// 寻找长度适中且不是纯空白的文本行
+				if len(trimmed) > 0 && len(trimmed) < 200 {
+					title = trimmed
+					log.Printf("从文本内容提取到标题: %s", title)
+					break
+				}
+			}
+		}
+
+		// 5. 如果所有方法都失败，使用已解析的主机名或URL
 		if title == "" {
 			if hostname != "" {
 				title = hostname
