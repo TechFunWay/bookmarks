@@ -1106,19 +1106,6 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 
 		// 4. 尝试从页面文本中提取第一个有意义的文本作为标题
 		if title == "" {
-			// 移除HTML标签
-			textContent := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(string(body), " ")
-			// 分割成行
-			lines := strings.Split(textContent, "\n")
-			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				// 寻找长度适中且不是纯空白的文本行
-				if len(trimmed) > 0 && len(trimmed) < 200 {
-					title = trimmed
-					log.Printf("从文本内容提取到标题: %s", title)
-					break
-				}
-			}
 		}
 
 		// 5. 如果所有方法都失败，使用已解析的主机名或URL
