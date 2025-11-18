@@ -78,9 +78,6 @@ const BookmarkNode = {
           <button v-if="isFolder" type="button" title="添加子文件夹" @click="onAddFolder">
             <span class="action-icon">📂</span>
           </button>
-          <button v-if="isFolder" type="button" title="添加网址" @click="onAddBookmark">
-            <span class="action-icon">➕</span>
-          </button>
           <button type="button" title="编辑" @click="onEdit">
             <span class="action-icon">✏️</span>
           </button>
