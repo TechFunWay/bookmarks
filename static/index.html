@@ -27,12 +27,13 @@
             <div class="panel-title horizontal">
               <h2>结构</h2>
               <div class="panel-actions">
-                <button class="tertiary" @click="openAddFolder(null)">
+                <button class="tertiary small" @click="openAddFolder(null)">
                 <span>📁+</span>
                 <span>新建文件夹</span>
               </button>
                 <button class="tertiary small" @click="toggleTreeActions">
-                  {{ treeActionsVisible ? '完成' : '编辑' }}
+                  <span>{{ treeActionsVisible ? '✅' : '✏️' }}</span>
+                  <span>{{ treeActionsVisible ? '完成' : '编辑' }}</span>
                 </button>
               </div>
             </div>
@@ -66,7 +67,8 @@
               </div>
               <div class="panel-actions">
                 <button class="tertiary small" @click="toggleBookmarkEdit" v-if="displayBookmarks.length > 0">
-                  {{ bookmarkEditMode ? '完成' : '编辑' }}
+                  <span>{{ bookmarkEditMode ? '✅' : '✏️' }}</span>
+                  <span>{{ bookmarkEditMode ? '完成' : '编辑' }}</span>
                 </button>
               </div>
             </div>
