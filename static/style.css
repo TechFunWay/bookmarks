@@ -592,7 +592,6 @@ button {
 .tree-actions.inline button {
   border: none;
   background: transparent;
-  padding: 6px 8px;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
@@ -615,7 +614,7 @@ button {
 
 .tree-actions .action-icon {
   font-size: 16px;
-  width: 18px;
+  width: 10px;
   display: inline-flex;
   justify-content: center;
 }
