@@ -52,14 +52,38 @@ A simple and easy-to-use bookmark management tool built with Go backend and Vue.
    ```bash
    go run main.go
    ```
+   
+   **Configuration options:**
+   - Custom port: `go run main.go -port 3000`
+   - Custom data path: `go run main.go -dataUrl=/path/to/your/data/`
+   - Combined configuration: `go run main.go -dataUrl=/path/to/data -port 8080`
+   - View all options: `go run main.go -h`
 
 3. **Access the application**
-   - Open browser: http://localhost:8901
-   - Application starts on port 8901
+   - Default address: http://localhost:8901
+   - Or visit your specified port address
 
-### Custom Data Path
+### Configuration Options
+
+You can customize the bookmark manager via command line parameters:
+
+**Available Parameters:**
+- `-dataUrl`: Data storage path (default: "./")
+- `-port`: Server listening port (default: "8901")
+
+**Examples:**
 ```bash
+# Custom data path
 go run main.go -dataUrl=/path/to/your/data/
+
+# Custom port
+go run main.go -port 3000
+
+# Combined configuration
+go run main.go -dataUrl=/path/to/data -port 8080
+
+# View all options
+go run main.go -h
 ```
 
 ## Usage Guide
