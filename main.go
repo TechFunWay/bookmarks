@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/flate"
-	"compress
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"database/sql"
