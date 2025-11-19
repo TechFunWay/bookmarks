@@ -677,14 +677,11 @@ const app = createApp({
     },
     contextMoveTo() {
       const node = this.contextNode;
-      console.log('contextMoveTo中 this.contextNode', node);
-      console.log('contextMoveTo中 this.getAllFolders()', this.getAllFolders());
       if (!node) return;
       this.moveModal.visible = true;
       this.moveModal.targetParentId = node.parent_id ?? null;
-      this.moveModal.nodeId = node.id;
       this.rightClickNode = node;
-      this.contextMenu.visible = false;
+      this.hideContextMenu();
     },
     closeMoveModal() {
       this.moveModal.visible = false;
