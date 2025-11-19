@@ -148,7 +148,11 @@ const app = createApp({
       moveModal: {
         visible: false,
         targetParentId: null,
+        nodeId: null,
       },
+      rightClickNode:{
+
+      }
     };
   },
   computed: {
@@ -673,9 +677,13 @@ const app = createApp({
     },
     contextMoveTo() {
       const node = this.contextNode;
+      console.log('contextMoveTo中 this.contextNode', node);
+      console.log('contextMoveTo中 this.getAllFolders()', this.getAllFolders());
       if (!node) return;
       this.moveModal.visible = true;
       this.moveModal.targetParentId = node.parent_id ?? null;
+      this.moveModal.nodeId = node.id;
+      this.rightClickNode = node;
       this.contextMenu.visible = false;
     },
     closeMoveModal() {
@@ -721,6 +729,7 @@ const app = createApp({
       return path.join(" / ");
     },
     isFolderOrChild(folderId, nodeId) {
+      console.log('isFolderOrChild 参数folderId：', folderId, 'nodeId：',nodeId);
       if (!nodeId) return false;
       
       // 检查是否是同一个文件夹
@@ -751,7 +760,7 @@ const app = createApp({
       return checkIsDescendant(node, folderId);
     },
     async confirmMove() {
-      const node = this.contextNode;
+      const node = this.rightClickNode;
       if (!node) return;
       
       const newParentId = this.moveModal.targetParentId;
