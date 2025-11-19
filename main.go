@@ -54,8 +54,10 @@ type node struct {
 
 func main() {
 	dataUrl := flag.String("dataUrl", "./", "数据存储路径") // 定义字符串参数
+	port := flag.String("port", "8901", "服务器监听端口")    // 定义端口参数
 	flag.Parse()                                      // 缺少此行将导致获取默认值
-	fmt.Println("url:", *dataUrl)
+	fmt.Println("数据路径:", *dataUrl)
+	fmt.Println("监听端口:", *port)
 	// 创建目录
 	if _, err := os.Stat(*dataUrl); os.IsNotExist(err) {
 		if err := os.Mkdir(*dataUrl, 0755); err != nil {
@@ -114,7 +116,7 @@ func main() {
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/*", fileServer)
 
-	addr := ":8901"
+	addr := ":" + *port
 	log.Printf("Bookmark server running on %s", addr)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server exited: %v", err)
