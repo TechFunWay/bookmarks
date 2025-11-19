@@ -145,6 +145,10 @@ const app = createApp({
       },
       bookmarkEditMode: false,
       selectedBookmarks: new Set(),
+      moveModal: {
+        visible: false,
+        targetParentId: null,
+      },
     };
   },
   computed: {
@@ -666,6 +670,116 @@ const app = createApp({
       if (!node) return;
       this.hideContextMenu();
       this.confirmDelete(node);
+    },
+    contextMoveTo() {
+      const node = this.contextNode;
+      if (!node) return;
+      this.moveModal.visible = true;
+      this.moveModal.targetParentId = node.parent_id ?? null;
+    },
+    closeMoveModal() {
+      this.moveModal.visible = false;
+      this.moveModal.targetParentId = null;
+      this.hideContextMenu();
+    },
+    selectMoveTarget(parentId) {
+      this.moveModal.targetParentId = parentId;
+    },
+    getAllFolders() {
+      const folders = [];
+      const collectFolders = (nodes) => {
+        for (const node of nodes) {
+          if (node.type === "folder") {
+            folders.push(node);
+            if (node.children && node.children.length) {
+              collectFolders(node.children);
+            }
+          }
+        }
+      };
+      collectFolders(this.tree);
+      return folders;
+    },
+    getFolderPath(folderId) {
+      const findPath = (nodes, targetId, currentPath = []) => {
+        for (const node of nodes) {
+          if (node.id === targetId) {
+            return currentPath.concat(node.title);
+          }
+          if (node.children && node.children.length) {
+            const found = findPath(node.children, targetId, currentPath.concat(node.title));
+            if (found.length > currentPath.length) {
+              return found;
+            }
+          }
+        }
+        return [];
+      };
+      
+      const path = findPath(this.tree, folderId);
+      return path.join(" / ");
+    },
+    isFolderOrChild(folderId, nodeId) {
+      if (!nodeId) return false;
+      
+      // 检查是否是同一个文件夹
+      if (folderId === nodeId) {
+        return true;
+      }
+      
+      // 检查是否是子文件夹
+      const node = this.findNodeById(nodeId, this.tree);
+      if (!node || node.type !== "folder") {
+        return false;
+      }
+      
+      const checkIsDescendant = (parentNode, targetId) => {
+        if (!parentNode.children) return false;
+        
+        for (const child of parentNode.children) {
+          if (child.id === targetId) {
+            return true;
+          }
+          if (child.type === "folder" && checkIsDescendant(child, targetId)) {
+            return true;
+          }
+        }
+        return false;
+      };
+      
+      return checkIsDescendant(node, folderId);
+    },
+    async confirmMove() {
+      const node = this.contextNode;
+      if (!node) return;
+      
+      const newParentId = this.moveModal.targetParentId;
+      if (newParentId === node.parent_id) {
+        this.showToast("未选择不同的文件夹", "warning");
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/nodes/${node.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            parent_id: newParentId,
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error("移动操作失败");
+        }
+        
+        this.closeMoveModal();
+        await this.loadTree();
+        this.showToast("已移动到指定文件夹", "success");
+      } catch (error) {
+        this.showToast(error.message || "移动操作失败", "error");
+      }
     },
     collectBookmarks(nodes, trail = []) {
       const list = [];
