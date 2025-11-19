@@ -676,6 +676,7 @@ const app = createApp({
       if (!node) return;
       this.moveModal.visible = true;
       this.moveModal.targetParentId = node.parent_id ?? null;
+      this.contextMenu.visible = false;
     },
     closeMoveModal() {
       this.moveModal.visible = false;
