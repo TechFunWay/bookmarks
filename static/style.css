@@ -1008,6 +1008,60 @@ button {
   gap: 12px;
 }
 
+.folder-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-variant);
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--on-surface);
+  transition: all 0.2s;
+}
+
+.folder-select-btn:hover {
+  background: var(--primary-container);
+  border-color: var(--primary);
+  color: var(--on-primary-container);
+}
+
+.folder-selector {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: var(--surface);
+  margin-top: 8px;
+}
+
+.folder-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.folder-option:last-child {
+  border-bottom: none;
+}
+
+.folder-option:hover {
+  background: var(--surface-variant);
+}
+
+.folder-option .selected-indicator {
+  margin-left: auto;
+  color: var(--primary);
+  font-weight: bold;
+}
+
 .toast {
   position: fixed;
   bottom: 24px;

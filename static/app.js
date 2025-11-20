@@ -5,7 +5,7 @@ const BookmarkNode = {
   props: {
     node: { type: Object, required: true },
     level: { type: Number, default: 0 },
-    selectedId: { type: Number, default: null },
+    selectedId: { type: Number, required: true },
     globalActionsVisible: { type: Boolean, default: false },
   },
   emits: ["add-folder", "add-bookmark", "edit", "delete", "select", "move", "context"],
@@ -81,7 +81,11 @@ const BookmarkNode = {
           <button type="button" title="编辑" @click="onEdit">
             <span class="action-icon">✏️</span>
           </button>
-          <button type="button" title="删除" @click="onDelete">
+          <button 
+            type="button" 
+            title="删除" 
+            @click="onDelete"
+          >
             <span class="action-icon">🗑️</span>
           </button>
         </div>
@@ -150,6 +154,8 @@ const app = createApp({
         targetParentId: null,
         nodeId: null,
       },
+      folderSelectorVisible: false,
+      selectedFolderId: null,
       rightClickNode:{
 
       }
@@ -228,6 +234,36 @@ const app = createApp({
     window.removeEventListener("resize", this.hideContextMenu);
   },
   methods: {
+    showFolderSelector() {
+      this.selectedFolderId = this.modal.parentId || null;
+      this.folderSelectorVisible = true;
+    },
+    selectFolder(folderId) {
+      this.selectedFolderId = folderId;
+    },
+    confirmFolderSelection() {
+      this.modal.parentId = this.selectedFolderId;
+      this.folderSelectorVisible = false;
+    },
+    cancelFolderSelection() {
+      this.folderSelectorVisible = false;
+    },
+    getAllFolders() {
+      // 获取所有文件夹节点
+      const folders = [];
+      const collectFolders = (nodes, path = '') => {
+        nodes.forEach(node => {
+          if (node.type === 'folder') {
+            folders.push(node);
+            if (node.children && node.children.length > 0) {
+              collectFolders(node.children);
+            }
+          }
+        });
+      };
+      collectFolders(this.tree);
+      return folders;
+    },
     toggleTheme() {
       const html = document.documentElement;
       const currentTheme = html.getAttribute('data-theme');
@@ -360,7 +396,7 @@ const app = createApp({
       this.modal.form.favicon_url = "";
       this.metadataError = "";
     },
-    openAddBookmark(parent) {
+    openAddBookmark(parent = null) {
       this.hideContextMenu();
       this.modal.visible = true;
       this.modal.type = "add-bookmark";
@@ -370,6 +406,8 @@ const app = createApp({
       this.modal.form.url = "";
       this.modal.form.favicon_url = "";
       this.metadataError = "";
+      // 从列表顶部按钮调用时，确保不强制设置parentId
+      // 这样用户可以先选择文件夹，再填写信息
     },
     openEdit(node) {
       this.hideContextMenu();
@@ -458,6 +496,7 @@ const app = createApp({
       this.selectedNodeId = data.id;
     },
     async createBookmark() {
+      // 允许添加到根目录（parentId为null）
       const payload = {
         url: this.modal.form.url.trim(),
         title: this.modal.form.title.trim(),
@@ -802,7 +841,7 @@ const app = createApp({
             title: node.title,
             url: node.url,
             favicon_url: node.favicon_url,
-            path: trail.join(" / "),
+            path: trail.length > 0 ? trail.join(" / ") : "",
             raw: node,
           });
         }
