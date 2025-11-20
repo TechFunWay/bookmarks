@@ -939,13 +939,23 @@ button {
 }
 
 .modal-title {
-  margin: 0 0 20px;
+  margin: 0 0 8px;
   font-size: 20px;
   font-weight: 600;
   background: linear-gradient(45deg, var(--primary), #8b5cf6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.modal-subtitle {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 3px solid var(--primary);
 }
 
 .form-group {
