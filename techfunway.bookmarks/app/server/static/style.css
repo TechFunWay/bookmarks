@@ -434,6 +434,22 @@ button {
   }
 }
 
+/* 脉冲动画 */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .header-actions button + button {
   margin-left: 12px;
 }
@@ -592,7 +608,6 @@ button {
 .tree-actions.inline button {
   border: none;
   background: transparent;
-  padding: 6px 8px;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
@@ -615,7 +630,7 @@ button {
 
 .tree-actions .action-icon {
   font-size: 16px;
-  width: 18px;
+  width: 10px;
   display: inline-flex;
   justify-content: center;
 }
@@ -940,13 +955,23 @@ button {
 }
 
 .modal-title {
-  margin: 0 0 20px;
+  margin: 0 0 8px;
   font-size: 20px;
   font-weight: 600;
   background: linear-gradient(45deg, var(--primary), #8b5cf6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.modal-subtitle {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 3px solid var(--primary);
 }
 
 .form-group {
@@ -999,28 +1024,174 @@ button {
   gap: 12px;
 }
 
+/* 确认对话框样式 */
+.confirm-dialog {
+  max-width: 480px;
+  text-align: center;
+  padding: 30px;
+}
+
+.confirm-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
+  animation: pulse 1.5s infinite;
+}
+
+.confirm-icon.warning {
+  animation-delay: 0.2s;
+}
+
+.confirm-content {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 20px 0;
+  padding: 0 10px;
+}
+
+.confirm-dialog .modal-title {
+  margin-bottom: 10px;
+}
+
+.confirm-dialog .modal-actions {
+  justify-content: center;
+  margin-top: 30px;
+}
+
+/* 危险按钮样式 */
+button.primary.danger {
+  background: linear-gradient(135deg, #ff4757, #ff6b6b);
+  border-color: #ff4757;
+}
+
+button.primary.danger:hover {
+  background: linear-gradient(135deg, #ff3838, #ff6348);
+  transform: translateY(-1px);
+}
+
+button.primary.danger:active {
+  transform: translateY(0);
+}
+
+.folder-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-variant);
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--on-surface);
+  transition: all 0.2s;
+}
+
+.folder-select-btn:hover {
+  background: var(--primary-container);
+  border-color: var(--primary);
+  color: var(--on-primary-container);
+}
+
+.folder-selector {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: var(--surface);
+  margin-top: 8px;
+}
+
+.folder-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.folder-option:last-child {
+  border-bottom: none;
+}
+
+.folder-option:hover {
+  background: var(--surface-variant);
+}
+
+.folder-option .selected-indicator {
+  margin-left: auto;
+  color: var(--primary);
+  font-weight: bold;
+}
+
 .toast {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  padding: 16px 20px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px var(--shadow-lg), 0 0 20px var(--glow);
+  bottom: 40px;
+  right: 40px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px var(--shadow-lg), 0 0 30px var(--glow);
   color: #fff;
-  font-size: 14px;
-  z-index: 200;
+  font-size: 16px;
+  font-weight: 500;
+  z-index: 2000;
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  min-width: 300px;
+  max-width: 400px;
+  word-wrap: break-word;
 }
 
 .toast.success {
   background: linear-gradient(45deg, var(--success), #34d399);
-  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 16px 40px rgba(16, 185, 129, 0.4);
+  animation: pulse 2s infinite;
 }
 
 .toast.error {
   background: linear-gradient(45deg, var(--danger), #f87171);
-  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 16px 40px rgba(239, 68, 68, 0.4);
+  animation: errorPulse 1s infinite;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.toast.warning {
+  background: linear-gradient(45deg, var(--warning), #fbbf24);
+  box-shadow: 0 16px 40px rgba(245, 158, 11, 0.4);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 16px 40px rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 16px 40px rgba(16, 185, 129, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 16px 40px rgba(16, 185, 129, 0.4);
+  }
+}
+
+@keyframes errorPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 16px 40px rgba(239, 68, 68, 0.4);
+  }
+  30% {
+    transform: scale(1.08);
+    box-shadow: 0 16px 40px rgba(239, 68, 68, 0.7);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 16px 40px rgba(239, 68, 68, 0.4);
+  }
 }
 
 .fade-enter-active,
@@ -1035,12 +1206,16 @@ button {
 
 .toast-enter-active,
 .toast-leave-active {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
-.toast-enter-from,
+.toast-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
 .toast-leave-to {
-  transform: translateY(10px);
+  transform: translateX(100%);
   opacity: 0;
 }
 

@@ -1,11 +1,61 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>网址收藏夹</title>
+    <link rel="icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/style.css" />
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+.folder-tree {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.folder-selector {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.folder-option {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.folder-option:hover {
+  background: var(--hover);
+}
+
+.folder-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.selected-indicator {
+  margin-left: auto;
+  color: var(--primary);
+  font-weight: bold;
+}
+
+.disabled-text {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+</style>
+    <script src="/vue.global.prod.js"></script>
     <script defer src="/app.js"></script>
   </head>
   <body>
@@ -27,17 +77,27 @@
             <div class="panel-title horizontal">
               <h2>结构</h2>
               <div class="panel-actions">
-                <button class="tertiary" @click="openAddFolder(null)">
+                <button class="tertiary small" @click="openAddFolder(null)">
                 <span>📁+</span>
                 <span>新建文件夹</span>
               </button>
                 <button class="tertiary small" @click="toggleTreeActions">
-                  {{ treeActionsVisible ? '完成' : '编辑' }}
+                  <span>{{ treeActionsVisible ? '✅' : '✏️' }}</span>
+                  <span>{{ treeActionsVisible ? '完成' : '编辑' }}</span>
                 </button>
               </div>
             </div>
           </div>
           <ul class="tree-root">
+            <!-- 固定的【所有网址】文件夹 -->
+            <li class="tree-item">
+              <div :class="['tree-row', { selected: selectedNodeId === 'all-bookmarks' }]" @click="selectAllBookmarksFolder">
+                <button class="node-main" type="button">
+                  <span class="node-icon">📚</span>
+                  <span class="node-title">所有网址</span>
+                </button>
+              </div>
+            </li>
             <bookmark-node
               v-for="node in tree"
               :key="node.id"
@@ -65,8 +125,13 @@
                 <span class="panel-tip">{{ listTitle }}</span>
               </div>
               <div class="panel-actions">
+                <button class="tertiary small" @click="openAddBookmark(null)">
+                  <span>➕</span>
+                  <span>添加网址</span>
+                </button>
                 <button class="tertiary small" @click="toggleBookmarkEdit" v-if="displayBookmarks.length > 0">
-                  {{ bookmarkEditMode ? '完成' : '编辑' }}
+                  <span>{{ bookmarkEditMode ? '✅' : '✏️' }}</span>
+                  <span>{{ bookmarkEditMode ? '完成' : '编辑' }}</span>
                 </button>
               </div>
             </div>
@@ -117,7 +182,7 @@
                     <div class="bookmark-main">
                       <span class="node-icon">
                         <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
-                        <span v-else>🔖</span>
+                        <span v-else>🌏</span>
                       </span>
                       <div class="bookmark-info">
                         <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
@@ -177,6 +242,10 @@
             <span class="action-icon">⬇️</span>
             <span class="action-text">下移</span>
           </button>
+          <button type="button" @click="contextMoveTo">
+            <span class="action-icon">📁</span>
+            <span class="action-text">移动到...</span>
+          </button>
           <hr />
           <button type="button" @click="contextEdit">
             <span class="action-icon">✏️</span>
@@ -193,6 +262,12 @@
         <div v-if="modal.visible" class="modal-backdrop">
           <div class="modal">
             <h3 class="modal-title">{{ modalTitle }}</h3>
+            <div class="modal-subtitle">
+              <button type="button" class="folder-select-btn" @click="showFolderSelector">
+                <span class="action-icon">📁</span>
+                <span>{{ modal.parentId ? getFolderPath(modal.parentId) : '选择文件夹' }}</span>
+              </button>
+            </div>
             <form @submit.prevent="submitModal">
               <div class="form-group" v-if="modal.type.includes('bookmark')">
                 <label>网址</label>
@@ -235,9 +310,98 @@
         </div>
       </transition>
 
-      <transition name="toast">
+      <transition name="fade">
+        <div v-if="moveModal.visible" class="modal-backdrop">
+          <div class="modal">
+            <h3 class="modal-title">移动到文件夹</h3>
+            <div class="form-group">
+              <label>选择目标文件夹</label>
+              <div class="folder-selector">
+                <!--<div class="folder-option" @click="selectMoveTarget(null)">
+                  <span class="action-icon">🏠</span>
+                  <span class="action-text">根目录</span>
+                  <span class="selected-indicator" v-if="moveModal.targetParentId === null">✓</span>
+                </div>-->
+                <div 
+                  v-for="folder in getAllFolders()" 
+                  :key="folder.id"
+                  class="folder-option"
+                  :class="{ 'disabled': isFolderOrChild(folder.id, rightClickNode?.parent_id) }"
+                  @click="!isFolderOrChild(folder.id, rightClickNode?.parent_id) && selectMoveTarget(folder.id)"
+                >
+                  <span class="action-icon">📁</span>
+                  <span class="action-text">{{ getFolderPath(folder.id) }}</span>
+                  <span class="selected-indicator" v-if="moveModal.targetParentId === folder.id">✓</span>
+                  <span class="disabled-text" v-if="isFolderOrChild(folder.id, rightClickNode?.parent_id)">（不可选择）</span>
+                </div>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="primary" @click="confirmMove" v-if="moveModal.targetParentId !== rightClickNode?.parent_id">
+                确认移动
+              </button>
+              <button type="button" class="secondary" @click="closeMoveModal">取消</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <transition name="fade">
         <div v-if="toast.visible" :class="['toast', toast.type]">
           {{ toast.message }}
+        </div>
+      </transition>
+
+      <transition name="fade">
+        <div v-if="confirmDialog.visible" class="modal-backdrop">
+          <div class="modal confirm-dialog">
+            <div class="confirm-icon" :class="confirmDialog.type">
+              {{ confirmDialog.type === 'warning' ? '⚠️' : '❓' }}
+            </div>
+            <h3 class="modal-title">{{ confirmDialog.title }}</h3>
+            <div class="confirm-content">
+              {{ confirmDialog.message }}
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="secondary" @click="handleConfirmCancel">
+                取消
+              </button>
+              <button type="button" class="primary danger" @click="handleConfirmOk">
+                {{ confirmDialog.confirmText || '确认' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <transition name="fade">
+        <div v-if="folderSelectorVisible" class="modal-backdrop">
+          <div class="modal">
+            <h3 class="modal-title">选择文件夹</h3>
+            <div class="form-group">
+              <label>目标文件夹</label>
+              <div class="folder-selector">
+                <div 
+                  v-for="folder in getAllFolders()" 
+                  :key="folder.id"
+                  class="folder-option"
+                  @click="selectFolder(folder.id)"
+                >
+                  <span class="action-icon">📁</span>
+                  <span class="action-text">{{ getFolderPath(folder.id) }}</span>
+                  <span class="selected-indicator" v-if="selectedFolderId === folder.id">✓</span>
+                </div>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="primary" @click="confirmFolderSelection">
+                确认
+              </button>
+              <button type="button" class="secondary" @click="cancelFolderSelection">
+                取消
+              </button>
+            </div>
+          </div>
         </div>
       </transition>
     </div>

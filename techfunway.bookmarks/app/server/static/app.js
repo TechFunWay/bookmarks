@@ -5,7 +5,7 @@ const BookmarkNode = {
   props: {
     node: { type: Object, required: true },
     level: { type: Number, default: 0 },
-    selectedId: { type: Number, default: null },
+    selectedId: { type: Number, required: true },
     globalActionsVisible: { type: Boolean, default: false },
   },
   emits: ["add-folder", "add-bookmark", "edit", "delete", "select", "move", "context"],
@@ -78,13 +78,14 @@ const BookmarkNode = {
           <button v-if="isFolder" type="button" title="添加子文件夹" @click="onAddFolder">
             <span class="action-icon">📂</span>
           </button>
-          <button v-if="isFolder" type="button" title="添加网址" @click="onAddBookmark">
-            <span class="action-icon">➕</span>
-          </button>
           <button type="button" title="编辑" @click="onEdit">
             <span class="action-icon">✏️</span>
           </button>
-          <button type="button" title="删除" @click="onDelete">
+          <button 
+            type="button" 
+            title="删除" 
+            @click="onDelete"
+          >
             <span class="action-icon">🗑️</span>
           </button>
         </div>
@@ -141,13 +142,32 @@ const app = createApp({
       metadataLoading: false,
       metadataError: "",
       toast: {
-        visible: false,
-        message: "",
-        type: "success",
-        timer: null,
-      },
+      visible: false,
+      message: "",
+      type: "success",
+      timer: null,
+    },
+    // 自定义确认对话框
+    confirmDialog: {
+      visible: false,
+      title: "确认操作",
+      message: "",
+      type: "warning", // warning 或 info
+      confirmText: "确认",
+      callback: null
+    },
       bookmarkEditMode: false,
       selectedBookmarks: new Set(),
+      moveModal: {
+        visible: false,
+        targetParentId: null,
+        nodeId: null,
+      },
+      folderSelectorVisible: false,
+      selectedFolderId: null,
+      rightClickNode:{
+
+      }
     };
   },
   computed: {
@@ -174,6 +194,11 @@ const app = createApp({
       return this.collectBookmarks(this.tree);
     },
     displayBookmarks() {
+      // 如果选择的是【所有网址】文件夹，显示所有书签
+      if (this.selectedNodeId === 'all-bookmarks') {
+        return this.bookmarkList;
+      }
+      
       const current = this.selectedNode;
       if (!current) {
         return this.bookmarkList;
@@ -188,6 +213,11 @@ const app = createApp({
       return this.bookmarkList;
     },
     listTitle() {
+      // 如果选择的是【所有网址】文件夹，显示对应标题
+      if (this.selectedNodeId === 'all-bookmarks') {
+        return "显示所有收藏的网址";
+      }
+      
       const current = this.selectedNode;
       if (!current) {
         return "显示全部收藏的网址";
@@ -223,6 +253,36 @@ const app = createApp({
     window.removeEventListener("resize", this.hideContextMenu);
   },
   methods: {
+    showFolderSelector() {
+      this.selectedFolderId = this.modal.parentId || null;
+      this.folderSelectorVisible = true;
+    },
+    selectFolder(folderId) {
+      this.selectedFolderId = folderId;
+    },
+    confirmFolderSelection() {
+      this.modal.parentId = this.selectedFolderId;
+      this.folderSelectorVisible = false;
+    },
+    cancelFolderSelection() {
+      this.folderSelectorVisible = false;
+    },
+    getAllFolders() {
+      // 获取所有文件夹节点
+      const folders = [];
+      const collectFolders = (nodes, path = '') => {
+        nodes.forEach(node => {
+          if (node.type === 'folder') {
+            folders.push(node);
+            if (node.children && node.children.length > 0) {
+              collectFolders(node.children);
+            }
+          }
+        });
+      };
+      collectFolders(this.tree);
+      return folders;
+    },
     toggleTheme() {
       const html = document.documentElement;
       const currentTheme = html.getAttribute('data-theme');
@@ -293,13 +353,13 @@ const app = createApp({
         this.tree = Array.isArray(data) ? data : [];
         if (this.selectedNodeId) {
           const current = this.findNodeById(this.selectedNodeId, this.tree);
-          if (!current) {
-            const firstFolder = this.findFirstFolder(this.tree);
-            this.selectedNodeId = firstFolder ? firstFolder.id : null;
+          if (!current && this.selectedNodeId !== 'all-bookmarks') {
+            // 默认选中【所有网址】文件夹
+            this.selectedNodeId = 'all-bookmarks';
           }
         } else {
-          const firstFolder = this.findFirstFolder(this.tree);
-          this.selectedNodeId = firstFolder ? firstFolder.id : null;
+          // 默认选中【所有网址】文件夹
+          this.selectedNodeId = 'all-bookmarks';
         }
         if (this.contextMenu.visible) {
           const node = this.contextNode;
@@ -344,6 +404,14 @@ const app = createApp({
         this.hideContextMenu();
       }
     },
+    
+    // 选择【所有网址】文件夹
+    selectAllBookmarksFolder() {
+      this.selectedNodeId = 'all-bookmarks';
+      // 确保编辑模式下也不会对所有网址文件夹进行操作
+      this.treeActionsVisible = false;
+      this.hideContextMenu();
+    },
     openAddFolder(parent) {
       this.hideContextMenu();
       this.modal.visible = true;
@@ -355,7 +423,7 @@ const app = createApp({
       this.modal.form.favicon_url = "";
       this.metadataError = "";
     },
-    openAddBookmark(parent) {
+    openAddBookmark(parent = null) {
       this.hideContextMenu();
       this.modal.visible = true;
       this.modal.type = "add-bookmark";
@@ -365,6 +433,8 @@ const app = createApp({
       this.modal.form.url = "";
       this.modal.form.favicon_url = "";
       this.metadataError = "";
+      // 从列表顶部按钮调用时，确保不强制设置parentId
+      // 这样用户可以先选择文件夹，再填写信息
     },
     openEdit(node) {
       this.hideContextMenu();
@@ -453,6 +523,11 @@ const app = createApp({
       this.selectedNodeId = data.id;
     },
     async createBookmark() {
+      // 验证是否选中了文件夹
+      if (!this.modal.parentId) {
+        throw new Error("请先选择一个文件夹");
+      }
+      
       const payload = {
         url: this.modal.form.url.trim(),
         title: this.modal.form.title.trim(),
@@ -486,9 +561,15 @@ const app = createApp({
       }
     },
     async updateBookmark() {
+      // 验证是否选中了文件夹
+      if (!this.modal.parentId) {
+        throw new Error("请先选择一个文件夹");
+      }
+      
       const payload = {
         title: this.modal.form.title.trim(),
         url: this.modal.form.url.trim(),
+        parent_id: this.modal.parentId,
       };
       const favicon = this.modal.form.favicon_url.trim();
       if (favicon) {
@@ -504,8 +585,43 @@ const app = createApp({
         throw new Error(err.error || "更新网址失败");
       }
     },
+    // 自定义确认对话框方法
+    async customConfirm(title, message, type = 'warning', confirmText = '确认') {
+      return new Promise((resolve) => {
+        this.confirmDialog = {
+          visible: true,
+          title,
+          message,
+          type,
+          confirmText,
+          callback: resolve
+        };
+      });
+    },
+    
+    handleConfirmOk() {
+      const callback = this.confirmDialog.callback;
+      this.confirmDialog.visible = false;
+      if (typeof callback === 'function') {
+        callback(true);
+      }
+    },
+    
+    handleConfirmCancel() {
+      const callback = this.confirmDialog.callback;
+      this.confirmDialog.visible = false;
+      if (typeof callback === 'function') {
+        callback(false);
+      }
+    },
+    
     async confirmDelete(node) {
-      const ok = window.confirm(`确定删除「${node.title}」吗？该操作不可撤销。`);
+      const ok = await this.customConfirm(
+        "确认删除",
+        `确定删除「${node.title}」吗？该操作不可撤销。`,
+        "warning",
+        "删除"
+      );
       if (!ok) return;
       try {
         const res = await fetch(`/api/nodes/${node.id}`, { method: "DELETE" });
@@ -567,17 +683,26 @@ const app = createApp({
     },
     toggleTreeActions() {
       this.treeActionsVisible = !this.treeActionsVisible;
+      // 如果当前选中的是【所有网址】文件夹，确保编辑模式为关闭
+      if (this.selectedNodeId === 'all-bookmarks') {
+        this.treeActionsVisible = false;
+      }
       if (this.treeActionsVisible) {
         this.hideContextMenu();
       }
     },
-    showFolderActions({ node, x, y }) {
-      this.treeActionsVisible = false;
-      if (!node || node.type !== "folder") {
-        return;
-      }
-      this.showContextMenu(node, x, y);
-    },
+     showFolderActions({ node, x, y }) {
+        // 如果是【所有网址】文件夹，不显示右键菜单
+        if (!node || node.id === 'all-bookmarks' || node.type !== 'folder') {
+          return;
+        }
+        this.treeActionsVisible = false;
+        this.contextMenu.visible = true;
+        this.contextMenu.x = x;
+        this.contextMenu.y = y;
+        this.contextMenu.nodeId = node.id;
+        this.rightClickNode = node;
+      },
     showBookmarkActions(node, event) {
       this.treeActionsVisible = false;
       this.showContextMenu(node, event.clientX, event.clientY);
@@ -670,6 +795,119 @@ const app = createApp({
       this.hideContextMenu();
       this.confirmDelete(node);
     },
+    contextMoveTo() {
+      const node = this.contextNode;
+      if (!node) return;
+      this.moveModal.visible = true;
+      this.moveModal.targetParentId = node.parent_id ?? null;
+      this.rightClickNode = node;
+      this.hideContextMenu();
+    },
+    closeMoveModal() {
+      this.moveModal.visible = false;
+      this.moveModal.targetParentId = null;
+      this.hideContextMenu();
+    },
+    selectMoveTarget(parentId) {
+      this.moveModal.targetParentId = parentId;
+    },
+    getAllFolders() {
+      const folders = [];
+      const collectFolders = (nodes) => {
+        for (const node of nodes) {
+          if (node.type === "folder") {
+            folders.push(node);
+            if (node.children && node.children.length) {
+              collectFolders(node.children);
+            }
+          }
+        }
+      };
+      collectFolders(this.tree);
+      return folders;
+    },
+    getFolderPath(folderId) {
+      const findPath = (nodes, targetId, currentPath = []) => {
+        for (const node of nodes) {
+          if (node.id === targetId) {
+            return currentPath.concat(node.title);
+          }
+          if (node.children && node.children.length) {
+            const found = findPath(node.children, targetId, currentPath.concat(node.title));
+            if (found.length > currentPath.length) {
+              return found;
+            }
+          }
+        }
+        return [];
+      };
+      
+      const path = findPath(this.tree, folderId);
+      return path.join(" / ");
+    },
+    isFolderOrChild(folderId, nodeId) {
+      console.log('isFolderOrChild 参数folderId：', folderId, 'nodeId：',nodeId);
+      if (!nodeId) return false;
+      
+      // 检查是否是同一个文件夹
+      if (folderId === nodeId) {
+        return true;
+      }
+      
+      // 检查是否是子文件夹
+      const node = this.findNodeById(nodeId, this.tree);
+      if (!node || node.type !== "folder") {
+        return false;
+      }
+      
+      const checkIsDescendant = (parentNode, targetId) => {
+        if (!parentNode.children) return false;
+        
+        for (const child of parentNode.children) {
+          if (child.id === targetId) {
+            return true;
+          }
+          if (child.type === "folder" && checkIsDescendant(child, targetId)) {
+            return true;
+          }
+        }
+        return false;
+      };
+      
+      return checkIsDescendant(node, folderId);
+    },
+    async confirmMove() {
+      const node = this.rightClickNode;
+      if (!node) return;
+      
+      const newParentId = this.moveModal.targetParentId;
+      if (newParentId === node.parent_id) {
+        this.showToast("未选择不同的文件夹", "warning");
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/nodes/${node.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            parent_id: newParentId,
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error("移动操作失败");
+        }
+        
+        this.closeMoveModal();
+        await this.loadTree();
+        this.showToast("已移动到指定文件夹", "success");
+      } catch (error) {
+        this.showToast(error.message || "移动操作失败", "error");
+      }
+    },
     collectBookmarks(nodes, trail = []) {
       const list = [];
       for (const node of nodes) {
@@ -684,7 +922,7 @@ const app = createApp({
             title: node.title,
             url: node.url,
             favicon_url: node.favicon_url,
-            path: trail.join(" / "),
+            path: trail.length > 0 ? trail.join(" / ") : "",
             raw: node,
           });
         }
@@ -706,16 +944,23 @@ const app = createApp({
       return result;
     },
     showToast(message, type = "success") {
-      this.toast.visible = true;
-      this.toast.message = message;
-      this.toast.type = type;
+      // 清除之前的定时器
       if (this.toast.timer) {
         clearTimeout(this.toast.timer);
       }
+      
+      // 设置新的消息
+      this.toast.visible = true;
+      this.toast.message = message;
+      this.toast.type = type;
+      
+      // 根据类型设置不同的显示时间
+      const duration = type === "error" ? 5000 : type === "warning" ? 3500 : 2200;
+      
       this.toast.timer = setTimeout(() => {
         this.toast.visible = false;
         this.toast.timer = null;
-      }, 2200);
+      }, duration);
     },
     // 编辑模式相关方法
     toggleBookmarkEdit() {
@@ -753,7 +998,12 @@ const app = createApp({
         return;
       }
       const count = this.selectedBookmarks.size;
-      const ok = window.confirm(`确定删除选中的 ${count} 个网址吗？该操作不可撤销。`);
+      const ok = await this.customConfirm(
+        "批量删除",
+        `确定删除选中的 ${count} 个网址吗？该操作不可撤销。`,
+        "warning",
+        "删除"
+      );
       if (!ok) return;
       
       try {
