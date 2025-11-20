@@ -185,6 +185,11 @@ const app = createApp({
       return this.collectBookmarks(this.tree);
     },
     displayBookmarks() {
+      // 如果选择的是【所有网址】文件夹，显示所有书签
+      if (this.selectedNodeId === 'all-bookmarks') {
+        return this.bookmarkList;
+      }
+      
       const current = this.selectedNode;
       if (!current) {
         return this.bookmarkList;
@@ -199,6 +204,11 @@ const app = createApp({
       return this.bookmarkList;
     },
     listTitle() {
+      // 如果选择的是【所有网址】文件夹，显示对应标题
+      if (this.selectedNodeId === 'all-bookmarks') {
+        return "显示所有收藏的网址";
+      }
+      
       const current = this.selectedNode;
       if (!current) {
         return "显示全部收藏的网址";
@@ -384,6 +394,14 @@ const app = createApp({
       if (!this.treeActionsVisible) {
         this.hideContextMenu();
       }
+    },
+    
+    // 选择【所有网址】文件夹
+    selectAllBookmarksFolder() {
+      this.selectedNodeId = 'all-bookmarks';
+      // 确保编辑模式下也不会对所有网址文件夹进行操作
+      this.treeActionsVisible = false;
+      this.hideContextMenu();
     },
     openAddFolder(parent) {
       this.hideContextMenu();
@@ -611,17 +629,26 @@ const app = createApp({
     },
     toggleTreeActions() {
       this.treeActionsVisible = !this.treeActionsVisible;
+      // 如果当前选中的是【所有网址】文件夹，确保编辑模式为关闭
+      if (this.selectedNodeId === 'all-bookmarks') {
+        this.treeActionsVisible = false;
+      }
       if (this.treeActionsVisible) {
         this.hideContextMenu();
       }
     },
-    showFolderActions({ node, x, y }) {
-      this.treeActionsVisible = false;
-      if (!node || node.type !== "folder") {
-        return;
-      }
-      this.showContextMenu(node, x, y);
-    },
+     showFolderActions({ node, x, y }) {
+        // 如果是【所有网址】文件夹，不显示右键菜单
+        if (!node || node.id === 'all-bookmarks' || node.type !== 'folder') {
+          return;
+        }
+        this.treeActionsVisible = false;
+        this.contextMenu.visible = true;
+        this.contextMenu.x = x;
+        this.contextMenu.y = y;
+        this.contextMenu.nodeId = node.id;
+        this.rightClickNode = node;
+      },
     showBookmarkActions(node, event) {
       this.treeActionsVisible = false;
       this.showContextMenu(node, event.clientX, event.clientY);
