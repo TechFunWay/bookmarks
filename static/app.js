@@ -142,11 +142,20 @@ const app = createApp({
       metadataLoading: false,
       metadataError: "",
       toast: {
-        visible: false,
-        message: "",
-        type: "success",
-        timer: null,
-      },
+      visible: false,
+      message: "",
+      type: "success",
+      timer: null,
+    },
+    // 自定义确认对话框
+    confirmDialog: {
+      visible: false,
+      title: "确认操作",
+      message: "",
+      type: "warning", // warning 或 info
+      confirmText: "确认",
+      callback: null
+    },
       bookmarkEditMode: false,
       selectedBookmarks: new Set(),
       moveModal: {
@@ -576,8 +585,43 @@ const app = createApp({
         throw new Error(err.error || "更新网址失败");
       }
     },
+    // 自定义确认对话框方法
+    async customConfirm(title, message, type = 'warning', confirmText = '确认') {
+      return new Promise((resolve) => {
+        this.confirmDialog = {
+          visible: true,
+          title,
+          message,
+          type,
+          confirmText,
+          callback: resolve
+        };
+      });
+    },
+    
+    handleConfirmOk() {
+      const callback = this.confirmDialog.callback;
+      this.confirmDialog.visible = false;
+      if (typeof callback === 'function') {
+        callback(true);
+      }
+    },
+    
+    handleConfirmCancel() {
+      const callback = this.confirmDialog.callback;
+      this.confirmDialog.visible = false;
+      if (typeof callback === 'function') {
+        callback(false);
+      }
+    },
+    
     async confirmDelete(node) {
-      const ok = window.confirm(`确定删除「${node.title}」吗？该操作不可撤销。`);
+      const ok = await this.customConfirm(
+        "确认删除",
+        `确定删除「${node.title}」吗？该操作不可撤销。`,
+        "warning",
+        "删除"
+      );
       if (!ok) return;
       try {
         const res = await fetch(`/api/nodes/${node.id}`, { method: "DELETE" });
@@ -954,7 +998,12 @@ const app = createApp({
         return;
       }
       const count = this.selectedBookmarks.size;
-      const ok = window.confirm(`确定删除选中的 ${count} 个网址吗？该操作不可撤销。`);
+      const ok = await this.customConfirm(
+        "批量删除",
+        `确定删除选中的 ${count} 个网址吗？该操作不可撤销。`,
+        "warning",
+        "删除"
+      );
       if (!ok) return;
       
       try {
