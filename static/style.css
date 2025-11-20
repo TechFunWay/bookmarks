@@ -434,6 +434,22 @@ button {
   }
 }
 
+/* 脉冲动画 */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .header-actions button + button {
   margin-left: 12px;
 }
@@ -1006,6 +1022,55 @@ button {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+/* 确认对话框样式 */
+.confirm-dialog {
+  max-width: 480px;
+  text-align: center;
+  padding: 30px;
+}
+
+.confirm-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
+  animation: pulse 1.5s infinite;
+}
+
+.confirm-icon.warning {
+  animation-delay: 0.2s;
+}
+
+.confirm-content {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 20px 0;
+  padding: 0 10px;
+}
+
+.confirm-dialog .modal-title {
+  margin-bottom: 10px;
+}
+
+.confirm-dialog .modal-actions {
+  justify-content: center;
+  margin-top: 30px;
+}
+
+/* 危险按钮样式 */
+button.primary.danger {
+  background: linear-gradient(135deg, #ff4757, #ff6b6b);
+  border-color: #ff4757;
+}
+
+button.primary.danger:hover {
+  background: linear-gradient(135deg, #ff3838, #ff6348);
+  transform: translateY(-1px);
+}
+
+button.primary.danger:active {
+  transform: translateY(0);
 }
 
 .folder-select-btn {
