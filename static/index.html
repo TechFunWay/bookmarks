@@ -249,6 +249,9 @@
         <div v-if="modal.visible" class="modal-backdrop">
           <div class="modal">
             <h3 class="modal-title">{{ modalTitle }}</h3>
+            <div class="modal-subtitle">
+              <span class="action-icon">📁</span> {{ getFolderPath(modal.parentId) }}
+            </div>
             <form @submit.prevent="submitModal">
               <div class="form-group" v-if="modal.type.includes('bookmark')">
                 <label>网址</label>
