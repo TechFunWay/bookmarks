@@ -89,6 +89,15 @@
             </div>
           </div>
           <ul class="tree-root">
+            <!-- 固定的【所有网址】文件夹 -->
+            <li class="tree-item">
+              <div :class="['tree-row', { selected: selectedNodeId === 'all-bookmarks' }]" @click="selectAllBookmarksFolder">
+                <button class="node-main" type="button">
+                  <span class="node-icon">📚</span>
+                  <span class="node-title">所有网址</span>
+                </button>
+              </div>
+            </li>
             <bookmark-node
               v-for="node in tree"
               :key="node.id"
@@ -350,11 +359,6 @@
             <div class="form-group">
               <label>目标文件夹</label>
               <div class="folder-selector">
-                <div class="folder-option" @click="selectFolder(null)">
-                  <span class="action-icon">🏠</span>
-                  <span class="action-text">根目录</span>
-                  <span class="selected-indicator" v-if="selectedFolderId === null">✓</span>
-                </div>
                 <div 
                   v-for="folder in getAllFolders()" 
                   :key="folder.id"
