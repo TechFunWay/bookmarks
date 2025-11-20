@@ -353,6 +353,28 @@
       </transition>
 
       <transition name="fade">
+        <div v-if="confirmDialog.visible" class="modal-backdrop">
+          <div class="modal confirm-dialog">
+            <div class="confirm-icon" :class="confirmDialog.type">
+              {{ confirmDialog.type === 'warning' ? '⚠️' : '❓' }}
+            </div>
+            <h3 class="modal-title">{{ confirmDialog.title }}</h3>
+            <div class="confirm-content">
+              {{ confirmDialog.message }}
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="secondary" @click="handleConfirmCancel">
+                取消
+              </button>
+              <button type="button" class="primary danger" @click="handleConfirmOk">
+                {{ confirmDialog.confirmText || '确认' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <transition name="fade">
         <div v-if="folderSelectorVisible" class="modal-backdrop">
           <div class="modal">
             <h3 class="modal-title">选择文件夹</h3>
