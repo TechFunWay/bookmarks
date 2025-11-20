@@ -514,7 +514,11 @@ const app = createApp({
       this.selectedNodeId = data.id;
     },
     async createBookmark() {
-      // 允许添加到根目录（parentId为null）
+      // 验证是否选中了文件夹
+      if (!this.modal.parentId) {
+        throw new Error("请先选择一个文件夹");
+      }
+      
       const payload = {
         url: this.modal.form.url.trim(),
         title: this.modal.form.title.trim(),
@@ -548,9 +552,15 @@ const app = createApp({
       }
     },
     async updateBookmark() {
+      // 验证是否选中了文件夹
+      if (!this.modal.parentId) {
+        throw new Error("请先选择一个文件夹");
+      }
+      
       const payload = {
         title: this.modal.form.title.trim(),
         url: this.modal.form.url.trim(),
+        parent_id: this.modal.parentId,
       };
       const favicon = this.modal.form.favicon_url.trim();
       if (favicon) {
@@ -890,16 +900,23 @@ const app = createApp({
       return result;
     },
     showToast(message, type = "success") {
-      this.toast.visible = true;
-      this.toast.message = message;
-      this.toast.type = type;
+      // 清除之前的定时器
       if (this.toast.timer) {
         clearTimeout(this.toast.timer);
       }
+      
+      // 设置新的消息
+      this.toast.visible = true;
+      this.toast.message = message;
+      this.toast.type = type;
+      
+      // 根据类型设置不同的显示时间
+      const duration = type === "error" ? 5000 : type === "warning" ? 3500 : 2200;
+      
       this.toast.timer = setTimeout(() => {
         this.toast.visible = false;
         this.toast.timer = null;
-      }, 2200);
+      }, duration);
     },
     // 编辑模式相关方法
     toggleBookmarkEdit() {
