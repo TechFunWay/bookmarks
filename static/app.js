@@ -344,13 +344,13 @@ const app = createApp({
         this.tree = Array.isArray(data) ? data : [];
         if (this.selectedNodeId) {
           const current = this.findNodeById(this.selectedNodeId, this.tree);
-          if (!current) {
-            const firstFolder = this.findFirstFolder(this.tree);
-            this.selectedNodeId = firstFolder ? firstFolder.id : null;
+          if (!current && this.selectedNodeId !== 'all-bookmarks') {
+            // 默认选中【所有网址】文件夹
+            this.selectedNodeId = 'all-bookmarks';
           }
         } else {
-          const firstFolder = this.findFirstFolder(this.tree);
-          this.selectedNodeId = firstFolder ? firstFolder.id : null;
+          // 默认选中【所有网址】文件夹
+          this.selectedNodeId = 'all-bookmarks';
         }
         if (this.contextMenu.visible) {
           const node = this.contextNode;
