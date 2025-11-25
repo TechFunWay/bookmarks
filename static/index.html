@@ -6,55 +6,6 @@
     <title>网址收藏夹</title>
     <link rel="icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/style.css" />
-<style>
-.folder-tree {
-  background: var(--surface);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.folder-selector {
-  max-height: 300px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px;
-}
-
-.folder-option {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  margin: 4px 0;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.folder-option:hover {
-  background: var(--hover);
-}
-
-.folder-option.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.selected-indicator {
-  margin-left: auto;
-  color: var(--primary);
-  font-weight: bold;
-}
-
-.disabled-text {
-  margin-left: auto;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-</style>
     <script src="/vue.global.prod.js"></script>
     <script defer src="/app.js"></script>
   </head>
@@ -123,6 +74,24 @@
               <div>
                 <h2>网址列表</h2>
                 <span class="panel-tip">{{ listTitle }}</span>
+              </div>
+              <div class="panel-actions">
+                <!-- 搜索框 -->
+                <div class="search-container">
+                  <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" @input="handleSearchInput" @keyup.enter="handleSearch" class="search-input" placeholder="搜索网址标题或URL..." v-model="searchQuery" />
+                    <button id="clear-search-btn" class="clear-search-btn" v-if="clearSearchBtnVisible" @click="clearSearch">
+                      ✕
+                    </button>
+                  </div>
+                  <button id="search-btn" class="search-btn" @click="handleSearch">
+                    搜索
+                  </button>
+                </div>
+                <div id="search-stats" class="searc h-stats" v-if="searchResultVisible">
+                  搜索结果: <strong v-text="searchResultCount"></strong> 项
+                </div>
               </div>
               <div class="panel-actions">
                 <button class="tertiary small" @click="openAddBookmark(null)">
