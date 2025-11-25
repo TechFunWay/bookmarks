@@ -106,6 +106,7 @@ func main() {
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/tree", s.handleGetTree)
 		r.Get("/metadata", s.handleMetadata)
+		r.Get("/search", s.handleSearch)
 		r.Post("/folders", s.handleCreateFolder)
 		r.Post("/bookmarks", s.handleCreateBookmark)
 		r.Put("/nodes/{id}", s.handleUpdateNode)
@@ -1286,4 +1287,74 @@ func handleIntranetURL(urlStr string) string {
 	}
 
 	return urlStr
+}
+
+// handleSearch 处理书签搜索请求
+func (s *server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		respondError(w, http.StatusBadRequest, errors.New("搜索关键词不能为空"))
+		return
+	}
+
+	// 构建搜索SQL，使用LIKE在标题和URL中搜索
+	sqlQuery := `
+		SELECT id, parent_id, type, title, url, favicon_url, position, created_at, updated_at
+		FROM nodes
+		WHERE type = ? AND (title LIKE ? OR url LIKE ?)
+		ORDER BY position, id
+	`
+
+	// 准备参数
+	likeQuery := "%" + query + "%"
+	args := []any{nodeTypeBookmark, likeQuery, likeQuery}
+
+	// 执行查询
+	rows, err := s.db.QueryContext(r.Context(), sqlQuery, args...)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+
+	// 解析结果
+	var results []*node
+	for rows.Next() {
+		var n node
+		var parent sql.NullInt64
+		var urlVal sql.NullString
+		var icon sql.NullString
+
+		if err := rows.Scan(&n.ID, &parent, &n.Type, &n.Title, &urlVal, &icon, &n.Position, &n.CreatedAt, &n.UpdatedAt); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if parent.Valid {
+			p := parent.Int64
+			n.ParentID = &p
+		}
+		if urlVal.Valid {
+			u := urlVal.String
+			n.URL = &u
+		}
+		if icon.Valid {
+			i := icon.String
+			n.FaviconURL = &i
+		}
+
+		results = append(results, &n)
+	}
+
+	if err := rows.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// 返回搜索结果
+	respondJSON(w, http.StatusOK, map[string]any{
+		"results": results,
+		"query":   query,
+		"total":   len(results),
+	})
 }

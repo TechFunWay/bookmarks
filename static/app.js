@@ -117,59 +117,63 @@ const app = createApp({
     BookmarkNode,
   },
   data() {
-    return {
-      tree: [],
-      loading: false,
-      selectedNodeId: null,
-      treeActionsVisible: false,
-      contextMenu: {
-        visible: false,
-        x: 0,
-        y: 0,
-        nodeId: null,
-      },
-      modal: {
-        visible: false,
-        type: "",
-        parentId: null,
-        nodeId: null,
-        form: {
-          title: "",
-          url: "",
-          favicon_url: "",
+      return {
+        tree: [],
+        loading: false,
+        selectedNodeId: null,
+        treeActionsVisible: false,
+        contextMenu: {
+          visible: false,
+          x: 0,
+          y: 0,
+          nodeId: null,
         },
-      },
-      metadataLoading: false,
-      metadataError: "",
-      toast: {
-      visible: false,
-      message: "",
-      type: "success",
-      timer: null,
+        modal: {
+          visible: false,
+          type: "",
+          parentId: null,
+          nodeId: null,
+          form: {
+            title: "",
+            url: "",
+            favicon_url: "",
+          },
+        },
+        metadataLoading: false,
+        metadataError: "",
+        toast: {
+          visible: false,
+          message: "",
+          type: "success",
+          timer: null,
+        },
+        // 自定义确认对话框
+        confirmDialog: {
+          visible: false,
+          title: "确认操作",
+          message: "",
+          type: "warning", // warning 或 info
+          confirmText: "确认",
+          callback: null
+        },
+        bookmarkEditMode: false,
+        selectedBookmarks: new Set(),
+        moveModal: {
+          visible: false,
+          targetParentId: null,
+          nodeId: null,
+        },
+        folderSelectorVisible: false,
+        selectedFolderId: null,
+        rightClickNode:{},
+        searchQuery: "",
+        clearSearchBtnVisible: false,
+        searchResultVisible: false,
+        searchResultCount: 0,
+        searchResults: [],
+        isSearching: false,
+      };
     },
-    // 自定义确认对话框
-    confirmDialog: {
-      visible: false,
-      title: "确认操作",
-      message: "",
-      type: "warning", // warning 或 info
-      confirmText: "确认",
-      callback: null
-    },
-      bookmarkEditMode: false,
-      selectedBookmarks: new Set(),
-      moveModal: {
-        visible: false,
-        targetParentId: null,
-        nodeId: null,
-      },
-      folderSelectorVisible: false,
-      selectedFolderId: null,
-      rightClickNode:{
-
-      }
-    };
-  },
   computed: {
     selectedNode() {
       if (!this.selectedNodeId) return null;
@@ -194,6 +198,13 @@ const app = createApp({
       return this.collectBookmarks(this.tree);
     },
     displayBookmarks() {
+      // 如果处于搜索模式，返回搜索结果
+      if (this.isSearching) {
+        return this.searchResults;
+      }
+
+      this.searchResultVisible = false;
+      
       // 如果选择的是【所有网址】文件夹，显示所有书签
       if (this.selectedNodeId === 'all-bookmarks') {
         return this.bookmarkList;
@@ -259,6 +270,9 @@ const app = createApp({
     },
     selectFolder(folderId) {
       this.selectedFolderId = folderId;
+      // 选择文件夹时退出搜索模式
+      this.isSearching = false;
+      this.searchResults = [];
     },
     confirmFolderSelection() {
       this.modal.parentId = this.selectedFolderId;
@@ -399,6 +413,10 @@ const app = createApp({
       return null;
     },
     selectNode(node) {
+      // 点击文件夹时退出搜索模式
+      this.isSearching = false;
+      this.searchResults = [];
+      
       this.selectedNodeId = node.id;
       if (!this.treeActionsVisible) {
         this.hideContextMenu();
@@ -407,6 +425,10 @@ const app = createApp({
     
     // 选择【所有网址】文件夹
     selectAllBookmarksFolder() {
+      // 点击所有网址文件夹时退出搜索模式
+      this.isSearching = false;
+      this.searchResults = [];
+      
       this.selectedNodeId = 'all-bookmarks';
       // 确保编辑模式下也不会对所有网址文件夹进行操作
       this.treeActionsVisible = false;
@@ -1090,6 +1112,52 @@ const app = createApp({
         this.showToast(`已${direction === 'up' ? '上移' : '下移'}该项目`, "success");
       } catch (error) {
         this.showToast(error.message || "移动操作失败", "error");
+      }
+    },
+    handleSearchInput(){
+      this.searchQuery = this.searchQuery.trim();
+      this.clearSearchBtnVisible = this.searchQuery.length > 0;
+    },
+    clearSearch() {
+      this.searchQuery = "";
+      this.clearSearchBtnVisible = false;
+      this.searchResultVisible = false;
+      this.searchResults = [];
+      this.isSearching = false;
+    },
+    handleSearch() {
+      if (this.searchQuery.trim().length === 0) {
+        this.showToast("请输入搜索内容", "warning");
+        return;
+      }
+
+      this.searchBookmarks();
+    },
+    async searchBookmarks() {
+      try {
+        const query = this.searchQuery.toLowerCase().trim();
+        if (!query) return;
+        
+        // 收集所有书签
+        const allBookmarks = this.collectBookmarks(this.tree);
+        
+        // 过滤符合条件的书签（搜索标题和URL）
+        this.searchResults = allBookmarks.filter(bookmark => 
+          bookmark.title.toLowerCase().includes(query) || 
+          bookmark.url.toLowerCase().includes(query)
+        );
+
+        // 更新搜索结果数量
+        this.searchResultCount = this.searchResults.length;
+        this.searchResultVisible = true;
+        
+        // 开启搜索模式
+        this.isSearching = true;
+        
+        // 显示搜索结果数量
+        this.showToast(`找到 ${this.searchResults.length} 个结果`, "info");
+      } catch (error) {
+        this.showToast(error.message || "搜索失败", "error");
       }
     },
   },
