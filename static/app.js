@@ -224,6 +224,10 @@ const app = createApp({
       return this.bookmarkList;
     },
     listTitle() {
+      // 如果处于搜索模式，显示搜索结果数量
+      if (this.isSearching) {
+        return `显示搜索结果（${this.searchResults.length} 个）`;
+      }
       // 如果选择的是【所有网址】文件夹，显示对应标题
       if (this.selectedNodeId === 'all-bookmarks') {
         return "显示所有收藏的网址";
@@ -1153,6 +1157,7 @@ const app = createApp({
         
         // 开启搜索模式
         this.isSearching = true;
+        this.listTitle = `搜索结果（${this.searchResults.length} 个）`
         
         // 显示搜索结果数量
         this.showToast(`找到 ${this.searchResults.length} 个结果`, "info");
