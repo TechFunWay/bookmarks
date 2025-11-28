@@ -140,6 +140,9 @@
                     class="bookmark-item"
                     :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }"
                     @contextmenu.prevent="showBookmarkActions(item.raw, $event)"
+                    @touchstart="startBookmarkLongPress(item.raw, $event)"
+                    @touchend="endBookmarkLongPress"
+                    @touchcancel="endBookmarkLongPress"
                   >
                     <div class="bookmark-edit-checkbox" v-if="bookmarkEditMode">
                       <input 
