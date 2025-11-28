@@ -51,10 +51,29 @@ const BookmarkNode = {
         });
       }
     },
+    startLongPress(event) {
+      // 长按事件，在移动端模拟右键菜单
+      this.longPressTimer = setTimeout(() => {
+        if (this.isFolder) {
+          this.$emit("context", {
+            node: this.node,
+            x: event.touches[0].clientX,
+            y: event.touches[0].clientY,
+          });
+        }
+      }, 500); // 500ms长按
+    },
+    endLongPress() {
+      // 清除长按定时器
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+    },
   },
   template: `
     <li class="tree-item" v-if="isFolder">
-      <div :class="['tree-row', { selected: isSelected }]" :style="indentStyle" @contextmenu.prevent="onContextMenu">
+      <div :class="['tree-row', { selected: isSelected }]" :style="indentStyle" @contextmenu.prevent="onContextMenu" @touchstart="startLongPress" @touchend="endLongPress" @touchcancel="endLongPress">
         <button class="node-main" type="button" @click="onSelect">
           <span class="node-icon">
             <template v-if="isFolder">
@@ -128,6 +147,7 @@ const app = createApp({
           y: 0,
           nodeId: null,
         },
+        longPressTimer: null,
         modal: {
           visible: false,
           type: "",
@@ -732,6 +752,20 @@ const app = createApp({
     showBookmarkActions(node, event) {
       this.treeActionsVisible = false;
       this.showContextMenu(node, event.clientX, event.clientY);
+    },
+    startBookmarkLongPress(node, event) {
+      // 长按事件，在移动端模拟右键菜单
+      this.longPressTimer = setTimeout(() => {
+        this.treeActionsVisible = false;
+        this.showContextMenu(node, event.touches[0].clientX, event.touches[0].clientY);
+      }, 500); // 500ms长按
+    },
+    endBookmarkLongPress() {
+      // 清除长按定时器
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
     },
     showContextMenu(node, x, y) {
       const padding = 16;
