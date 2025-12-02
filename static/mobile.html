@@ -180,10 +180,6 @@
       }
 
       .bookmark-item {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.75rem;
         background: var(--card-bg-hover);
         border-radius: 8px;
         margin-bottom: 0.5rem;
@@ -192,7 +188,176 @@
 
       .bookmark-item:hover {
         background: var(--card-bg-active);
-        transform: translateX(4px);
+      }
+
+      .bookmark-content-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+      }
+
+      .bookmark-main {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--text);
+        text-decoration: none;
+      }
+
+      .bookmark-main:hover {
+        text-decoration: underline;
+      }
+
+      .bookmark-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      .bookmark-actions .action-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0.25rem;
+        border-radius: 6px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+      }
+
+      .bookmark-actions .action-btn:hover {
+        color: var(--primary);
+        background: var(--card-bg-hover);
+      }
+
+      /* 书签编辑模式样式 */
+      .bookmark-item.selected {
+        background: var(--card-bg-active);
+        border-color: var(--primary);
+      }
+
+      .bookmark-item.editing {
+        cursor: pointer;
+      }
+
+      .bookmark-checkbox {
+        margin-right: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .bookmark-checkbox input[type="checkbox"] {
+        width: 1rem;
+        height: 1rem;
+        accent-color: var(--primary);
+      }
+
+      .bookmark-toolbar {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        backdrop-filter: blur(10px);
+      }
+
+      .toolbar-info {
+        display: flex;
+        align-items: center;
+      }
+
+      .toolbar-text {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+      }
+
+      .toolbar-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .toolbar-actions button {
+        padding: 0.5rem 0.75rem;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+      }
+
+      .toolbar-actions button.primary {
+        background: var(--primary);
+        color: white;
+      }
+
+      .toolbar-actions button.primary:hover {
+        background: var(--primary-hover);
+      }
+
+      .toolbar-actions button.tertiary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+
+      .toolbar-actions button.tertiary:hover {
+        background: var(--card-bg-hover);
+        border-color: var(--border-hover);
+      }
+
+      .toolbar-actions button.danger {
+        color: var(--danger);
+        border-color: var(--danger);
+      }
+
+      .toolbar-actions button.danger:hover {
+        background: var(--danger-bg);
+      }
+
+      .toolbar-actions button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .bookmark-edit-toggle {
+        margin-top: 0.75rem;
+        display: flex;
+        justify-content: center;
+      }
+
+      .bookmark-edit-toggle button {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.875rem;
+      }
+
+      .bookmark-edit-toggle button:hover {
+        background: var(--card-bg-hover);
+        border-color: var(--border-hover);
       }
 
       .bookmark-info {
@@ -200,11 +365,15 @@
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+        overflow: hidden;
       }
 
       .bookmark-title {
         font-size: 0.875rem;
         font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .bookmark-url {
@@ -378,6 +547,43 @@
         margin-bottom: 0.5rem;
       }
 
+      /* 确保书签操作按钮可见 */
+      .bookmark-content-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+      }
+
+      .bookmark-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      .bookmark-actions button.action-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        font-size: 1.25rem;
+        line-height: 1;
+        color: var(--text-muted);
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0;
+      }
+
+      .bookmark-actions button.action-btn:hover {
+        color: var(--primary);
+        background: var(--card-bg-hover);
+      }
+
       /* 主题切换按钮样式优化 */
       .action-btn {
         transition: all 0.2s ease;
@@ -473,20 +679,74 @@
               暂无收藏的网址。
             </div>
             <div v-else>
+              <!-- 编辑模式工具栏 -->
+              <div v-if="bookmarkEditMode" class="bookmark-toolbar">
+                <div class="toolbar-info">
+                  <span class="toolbar-text">已选择 {{ selectedCount }} 个项目</span>
+                </div>
+                <div class="toolbar-actions">
+                  <button class="tertiary small" @click="toggleSelectAllBookmarks">
+                    {{ allSelected ? '取消全选' : '全选' }}
+                  </button>
+                  <button class="tertiary small danger" @click="deleteSelectedBookmarks" :disabled="selectedCount === 0">
+                    <span>🗑️</span>
+                    删除选中
+                  </button>
+                  <button class="tertiary small" @click="moveSelectedBookmarks('up')" :disabled="selectedCount === 0">
+                    <span>⬆️</span>
+                    上移
+                  </button>
+                  <button class="tertiary small" @click="moveSelectedBookmarks('down')" :disabled="selectedCount === 0">
+                    <span>⬇️</span>
+                    下移
+                  </button>
+                  <button class="primary small" @click="exitBookmarkEditMode">
+                    完成
+                  </button>
+                </div>
+              </div>
+              
+              <!-- 书签列表 -->
               <ul class="bookmark-list">
-                <li v-for="item in currentFolderBookmarks" :key="item.id" class="bookmark-item">
-                  <a :href="item.url" target="_blank" rel="noopener" class="bookmark-main">
-                    <span class="node-icon">
-                      <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
-                      <span v-else>🔖</span>
-                    </span>
-                    <div class="bookmark-info">
-                      <span class="bookmark-title">{{ item.title }}</span>
-                      <span class="bookmark-url">{{ item.url }}</span>
+                <li v-for="item in currentFolderBookmarks" :key="item.id" class="bookmark-item" :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }">
+                  <div class="bookmark-content-wrapper">
+                    <!-- 编辑模式下的选择框 -->
+                    <div class="bookmark-checkbox" v-if="bookmarkEditMode">
+                      <input 
+                        type="checkbox" 
+                        :checked="selectedBookmarks.has(item.id)" 
+                        @change="toggleBookmarkSelection(item.id)"
+                      />
                     </div>
-                  </a>
+                    
+                    <!-- 书签内容 -->
+                    <a :href="!bookmarkEditMode ? item.url : '#'" target="_blank" rel="noopener" class="bookmark-main">
+                      <span class="node-icon">
+                        <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
+                        <span v-else>🔖</span>
+                      </span>
+                      <div class="bookmark-info">
+                        <span class="bookmark-title">{{ item.title }}</span>
+                        <span class="bookmark-url">{{ item.url }}</span>
+                      </div>
+                    </a>
+                    
+                    <!-- 操作按钮 -->
+                    <div class="bookmark-actions">
+                      <button class="action-btn" title="操作" @click.stop="showBookmarkActions({ node: item, x: $event.clientX, y: $event.clientY })">
+                        <span>⋮</span>
+                      </button>
+                    </div>
+                  </div>
                 </li>
               </ul>
+              
+              <!-- 编辑模式切换按钮 -->
+              <div class="bookmark-edit-toggle">
+                <button class="tertiary" @click="toggleBookmarkEditMode">
+                  {{ bookmarkEditMode ? '退出编辑' : '编辑' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -497,20 +757,74 @@
             暂无收藏的网址。
           </div>
           <div v-else>
+            <!-- 编辑模式工具栏 -->
+            <div v-if="bookmarkEditMode" class="bookmark-toolbar">
+              <div class="toolbar-info">
+                <span class="toolbar-text">已选择 {{ selectedCount }} 个项目</span>
+              </div>
+              <div class="toolbar-actions">
+                <button class="tertiary small" @click="toggleSelectAllBookmarks">
+                  {{ allSelected ? '取消全选' : '全选' }}
+                </button>
+                <button class="tertiary small danger" @click="deleteSelectedBookmarks" :disabled="selectedCount === 0">
+                  <span>🗑️</span>
+                  删除选中
+                </button>
+                <button class="tertiary small" @click="moveSelectedBookmarks('up')" :disabled="selectedCount === 0">
+                  <span>⬆️</span>
+                  上移
+                </button>
+                <button class="tertiary small" @click="moveSelectedBookmarks('down')" :disabled="selectedCount === 0">
+                  <span>⬇️</span>
+                  下移
+                </button>
+                <button class="primary small" @click="exitBookmarkEditMode">
+                  完成
+                </button>
+              </div>
+            </div>
+            
+            <!-- 书签列表 -->
             <ul class="bookmark-list">
-              <li v-for="item in displayBookmarks" :key="item.id" class="bookmark-item">
-                <a :href="item.url" target="_blank" rel="noopener" class="bookmark-main">
-                  <span class="node-icon">
-                    <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
-                    <span v-else>🔖</span>
-                  </span>
-                  <div class="bookmark-info">
-                    <span class="bookmark-title">{{ item.title }}</span>
-                    <span class="bookmark-url">{{ item.url }}</span>
+              <li v-for="item in displayBookmarks" :key="item.id" class="bookmark-item" :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }">
+                <div class="bookmark-content-wrapper">
+                  <!-- 编辑模式下的选择框 -->
+                  <div class="bookmark-checkbox" v-if="bookmarkEditMode">
+                    <input 
+                      type="checkbox" 
+                      :checked="selectedBookmarks.has(item.id)" 
+                      @change="toggleBookmarkSelection(item.id)"
+                    />
                   </div>
-                </a>
+                  
+                  <!-- 书签内容 -->
+                  <a :href="!bookmarkEditMode ? item.url : '#'" target="_blank" rel="noopener" class="bookmark-main">
+                    <span class="node-icon">
+                      <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
+                      <span v-else>🔖</span>
+                    </span>
+                    <div class="bookmark-info">
+                      <span class="bookmark-title">{{ item.title }}</span>
+                      <span class="bookmark-url">{{ item.url }}</span>
+                    </div>
+                  </a>
+                  
+                  <!-- 操作按钮 -->
+            <div class="bookmark-actions">
+              <button class="action-btn" title="操作" @click.stop="showBookmarkActions({ node: item, x: $event.clientX, y: $event.clientY })">
+                <span>⋮</span>
+              </button>
+            </div>
+                </div>
               </li>
             </ul>
+            
+            <!-- 编辑模式切换按钮 -->
+            <div class="bookmark-edit-toggle">
+              <button class="tertiary" @click="toggleBookmarkEditMode">
+                {{ bookmarkEditMode ? '退出编辑' : '编辑' }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -783,6 +1097,10 @@
               currentPath: [],
               breadcrumb: [],
               addMenuVisible: false,
+              
+              // 网址列表编辑模式
+              bookmarkEditMode: false,
+              selectedBookmarks: new Set(),
             };
           },
           computed: {
@@ -833,9 +1151,73 @@
               if (!this.contextMenu.visible) {
                 return {};
               }
+              
+              // 获取屏幕尺寸
+              const screenWidth = window.innerWidth;
+              const screenHeight = window.innerHeight;
+              
+              // 菜单项高度估算（实际高度取决于内容）
+              const menuItemHeight = 48; // 每个菜单项高度
+              const menuHeaderHeight = 8; // 分隔线高度
+              
+              // 根据上下文节点类型计算实际菜单高度
+              let actualMenuHeight;
+              if (this.contextNode && this.contextNode.type === 'folder') {
+                // 文件夹菜单：2个特殊项 + 分隔线 + 3个普通项 + 分隔线 + 2个操作项
+                actualMenuHeight = (menuItemHeight * 7) + (menuHeaderHeight * 2) + 16; // 16px 内边距
+              } else {
+                // 书签菜单：3个普通项 + 分隔线 + 2个操作项
+                actualMenuHeight = (menuItemHeight * 5) + menuHeaderHeight + 16; // 16px 内边距
+              }
+              
+              const menuWidth = 220; // 菜单宽度
+              const padding = 16; // 屏幕边距
+              
+              // 计算菜单位置
+              let left = this.contextMenu.x;
+              let top = this.contextMenu.y;
+              
+              // 智能定位：根据点击位置自动调整菜单方向
+              
+              // 1. 水平方向：优先显示在点击位置右侧，空间不足则显示在左侧
+              if (left + menuWidth > screenWidth) {
+                // 右侧空间不足，显示在左侧
+                left = left - menuWidth;
+                // 确保左侧不超出屏幕
+                if (left < padding) {
+                  left = padding;
+                }
+              } else {
+                // 右侧有足够空间，正常显示
+                // 确保左侧不小于边距
+                if (left < padding) {
+                  left = padding;
+                }
+              }
+              
+              // 2. 垂直方向：优先显示在点击位置下方，空间不足则显示在上方
+              if (top + actualMenuHeight > screenHeight) {
+                // 下方空间不足，显示在上方
+                top = top - actualMenuHeight;
+                // 确保上方不超出屏幕
+                if (top < padding) {
+                  top = padding;
+                }
+              } else {
+                // 下方有足够空间，正常显示
+                // 确保上方不小于边距
+                if (top < padding) {
+                  top = padding;
+                }
+              }
+              
+              // 最终边界检查，确保菜单完全在屏幕内
+              left = Math.max(padding, Math.min(left, screenWidth - menuWidth - padding));
+              top = Math.max(padding, Math.min(top, screenHeight - actualMenuHeight - padding));
+              
               return {
-                top: `${this.contextMenu.y}px`,
-                left: `${this.contextMenu.x}px`,
+                top: `${top}px`,
+                left: `${left}px`,
               };
             },
             bookmarkList() {
@@ -873,6 +1255,23 @@
                 default:
                   return "";
               }
+            },
+            currentDisplayedBookmarks() {
+              // 获取当前显示的书签列表
+              if (this.currentView === 'folders' && this.selectedNodeId && this.selectedNodeId !== 'all-bookmarks') {
+                return this.currentFolderBookmarks;
+              } else if (this.currentView === 'bookmarks' || this.selectedNodeId === 'all-bookmarks') {
+                return this.displayBookmarks;
+              }
+              return [];
+            },
+            selectedCount() {
+              // 获取当前选择的书签数量
+              return this.selectedBookmarks.size;
+            },
+            allSelected() {
+              // 判断是否全选
+              return this.selectedCount === this.currentDisplayedBookmarks.length && this.currentDisplayedBookmarks.length > 0;
             },
           },
           mounted() {
@@ -1007,6 +1406,9 @@
               return path.join(" / ");
             },
             toggleFolder(node) {
+              // 关闭上下文菜单
+              this.hideContextMenu();
+              
               // 更新面包屑导航，显示所属上级名称
               this.selectedNodeId = node.id;
               if (node.type === 'folder') {
@@ -1052,10 +1454,12 @@
               this.addMenuVisible = !this.addMenuVisible;
             },
             selectAllBookmarksFolder() {
+              // 关闭上下文菜单
+              this.hideContextMenu();
+              
               this.selectedNodeId = 'all-bookmarks';
               this.currentView = 'bookmarks';
               this.addMenuVisible = false;
-              this.hideContextMenu();
               
               // 更新面包屑导航，将【所有网址】作为一级显示
               // 无论当前在哪个文件夹，【所有网址】都作为一级显示
@@ -1064,6 +1468,9 @@
               this.currentPath = [];
             },
             selectNode(node) {
+              // 关闭上下文菜单
+              this.hideContextMenu();
+              
               this.selectedNodeId = node.id;
               if (node.type === 'folder') {
                 // 清空当前路径，重新构建
@@ -1078,9 +1485,11 @@
                 this.currentView = 'bookmarks';
               }
               this.addMenuVisible = false;
-              this.hideContextMenu();
             },
             goBack() {
+              // 关闭上下文菜单
+              this.hideContextMenu();
+              
               if (this.selectedNodeId === 'all-bookmarks') {
                 // 如果当前是【所有网址】
                 if (this.currentPath.length > 0) {
@@ -1115,6 +1524,22 @@
                 this.currentView = 'folders';
                 this.breadcrumb = [];
                 this.selectedNodeId = null;
+              }
+            },
+            navigateToBreadcrumb(index) {
+              // 关闭上下文菜单
+              this.hideContextMenu();
+              
+              if (this.breadcrumb[index].id === 'all-bookmarks') {
+                // 如果点击的是所有网址，进入所有网址视图
+                this.selectedNodeId = 'all-bookmarks';
+                this.currentView = 'bookmarks';
+              } else {
+                // 正常点击面包屑，进入对应文件夹
+                this.currentPath = this.currentPath.slice(0, index + 1);
+                this.updateBreadcrumb();
+                this.selectedNodeId = this.currentPath[this.currentPath.length - 1];
+                this.currentView = 'folders';
               }
             },
             updateBreadcrumb() {
@@ -1340,12 +1765,181 @@
               }
             },
             showFolderActions({ node, x, y }) {
+              // 如果当前菜单已显示且点击的是同一个节点，则关闭菜单
+              if (this.contextMenu.visible && this.contextMenu.nodeId === node.id) {
+                this.hideContextMenu();
+                return;
+              }
+              
+              // 否则显示菜单
               this.contextMenu.visible = true;
               this.contextMenu.x = x;
               this.contextMenu.y = y;
               this.contextMenu.nodeId = node.id;
               this.rightClickNode = node;
               this.addMenuVisible = false;
+            },
+            showBookmarkActions({ node, x, y }) {
+              // 确保获取到完整的节点信息，处理 raw 属性情况
+              const fullNode = node.raw || node;
+              
+              // 如果当前菜单已显示且点击的是同一个节点，则关闭菜单
+              if (this.contextMenu.visible && this.contextMenu.nodeId === fullNode.id) {
+                this.hideContextMenu();
+                return;
+              }
+              
+              // 否则显示菜单
+              this.contextMenu.visible = true;
+              this.contextMenu.x = x;
+              this.contextMenu.y = y;
+              this.contextMenu.nodeId = fullNode.id;
+              this.rightClickNode = fullNode;
+              this.addMenuVisible = false;
+            },
+            
+            // 书签编辑模式相关方法
+            toggleBookmarkEditMode() {
+              this.bookmarkEditMode = !this.bookmarkEditMode;
+              // 退出编辑模式时清空选择
+              if (!this.bookmarkEditMode) {
+                this.selectedBookmarks.clear();
+              }
+            },
+            
+            exitBookmarkEditMode() {
+              this.bookmarkEditMode = false;
+              this.selectedBookmarks.clear();
+            },
+            
+            toggleSelectAllBookmarks() {
+              if (this.allSelected) {
+                // 取消全选
+                this.selectedBookmarks.clear();
+              } else {
+                // 全选
+                this.selectedBookmarks.clear();
+                for (const bookmark of this.currentDisplayedBookmarks) {
+                  this.selectedBookmarks.add(bookmark.id);
+                }
+              }
+            },
+            
+            toggleBookmarkSelection(id) {
+              if (this.selectedBookmarks.has(id)) {
+                this.selectedBookmarks.delete(id);
+              } else {
+                this.selectedBookmarks.add(id);
+              }
+            },
+            
+            async deleteSelectedBookmarks() {
+              if (this.selectedCount === 0) {
+                return;
+              }
+              
+              const count = this.selectedCount;
+              const ok = await this.customConfirm(
+                "批量删除",
+                `确定删除选中的 ${count} 个网址吗？该操作不可撤销。`,
+                "warning",
+                "删除"
+              );
+              if (!ok) return;
+              
+              try {
+                // 获取选中的书签节点
+                const selectedNodes = [];
+                for (const bookmark of this.currentDisplayedBookmarks) {
+                  if (this.selectedBookmarks.has(bookmark.id)) {
+                    // 获取完整的节点对象
+                    const fullNode = this.findNodeById(bookmark.id, this.tree);
+                    if (fullNode) {
+                      selectedNodes.push(fullNode);
+                    }
+                  }
+                }
+                
+                // 批量删除
+                let successCount = 0;
+                for (const node of selectedNodes) {
+                  try {
+                    const res = await fetch(`/api/nodes/${node.id}`, { method: "DELETE" });
+                    if (res.ok) {
+                      successCount++;
+                    }
+                  } catch (error) {
+                    console.error(`删除节点 ${node.id} 失败:`, error);
+                  }
+                }
+                
+                // 重新加载树结构
+                await this.loadTree();
+                
+                // 退出编辑模式并清空选择
+                this.exitBookmarkEditMode();
+                
+                this.showToast(`成功删除 ${successCount}/${count} 个网址`, "success");
+              } catch (error) {
+                this.showToast(error.message || "批量删除失败", "error");
+              }
+            },
+            
+            async moveSelectedBookmarks(direction) {
+              if (this.selectedCount === 0) {
+                return;
+              }
+              
+              try {
+                // 获取当前显示的书签列表
+                const bookmarks = this.currentDisplayedBookmarks;
+                
+                // 获取选中的书签并按当前顺序排列
+                const selectedItems = bookmarks.filter(bookmark => 
+                  this.selectedBookmarks.has(bookmark.id)
+                );
+                
+                let successCount = 0;
+                const totalCount = selectedItems.length;
+                
+                // 上移：从上到下依次移动每个选中的项目
+                if (direction === 'up') {
+                  for (const item of selectedItems) {
+                    try {
+                      // 获取完整的节点对象
+                      const fullNode = this.findNodeById(item.id, this.tree);
+                      if (fullNode) {
+                        await this.reorderNode({ node: fullNode, direction: 'up' });
+                        successCount++;
+                      }
+                    } catch (error) {
+                      console.warn(`移动项目 ${item.id} 失败:`, error);
+                    }
+                  }
+                } 
+                // 下移：从下到上依次移动每个选中的项目
+                else if (direction === 'down') {
+                  for (const item of [...selectedItems].reverse()) {
+                    try {
+                      // 获取完整的节点对象
+                      const fullNode = this.findNodeById(item.id, this.tree);
+                      if (fullNode) {
+                        await this.reorderNode({ node: fullNode, direction: 'down' });
+                        successCount++;
+                      }
+                    } catch (error) {
+                      console.warn(`移动项目 ${item.id} 失败:`, error);
+                    }
+                  }
+                }
+                
+                // 重新加载树结构
+                await this.loadTree();
+                
+                this.showToast(`已${direction === 'up' ? '上移' : '下移'} ${successCount} 个项目`, "success");
+              } catch (error) {
+                this.showToast(error.message || "批量移动操作失败", "error");
+              }
             },
             contextAddFolder() {
               const node = this.contextNode;
