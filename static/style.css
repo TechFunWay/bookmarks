@@ -13,6 +13,14 @@
   overflow: hidden;
 }
 
+/* 文件夹数量显示样式 */
+.node-count {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  margin-left: 4px;
+  font-weight: normal;
+}
+
 /* 深色主题下右键菜单完全不透明 */
 [data-theme="dark"] .context-menu,
 .context-menu:not([data-theme]) {
