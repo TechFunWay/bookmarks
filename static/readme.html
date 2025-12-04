@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网址收藏夹 - 使用说明</title>
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --secondary-color: #64748b;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+            --text-color: #1e293b;
+            --text-secondary: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .feature-card {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary-color);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h3 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .feature-card p {
+            font-size: 0.9rem;
+            margin-bottom: 0;
+        }
+
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .tech-column {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .tech-column h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            color: var(--primary-color);
+        }
+
+        .tech-column ul {
+            list-style: none;
+        }
+
+        .tech-column li {
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .tech-column li::before {
+            content: "•";
+            color: var(--primary-color);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        .quick-start {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin: 2rem 0;
+        }
+
+        .quick-start h3 {
+            margin-top: 0;
+        }
+
+        .code-block {
+            background-color: #1e293b;
+            color: #f1f5f9;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .code-inline {
+            background-color: #e2e8f0;
+            color: #1e293b;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        ul, ol {
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+            color: var(--text-secondary);
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        a:hover {
+            color: var(--primary-hover);
+            text-decoration: underline;
+        }
+
+        .browser-support {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .browser-item {
+            background-color: var(--card-bg);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+
+        .browser-name {
+            font-weight: 600;
+            margin-top: 0.5rem;
+        }
+
+        .browser-version {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .plan-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .plan-list li {
+            background-color: var(--card-bg);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .checkmark {
+            color: var(--success-color);
+            margin-right: 0.5rem;
+        }
+
+        .crossmark {
+            color: var(--danger-color);
+            margin-right: 0.5rem;
+        }
+
+        .future-plan {
+            color: var(--warning-color);
+            margin-right: 0.5rem;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 3rem;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .nav {
+            background-color: var(--card-bg);
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+            box-shadow: var(--shadow);
+        }
+
+        .nav h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+
+        .nav ul {
+            list-style: none;
+            padding-left: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .nav li {
+            margin-bottom: 0;
+        }
+
+        .nav a {
+            color: var(--secondary-color);
+            transition: color 0.2s ease;
+        }
+
+        .nav a:hover {
+            color: var(--primary-color);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            h2 {
+                font-size: 1.5rem;
+            }
+
+            h3 {
+                font-size: 1.2rem;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tech-stack {
+                grid-template-columns: 1fr;
+            }
+
+            .browser-support {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>网址收藏夹</h1>
+            <p class="subtitle">一个简单易用的网址收藏夹管理工具，基于Go语言后端和Vue.js前端构建。</p>
+        </header>
+
+        <nav class="nav">
+            <h3>导航</h3>
+            <ul>
+                <li><a href="#features">功能特性</a></li>
+                <li><a href="#tech">技术架构</a></li>
+                <li><a href="#quick-start">快速开始</a></li>
+                <li><a href="#usage">使用说明</a></li>
+                <li><a href="#api">API接口</a></li>
+                <li><a href="#structure">目录结构</a></li>
+                <li><a href="#updates">更新日志</a></li>
+                <li><a href="#security">安全说明</a></li>
+            </ul>
+        </nav>
+
+        <section id="features">
+            <h2>功能特性</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📁</div>
+                    <h3>文件夹管理</h3>
+                    <p>创建、编辑、删除文件夹，支持嵌套结构</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔖</div>
+                    <h3>书签管理</h3>
+                    <p>添加、编辑、删除网址书签，支持批量操作</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <h3>拖拽排序</h3>
+                    <p>支持文件夹和书签的拖拽重排序</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📦</div>
+                    <h3>批量操作</h3>
+                    <p>批量选择、删除和移动书签</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🌐</div>
+                    <h3>元数据获取</h3>
+                    <p>自动获取网页标题和favicon图标</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3>现代化界面</h3>
+                    <p>简洁美观的用户界面</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>响应式设计</h3>
+                    <p>适配不同屏幕尺寸</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>快速响应</h3>
+                    <p>基于SQLite本地数据库，查询速度快</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>安全可靠</h3>
+                    <p>支持内网HTTPS站点访问</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="tech">
+            <h2>技术架构</h2>
+            <div class="tech-stack">
+                <div class="tech-column">
+                    <h3>后端技术栈</h3>
+                    <ul>
+                        <li>Go 1.21+ - 主要编程语言</li>
+                        <li>Chi - 轻量级HTTP路由器</li>
+                        <li>SQLite - 本地数据库存储</li>
+                        <li>Go Modules - 依赖管理</li>
+                    </ul>
+                </div>
+                <div class="tech-column">
+                    <h3>前端技术栈</h3>
+                    <ul>
+                        <li>Vue.js 3 - 现代JavaScript框架</li>
+                        <li>HTML5/CSS3 - 页面布局和样式</li>
+                        <li>Fetch API - HTTP请求处理</li>
+                    </ul>
+                </div>
+                <div class="tech-column">
+                    <h3>数据存储</h3>
+                    <ul>
+                        <li>SQLite数据库文件：<code class="code-inline">data.db</code></li>
+                        <li>支持外键约束和数据一致性</li>
+                        <li>自动维护排序位置</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="quick-start">
+            <h2>快速开始</h2>
+            <div class="quick-start">
+                <h3>系统要求</h3>
+                <ul>
+                    <li>Go 1.21 或更高版本</li>
+                    <li>支持SQLite的操作系统（Windows/macOS/Linux）</li>
+                </ul>
+
+                <h3>安装步骤</h3>
+                <ol>
+                    <li><strong>克隆或下载项目</strong>
+                        <div class="code-block">git clone &lt;项目地址&gt;
+cd bookmarks</div>
+                    </li>
+                    <li><strong>运行应用</strong>
+                        <p>使用默认端口8901启动：</p>
+                        <div class="code-block">go run main.go</div>
+                        <p>自定义端口启动：</p>
+                        <div class="code-block">go run main.go -port 3000</div>
+                        <p>自定义数据路径和端口：</p>
+                        <div class="code-block">go run main.go -dataUrl /path/to/data -port 8080</div>
+                    </li>
+                    <li><strong>访问应用</strong>
+                        <ul>
+                            <li>默认访问地址：http://localhost:8901</li>
+                            <li>或访问您指定的端口地址</li>
+                            <li>查看所有可用选项：<code class="code-inline">go run main.go -h</code></li>
+                        </ul>
+                    </li>
+                </ol>
+
+                <h3>自定义配置</h3>
+                <p>启动时可以通过命令行参数自定义配置：</p>
+                <ul>
+                    <li><strong>-dataUrl</strong>：数据存储路径（默认："./"）</li>
+                    <li><strong>-port</strong>：服务器监听端口（默认："8901"）</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="usage">
+            <h2>使用说明</h2>
+            
+            <h3>基础操作</h3>
+            <ul>
+                <li><strong>创建文件夹</strong>
+                    <ul>
+                        <li>点击左侧"新建文件夹"按钮</li>
+                        <li>或右键点击现有文件夹选择"新建子文件夹"</li>
+                    </ul>
+                </li>
+                <li><strong>添加书签</strong>
+                    <ul>
+                        <li>点击左侧"添加网址"按钮</li>
+                        <li>或右键点击文件夹选择"添加网址"</li>
+                        <li>输入网址后点击"获取信息"可自动填充标题和图标</li>
+                    </ul>
+                </li>
+                <li><strong>编辑项目</strong>
+                    <ul>
+                        <li>双击文件夹或书签名称进行编辑</li>
+                        <li>或右键选择"编辑"选项</li>
+                    </ul>
+                </li>
+                <li><strong>删除项目</strong>
+                    <ul>
+                        <li>右键选择"删除"选项</li>
+                        <li>或在编辑模式下批量选择删除</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <h3>高级功能</h3>
+            <ul>
+                <li><strong>重排序</strong>
+                    <ul>
+                        <li>拖拽文件夹或书签到新位置</li>
+                        <li>或使用右键菜单的"上移"/"下移"选项</li>
+                    </ul>
+                </li>
+                <li><strong>移动到文件夹</strong>
+                    <ul>
+                        <li>右键选择"移动到文件夹"</li>
+                        <li>选择目标文件夹并确认</li>
+                    </ul>
+                </li>
+                <li><strong>批量操作</strong>
+                    <ul>
+                        <li>点击"编辑"按钮进入编辑模式</li>
+                        <li>使用复选框选择多个项目</li>
+                        <li>执行批量删除或移动操作</li>
+                    </ul>
+                </li>
+                <li><strong>搜索和组织</strong>
+                    <ul>
+                        <li>通过文件夹结构组织书签</li>
+                        <li>查看书签路径信息</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <h3>快捷操作</h3>
+            <ul>
+                <li><strong>右键菜单</strong>：在任何项目上右键查看可用操作</li>
+                <li><strong>双击编辑</strong>：双击项目名称快速编辑</li>
+                <li><strong>拖拽移动</strong>：直接拖拽到目标位置</li>
+                <li><strong>批量选择</strong>：使用编辑模式进行批量操作</li>
+            </ul>
+        </section>
+
+        <section id="api">
+            <h2>API接口</h2>
+            <h3>RESTful API</h3>
+            <ul>
+                <li><strong>GET /api/tree</strong> - 获取完整树结构</li>
+                <li><strong>GET /api/metadata?url=&lt;网址&gt;</strong> - 获取网页元数据</li>
+                <li><strong>POST /api/folders</strong> - 创建文件夹</li>
+                <li><strong>POST /api/bookmarks</strong> - 创建书签</li>
+                <li><strong>PUT /api/nodes/{id}</strong> - 更新节点</li>
+                <li><strong>DELETE /api/nodes/{id}</strong> - 删除节点</li>
+                <li><strong>POST /api/nodes/reorder</strong> - 重新排序节点</li>
+            </ul>
+
+            <h3>请求示例</h3>
+            <div class="code-block"># 获取树结构
+curl http://localhost:8901/api/tree
+
+# 创建文件夹
+curl -X POST http://localhost:8901/api/folders \
+  -H "Content-Type: application/json" \
+  -d '{"title":"工作相关","parent_id":null}'
+
+# 创建书签
+curl -X POST http://localhost:8901/api/bookmarks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"GitHub","url":"https://github.com","parent_id":1}'</div>
+        </section>
+
+        <section id="structure">
+            <h2>目录结构</h2>
+            <div class="code-block">bookmarks/
+├── main.go              # 主程序入口
+├── go.mod               # Go模块定义
+├── go.sum               # 依赖校验
+├── data.db              # SQLite数据库文件（运行时生成）
+├── static/              # 静态文件目录
+│   ├── index.html       # 主页面
+│   ├── app.js          # Vue.js应用
+│   └── style.css       # 样式文件
+├── README.md           # 中文说明
+├── README.en.md        # English README
+└── techfunway.bookmarks/ # 打包相关文件</div>
+        </section>
+
+        <section id="updates">
+            <h2>更新日志</h2>
+            <h3>v1.1.0</h3>
+            <ul>
+                <li>新增搜索功能，支持按网址名称搜索</li>
+                <li>手机端适配优化</li>
+                <li>性能优化和bug修复</li>
+            </ul>
+            <h3>v1.0.0</h3>
+            <ul>
+                <li>初始版本发布</li>
+                <li>基础文件夹和书签管理功能</li>
+                <li>拖拽排序支持</li>
+                <li>批量操作功能</li>
+                <li>网页元数据获取</li>
+                <li>响应式设计，适配不同屏幕尺寸</li>
+                <li>现代化美观界面</li>
+                <li>支持内网HTTPS站点访问</li>
+            </ul>
+        </section>
+
+        <section id="security">
+            <h2>安全说明</h2>
+            
+            <h3>数据安全</h3>
+            <ul>
+                <li>数据存储在本地SQLite数据库文件中，不会上传到云端</li>
+                <li>支持定期备份数据库文件</li>
+                <li>建议将数据文件存储在安全位置</li>
+            </ul>
+
+            <h3>网络安全</h3>
+            <ul>
+                <li>仅通过本地HTTP服务器访问，不暴露公网</li>
+                <li>支持内网HTTPS站点访问</li>
+                <li>无第三方依赖，减少安全风险</li>
+            </ul>
+        </section>
+
+        <section id="browser">
+            <h2>浏览器兼容性</h2>
+            <div class="browser-support">
+                <div class="browser-item">
+                    <div class="checkmark">✅</div>
+                    <div class="browser-name">Chrome</div>
+                    <div class="browser-version">80+</div>
+                </div>
+                <div class="browser-item">
+                    <div class="checkmark">✅</div>
+                    <div class="browser-name">Firefox</div>
+                    <div class="browser-version">75+</div>
+                </div>
+                <div class="browser-item">
+                    <div class="checkmark">✅</div>
+                    <div class="browser-name">Safari</div>
+                    <div class="browser-version">13+</div>
+                </div>
+                <div class="browser-item">
+                    <div class="checkmark">✅</div>
+                    <div class="browser-name">Edge</div>
+                    <div class="browser-version">80+</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="performance">
+            <h2>性能优化</h2>
+            <ul>
+                <li>本地SQLite数据库，查询速度快</li>
+                <li>前端采用Vue.js 3，渲染性能优秀</li>
+                <li>支持大量书签和文件夹的高效管理</li>
+                <li>拖拽操作流畅，响应迅速</li>
+            </ul>
+        </section>
+
+        <section id="backup">
+            <h2>备份和恢复</h2>
+            
+            <h3>备份数据</h3>
+            <ol>
+                <li>关闭应用程序</li>
+                <li>复制<code class="code-inline">data.db</code>文件到安全位置</li>
+                <li>完成备份</li>
+            </ol>
+
+            <h3>恢复数据</h3>
+            <ol>
+                <li>关闭应用程序</li>
+                <li>将备份的<code class="code-inline">data.db</code>文件复制到应用程序目录</li>
+                <li>启动应用程序</li>
+                <li>数据将自动恢复</li>
+            </ol>
+        </section>
+
+        <section id="future">
+            <h2>未来计划</h2>
+            <ul class="plan-list">
+                <li><span class="future-plan">[ ]</span> 支持导入/导出书签</li>
+                <li><span class="future-plan">[ ]</span> 支持标签功能</li>
+                <li><span class="future-plan">[ ]</span> 支持快捷键操作</li>
+                <li><span class="future-plan">[ ]</span> 支持主题切换</li>
+                <li><span class="future-plan">[ ]</span> 支持书签预览功能</li>
+                <li><span class="future-plan">[ ]</span> 支持云同步功能</li>
+            </ul>
+        </section>
+
+        <section id="support">
+            <h2>支持和反馈</h2>
+            <p>如果您在使用过程中遇到问题或有任何建议，欢迎通过以下方式反馈：</p>
+            <ul>
+                <li>创建Issue：在GitHub仓库提交Issue</li>
+                <li>邮件反馈：发送邮件到[your-email@example.com]</li>
+                <li>提交Pull Request：贡献代码或改进</li>
+            </ul>
+        </section>
+
+        <section id="license">
+            <h2>许可证</h2>
+            <p>本项目采用MIT许可证，详见LICENSE文件。</p>
+        </section>
+
+        <div class="footer">
+            <p>感谢所有为本项目做出贡献的开发者和用户！</p>
+            <p>© 2024 网址收藏夹 - 一个热爱技术的开发者</p>
+        </div>
+    </div>
+</body>
+</html>
