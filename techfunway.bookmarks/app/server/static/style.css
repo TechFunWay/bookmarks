@@ -13,6 +13,14 @@
   overflow: hidden;
 }
 
+/* 文件夹数量显示样式 */
+.node-count {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  margin-left: 4px;
+  font-weight: normal;
+}
+
 /* 深色主题下右键菜单完全不透明 */
 [data-theme="dark"] .context-menu,
 .context-menu:not([data-theme]) {
@@ -1219,15 +1227,373 @@ button.primary.danger:active {
   opacity: 0;
 }
 
+/* 平板设备 */
 @media (max-width: 960px) {
   .app-main {
     grid-template-columns: 1fr;
+    padding: 16px;
   }
 
   .tree-panel,
   .list-panel {
     min-height: auto;
     max-height: none;
+    height: auto;
+  }
+
+  .app-header {
+    padding: 1rem 1.5rem;
+  }
+
+  .panel-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .search-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input-wrapper {
+    max-width: none;
+  }
+}
+
+/* 手机设备 */
+@media (max-width: 640px) {
+  .app-header {
+    padding: 0.75rem 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .app-header h1 {
+    font-size: 18px;
+    text-align: center;
+  }
+
+  .subtitle-artistic {
+    font-size: 12px;
+    margin-left: 8px;
+  }
+
+  .app-main {
+    grid-template-columns: 1fr;
+    padding: 12px;
+    gap: 12px;
+    height: calc(100vh - 120px);
+  }
+
+  .tree-panel, .list-panel {
+    height: calc(50vh - 76px);
+    min-height: 200px;
+  }
+
+  .panel-header {
+    padding: 12px 16px;
+  }
+
+  .panel-title.horizontal {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .panel-actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .panel-actions .tertiary.small {
+    padding: 0.375rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .panel-actions .tertiary.small span:last-child {
+    display: none;
+  }
+
+  .tree-root {
+    padding: 12px 12px 16px;
+  }
+
+  .tree-row {
+    padding: 8px 10px;
+  }
+
+  .node-title {
+    max-width: 120px;
+    font-size: 14px;
+  }
+
+  /* 搜索容器优化 */
+  .search-container {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .search-input-wrapper {
+    max-width: none;
+    width: 100%;
+  }
+
+  .search-btn {
+    width: 100%;
+  }
+
+  .bookmark-content-container {
+    height: calc(100% - 60px);
+  }
+
+  .bookmark-scroll-container {
+    max-height: calc(100% - 60px);
+  }
+
+  .bookmark-list {
+    padding: 8px 12px 16px;
+    gap: 8px;
+  }
+
+  .bookmark-item {
+    padding: 12px;
+    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bookmark-main {
+    gap: 10px;
+    width: 100%;
+  }
+
+  .bookmark-info {
+    flex: 1;
+  }
+
+  .bookmark-title {
+    font-size: 14px;
+    word-break: break-word;
+  }
+
+  .bookmark-url {
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  .bookmark-path {
+    font-size: 11px;
+  }
+
+  .bookmark-actions {
+    gap: 4px;
+    opacity: 1;
+    width: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+    margin-top: 8px;
+  }
+
+  .bookmark-item:not(.editing) .bookmark-actions {
+    display: none;
+  }
+
+  .bookmark-actions .tertiary.small {
+    padding: 4px;
+    min-width: 28px;
+    height: 28px;
+  }
+
+  .modal {
+    width: 95%;
+    max-width: 420px;
+    padding: 20px;
+    margin: 20px;
+  }
+
+  .url-input {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group input {
+    padding: 10px 14px;
+  }
+
+  .toast {
+    bottom: 20px;
+    right: 20px;
+    padding: 16px 20px;
+    min-width: 250px;
+    max-width: 90%;
+  }
+
+  .context-menu {
+    min-width: 180px;
+    max-width: 90%;
+  }
+
+  .context-menu button {
+    padding: 10px 16px;
+  }
+
+  /* 编辑模式工具栏优化 */
+  .bookmark-toolbar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .toolbar-actions {
+    justify-content: space-between;
+  }
+
+  /* 移动端优化按钮大小 */
+  button {
+    min-height: 36px;
+  }
+
+  .tertiary.small {
+    min-height: 32px;
+  }
+}
+
+/* 小屏手机 */
+@media (max-width: 480px) {
+  .app-header {
+    padding: 0.5rem 0.75rem;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .app-header h1 {
+    font-size: 16px;
+    text-align: center;
+  }
+
+  .subtitle-artistic {
+    display: none;
+  }
+
+  .app-main {
+    padding: 8px;
+    gap: 8px;
+    height: calc(100vh - 100px);
+  }
+
+  .tree-panel, .list-panel {
+    height: calc(50vh - 66px);
+    min-height: 180px;
+  }
+
+  .panel-header {
+    padding: 10px 12px;
+  }
+
+  .panel-header h2 {
+    font-size: 14px;
+  }
+
+  .tree-root {
+    padding: 8px 8px 12px;
+  }
+
+  .tree-row {
+    padding: 6px 8px;
+  }
+
+  .node-icon {
+    font-size: 14px;
+  }
+
+  .node-title {
+    max-width: 100px;
+    font-size: 13px;
+  }
+
+  .bookmark-item {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .bookmark-main {
+    gap: 8px;
+  }
+
+  .bookmark-title {
+    font-size: 13px;
+  }
+
+  .bookmark-url {
+    font-size: 11px;
+  }
+
+  .bookmark-path {
+    font-size: 10px;
+  }
+
+  .modal {
+    padding: 16px;
+    width: 98%;
+    margin: 10px;
+  }
+
+  .modal-title {
+    font-size: 18px;
+  }
+
+  .form-group {
+    margin-bottom: 12px;
+  }
+
+  .form-group input {
+    padding: 8px 12px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-actions button {
+    width: 100%;
+  }
+
+  /* 小屏手机优化上下文菜单 */
+  .context-menu {
+    min-width: 160px;
+  }
+
+  .context-menu button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* 小屏手机优化主题切换 */
+  .theme-toggle {
+    justify-content: center;
+  }
+
+  /* 小屏手机优化编辑模式 */
+  .bookmark-toolbar {
+    padding: 8px 12px;
+  }
+
+  .toolbar-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .toolbar-actions button {
+    flex: 1;
+    min-width: 45%;
   }
 }
 

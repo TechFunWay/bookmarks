@@ -21,8 +21,24 @@ const BookmarkNode = {
         paddingLeft: `${this.level * 16}px`,
       };
     },
+    bookmarkCount() {
+      // 计算当前文件夹及其子文件夹中的书签数量
+      return this.countBookmarks(this.node);
+    },
   },
   methods: {
+    countBookmarks(node) {
+      // 递归计算书签数量
+      let count = 0;
+      if (node.type === "bookmark") {
+        count = 1;
+      } else if (node.type === "folder" && node.children && node.children.length) {
+        for (const child of node.children) {
+          count += this.countBookmarks(child);
+        }
+      }
+      return count;
+    },
     onSelect() {
       this.$emit("select", this.node);
     },
@@ -51,23 +67,45 @@ const BookmarkNode = {
         });
       }
     },
+    startLongPress(event) {
+      // 长按事件，在移动端模拟右键菜单
+      this.longPressTimer = setTimeout(() => {
+        if (this.isFolder) {
+          this.$emit("context", {
+            node: this.node,
+            x: event.touches[0].clientX,
+            y: event.touches[0].clientY,
+          });
+        }
+      }, 500); // 500ms长按
+    },
+    endLongPress() {
+      // 清除长按定时器
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+    },
   },
   template: `
     <li class="tree-item" v-if="isFolder">
-      <div :class="['tree-row', { selected: isSelected }]" :style="indentStyle" @contextmenu.prevent="onContextMenu">
+      <div :class="['tree-row', { selected: isSelected }]" :style="indentStyle" @contextmenu.prevent="onContextMenu" @touchstart="startLongPress" @touchend="endLongPress" @touchcancel="endLongPress">
         <button class="node-main" type="button" @click="onSelect">
-          <span class="node-icon">
-            <template v-if="isFolder">
-              <span v-if="level === 0">📁</span>
-              <span v-else>🗂️</span>
-            </template>
-            <template v-else>
-              <img v-if="getFaviconUrl && getFaviconUrl(node)" :src="getFaviconUrl(node)" alt="favicon" />
-              <span v-else>🔖</span>
-            </template>
-          </span>
-          <span class="node-title" :title="node.title">{{ node.title }}</span>
-        </button>
+            <span class="node-icon">
+              <template v-if="isFolder">
+                <span v-if="level === 0">📁</span>
+                <span v-else>🗂️</span>
+              </template>
+              <template v-else>
+                <img v-if="getFaviconUrl && getFaviconUrl(node)" :src="getFaviconUrl(node)" alt="favicon" />
+                <span v-else>🔖</span>
+              </template>
+            </span>
+            <span class="node-title" :title="node.title">
+              {{ node.title }}
+              <span class="node-count" v-if="isFolder">({{ bookmarkCount }})</span>
+            </span>
+          </button>
         <div class="tree-actions inline" v-if="globalActionsVisible">
           <button type="button" title="上移" @click="onMove('up')">
             <span class="action-icon">⬆️</span>
@@ -128,6 +166,7 @@ const app = createApp({
           y: 0,
           nodeId: null,
         },
+        longPressTimer: null,
         modal: {
           visible: false,
           type: "",
@@ -175,6 +214,10 @@ const app = createApp({
       };
     },
   computed: {
+    totalBookmarks() {
+      // 计算所有书签的总数
+      return this.collectBookmarks(this.tree).length;
+    },
     selectedNode() {
       if (!this.selectedNodeId) return null;
       return this.findNodeById(this.selectedNodeId, this.tree);
@@ -732,6 +775,20 @@ const app = createApp({
     showBookmarkActions(node, event) {
       this.treeActionsVisible = false;
       this.showContextMenu(node, event.clientX, event.clientY);
+    },
+    startBookmarkLongPress(node, event) {
+      // 长按事件，在移动端模拟右键菜单
+      this.longPressTimer = setTimeout(() => {
+        this.treeActionsVisible = false;
+        this.showContextMenu(node, event.touches[0].clientX, event.touches[0].clientY);
+      }, 500); // 500ms长按
+    },
+    endBookmarkLongPress() {
+      // 清除长按定时器
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
     },
     showContextMenu(node, x, y) {
       const padding = 16;

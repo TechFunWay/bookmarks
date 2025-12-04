@@ -1,379 +1,81 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>网址收藏夹</title>
-    <link rel="icon" href="/favicon.ico" />
-    <link rel="stylesheet" href="/style.css" />
-    <script src="/vue.global.prod.js"></script>
-    <script defer src="/app.js"></script>
-  </head>
-  <body>
-    <div id="app" @click="handleRootClick">
-      <header class="app-header" @click="handleHeaderClick">
-        <h1>网址收藏夹<span class="subtitle-artistic">每天都很哇塞</span></h1>
-        <div class="header-actions">
-          <div class="theme-toggle">
-            <span class="theme-toggle-icon moon-icon">🌙</span>
-            <div class="theme-toggle-btn" @click="toggleTheme"></div>
-            <span class="theme-toggle-icon sun-icon">☀️</span>
-          </div>
-        </div>
-      </header>
-
-      <main class="app-main">
-        <section class="tree-panel" @click="handleTreePanelClick">
-          <div class="panel-header">
-            <div class="panel-title horizontal">
-              <h2>结构</h2>
-              <div class="panel-actions">
-                <button class="tertiary small" @click="openAddFolder(null)">
-                <span>📁+</span>
-                <span>新建文件夹</span>
-              </button>
-                <button class="tertiary small" @click="toggleTreeActions">
-                  <span>{{ treeActionsVisible ? '✅' : '✏️' }}</span>
-                  <span>{{ treeActionsVisible ? '完成' : '编辑' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <ul class="tree-root">
-            <!-- 固定的【所有网址】文件夹 -->
-            <li class="tree-item">
-              <div :class="['tree-row', { selected: selectedNodeId === 'all-bookmarks' }]" @click="selectAllBookmarksFolder">
-                <button class="node-main" type="button">
-                  <span class="node-icon">📚</span>
-                  <span class="node-title">所有网址</span>
-                </button>
-              </div>
-            </li>
-            <bookmark-node
-              v-for="node in tree"
-              :key="node.id"
-              :node="node"
-              :level="0"
-              :selected-id="selectedNodeId"
-              :global-actions-visible="treeActionsVisible"
-              :get-favicon-url="getFaviconUrl"
-              @add-folder="openAddFolder"
-              @add-bookmark="openAddBookmark"
-              @edit="openEdit"
-              @delete="confirmDelete"
-              @select="selectNode"
-              @move="reorderNode"
-              @context="showFolderActions"
-            ></bookmark-node>
-          </ul>
-        </section>
-
-        <section class="list-panel" @click="handleListPanelClick">
-          <div class="panel-header">
-            <div class="panel-title horizontal">
-              <div>
-                <h2>网址列表</h2>
-                <span class="panel-tip">{{ listTitle }}</span>
-              </div>
-              <div class="panel-actions">
-                <!-- 搜索框 -->
-                <div class="search-container">
-                  <div class="search-input-wrapper">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" @input="handleSearchInput" @keyup.enter="handleSearch" class="search-input" placeholder="搜索网址标题或URL..." v-model="searchQuery" />
-                    <button id="clear-search-btn" class="clear-search-btn" v-if="clearSearchBtnVisible" @click="clearSearch">
-                      ✕
-                    </button>
-                  </div>
-                  <button id="search-btn" class="search-btn" @click="handleSearch">
-                    搜索
-                  </button>
-                </div>
-                <div id="search-stats" class="searc h-stats" v-if="searchResultVisible">
-                  搜索结果: <strong v-text="searchResultCount"></strong> 项
-                </div>
-              </div>
-              <div class="panel-actions">
-                <button class="tertiary small" @click="openAddBookmark(null)">
-                  <span>➕</span>
-                  <span>添加网址</span>
-                </button>
-                <button class="tertiary small" @click="toggleBookmarkEdit" v-if="displayBookmarks.length > 0">
-                  <span>{{ bookmarkEditMode ? '✅' : '✏️' }}</span>
-                  <span>{{ bookmarkEditMode ? '完成' : '编辑' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div v-if="displayBookmarks.length === 0" class="placeholder">
-            暂无收藏的网址。
-          </div>
-          <div v-else>
-            <div class="bookmark-content-container">
-              <div v-if="bookmarkEditMode" class="bookmark-toolbar">
-                <div class="toolbar-info">
-                  <span class="toolbar-text">已选择 {{ selectedBookmarks.size }} 个项目</span>
-                </div>
-                <div class="toolbar-actions">
-                  <button class="tertiary small" @click="selectAllBookmarks">
-                    {{ selectedBookmarks.size === displayBookmarks.length ? '取消全选' : '全选' }}
-                  </button>
-                  <button class="tertiary small" @click="deleteSelectedBookmarks" :disabled="selectedBookmarks.size === 0">
-                    <span class="action-icon">🗑️</span>
-                    删除选中
-                  </button>
-                  <button class="tertiary small" @click="moveSelectedBookmarks('up')" :disabled="selectedBookmarks.size === 0">
-                    <span class="action-icon">⬆️</span>
-                    上移
-                  </button>
-                  <button class="tertiary small" @click="moveSelectedBookmarks('down')" :disabled="selectedBookmarks.size === 0">
-                    <span class="action-icon">⬇️</span>
-                    下移
-                  </button>
-                </div>
-              </div>
-              <div class="bookmark-scroll-container">
-                <ul class="bookmark-list">
-                  <li 
-                    v-for="item in displayBookmarks" 
-                    :key="item.id" 
-                    class="bookmark-item"
-                    :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }"
-                    @contextmenu.prevent="showBookmarkActions(item.raw, $event)"
-                  >
-                    <div class="bookmark-edit-checkbox" v-if="bookmarkEditMode">
-                      <input 
-                        type="checkbox" 
-                        :checked="selectedBookmarks.has(item.id)"
-                        @change="toggleBookmarkSelection(item.id)"
-                      />
-                    </div>
-                    <div class="bookmark-main">
-                      <span class="node-icon">
-                        <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
-                        <span v-else>🌏</span>
-                      </span>
-                      <div class="bookmark-info">
-                        <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
-                          {{ item.title }}
-                        </a>
-                        <span class="bookmark-url">{{ item.url }}</span>
-                        <span class="bookmark-path" v-if="item.path">
-                          {{ item.path }}
-                        </span>
-                      </div>
-                    </div>
-                    <div class="bookmark-actions" v-if="bookmarkEditMode">
-                      <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'up')" title="上移">
-                        <span class="action-icon">⬆️</span>
-                      </button>
-                      <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'down')" title="下移">
-                        <span class="action-icon">⬇️</span>
-                      </button>
-                      <button class="tertiary small" @click="editBookmark(item.raw)" title="编辑">
-                        <span class="action-icon">✏️</span>
-                      </button>
-                      <button class="tertiary small danger" @click="deleteBookmark(item.raw)" title="删除">
-                        <span class="action-icon">🗑️</span>
-                      </button>
-                    </div>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <transition name="fade">
-        <div
-          v-if="contextMenu.visible && contextNode"
-          class="context-menu"
-          :style="contextMenuStyle"
-          @click.stop
-        >
-          <template v-if="contextNode.type === 'folder'">
-            <button type="button" @click="contextAddFolder">
-              <span class="action-icon">🗂️</span>
-              <span class="action-text">新建子文件夹</span>
-            </button>
-            <button type="button" @click="contextAddBookmark">
-              <span class="action-icon">➕</span>
-              <span class="action-text">添加网址</span>
-            </button>
-            <hr />
-          </template>
-          <button type="button" @click="contextReorder('up')">
-            <span class="action-icon">⬆️</span>
-            <span class="action-text">上移</span>
-          </button>
-          <button type="button" @click="contextReorder('down')">
-            <span class="action-icon">⬇️</span>
-            <span class="action-text">下移</span>
-          </button>
-          <button type="button" @click="contextMoveTo">
-            <span class="action-icon">📁</span>
-            <span class="action-text">移动到...</span>
-          </button>
-          <hr />
-          <button type="button" @click="contextEdit">
-            <span class="action-icon">✏️</span>
-            <span class="action-text">编辑</span>
-          </button>
-          <button type="button" class="danger" @click="contextDelete">
-            <span class="action-icon">🗑️</span>
-            <span class="action-text">删除</span>
-          </button>
-        </div>
-      </transition>
-
-      <transition name="fade">
-        <div v-if="modal.visible" class="modal-backdrop">
-          <div class="modal">
-            <h3 class="modal-title">{{ modalTitle }}</h3>
-            <div class="modal-subtitle">
-              <button type="button" class="folder-select-btn" @click="showFolderSelector">
-                <span class="action-icon">📁</span>
-                <span>{{ modal.parentId ? getFolderPath(modal.parentId) : '选择文件夹' }}</span>
-              </button>
-            </div>
-            <form @submit.prevent="submitModal">
-              <div class="form-group" v-if="modal.type.includes('bookmark')">
-                <label>网址</label>
-                <div class="url-input">
-                  <input
-                    v-model="modal.form.url"
-                    type="url"
-                    required
-                    placeholder="https://example.com"
-                  />
-                  <button type="button" class="tertiary" @click="lookupMetadata" :disabled="metadataLoading || !modal.form.url">
-                    {{ metadataLoading ? '获取中...' : '获取信息' }}
-                  </button>
-                </div>
-                <p v-if="metadataError" class="form-error">{{ metadataError }}</p>
-              </div>
-              <div class="form-group">
-                <label>名称</label>
-                <input
-                  v-model="modal.form.title"
-                  type="text"
-                  required
-                  placeholder="请输入名称"
-                />
-              </div>
-              <div class="form-group" v-if="modal.type.includes('bookmark')">
-                <label>图标地址</label>
-                <input
-                  v-model="modal.form.favicon_url"
-                  type="url"
-                  placeholder="自动获取或手动输入"
-                />
-              </div>
-              <div class="modal-actions">
-                <button type="submit" class="primary">确认</button>
-                <button type="button" class="secondary" @click="closeModal">取消</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </transition>
-
-      <transition name="fade">
-        <div v-if="moveModal.visible" class="modal-backdrop">
-          <div class="modal">
-            <h3 class="modal-title">移动到文件夹</h3>
-            <div class="form-group">
-              <label>选择目标文件夹</label>
-              <div class="folder-selector">
-                <!--<div class="folder-option" @click="selectMoveTarget(null)">
-                  <span class="action-icon">🏠</span>
-                  <span class="action-text">根目录</span>
-                  <span class="selected-indicator" v-if="moveModal.targetParentId === null">✓</span>
-                </div>-->
-                <div 
-                  v-for="folder in getAllFolders()" 
-                  :key="folder.id"
-                  class="folder-option"
-                  :class="{ 'disabled': isFolderOrChild(folder.id, rightClickNode?.parent_id) }"
-                  @click="!isFolderOrChild(folder.id, rightClickNode?.parent_id) && selectMoveTarget(folder.id)"
-                >
-                  <span class="action-icon">📁</span>
-                  <span class="action-text">{{ getFolderPath(folder.id) }}</span>
-                  <span class="selected-indicator" v-if="moveModal.targetParentId === folder.id">✓</span>
-                  <span class="disabled-text" v-if="isFolderOrChild(folder.id, rightClickNode?.parent_id)">（不可选择）</span>
-                </div>
-              </div>
-            </div>
-            <div class="modal-actions">
-              <button type="button" class="primary" @click="confirmMove" v-if="moveModal.targetParentId !== rightClickNode?.parent_id">
-                确认移动
-              </button>
-              <button type="button" class="secondary" @click="closeMoveModal">取消</button>
-            </div>
-          </div>
-        </div>
-      </transition>
-
-      <transition name="fade">
-        <div v-if="toast.visible" :class="['toast', toast.type]">
-          {{ toast.message }}
-        </div>
-      </transition>
-
-      <transition name="fade">
-        <div v-if="confirmDialog.visible" class="modal-backdrop">
-          <div class="modal confirm-dialog">
-            <div class="confirm-icon" :class="confirmDialog.type">
-              {{ confirmDialog.type === 'warning' ? '⚠️' : '❓' }}
-            </div>
-            <h3 class="modal-title">{{ confirmDialog.title }}</h3>
-            <div class="confirm-content">
-              {{ confirmDialog.message }}
-            </div>
-            <div class="modal-actions">
-              <button type="button" class="secondary" @click="handleConfirmCancel">
-                取消
-              </button>
-              <button type="button" class="primary danger" @click="handleConfirmOk">
-                {{ confirmDialog.confirmText || '确认' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </transition>
-
-      <transition name="fade">
-        <div v-if="folderSelectorVisible" class="modal-backdrop">
-          <div class="modal">
-            <h3 class="modal-title">选择文件夹</h3>
-            <div class="form-group">
-              <label>目标文件夹</label>
-              <div class="folder-selector">
-                <div 
-                  v-for="folder in getAllFolders()" 
-                  :key="folder.id"
-                  class="folder-option"
-                  @click="selectFolder(folder.id)"
-                >
-                  <span class="action-icon">📁</span>
-                  <span class="action-text">{{ getFolderPath(folder.id) }}</span>
-                  <span class="selected-indicator" v-if="selectedFolderId === folder.id">✓</span>
-                </div>
-              </div>
-            </div>
-            <div class="modal-actions">
-              <button type="button" class="primary" @click="confirmFolderSelection">
-                确认
-              </button>
-              <button type="button" class="secondary" @click="cancelFolderSelection">
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      </transition>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网址收藏夹 - 重定向中</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f5f5f5;
+            color: #333;
+            text-align: center;
+        }
+        
+        .container {
+            padding: 2rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        p {
+            color: #666;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>网址收藏夹</h1>
+        <p>正在为您的设备重定向到合适的版本...</p>
     </div>
-  </body>
+    
+    <script>
+        // 设备检测函数
+        function isMobileDevice() {
+            // 使用多种方法检测移动设备
+            return (
+                // 检测移动设备的关键特征
+                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                // 检测屏幕宽度
+                (window.innerWidth <= 768) ||
+                // 检测触摸支持
+                (('ontouchstart' in window) || (navigator.maxTouchPoints > 0))
+            );
+        }
+        
+        // 重定向到对应的页面
+        function redirectToAppropriateVersion() {
+            if (isMobileDevice()) {
+                // 如果是移动设备，尝试跳转到mobile.html
+                // 如果mobile.html不存在，可以回退到pc.html
+                window.location.href = 'mobile.html';
+            } else {
+                // 如果是桌面设备，跳转到pc.html
+                window.location.href = 'pc.html';
+            }
+        }
+        
+        // 页面加载时执行重定向
+        window.addEventListener('DOMContentLoaded', redirectToAppropriateVersion);
+    </script>
+</body>
 </html>
 
