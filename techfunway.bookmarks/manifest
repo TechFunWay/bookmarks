@@ -10,4 +10,4 @@ distributor           = 科技智趣坊
 distributor_url       = http://techfunway.wycto.cn/fnapp/bookmarks
 desktop_uidir         = ui
 desktop_applaunchname = techfunway.bookmarks.Application
-changelog             = 1、新增搜索功能，支持按网址名称搜索<2>2、手机端适配
+changelog             = 1、新增搜索功能，支持按网址名称搜索<br>2、手机端适配
