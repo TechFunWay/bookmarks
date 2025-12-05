@@ -3,20 +3,8 @@
 ### This script is called after the user uninstalls the application.
 #!/bin/bash
 
-TEST_FILE="${TRIM_PKGVAR}/test.log"
-
 # 获取用户在向导中的选择
 DATA_ACTION="$wizard_data_action"
-
-log_msg() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${TEST_FILE}
-}
-
-log_msg "TRIM_DATA_SHARE_PATHS：$TRIM_DATA_SHARE_PATHS"
-log_msg "TRIM_TEMP_LOGFILE：$TRIM_TEMP_LOGFILE"
-log_msg "TRIM_TEMP_UPGRADE_FOLDER：$TRIM_TEMP_UPGRADE_FOLDER"
-log_msg "TRIM_PKGINST_TEMP_DIR：$TRIM_PKGINST_TEMP_DIR"
-log_msg "TRIM_TEMP_TPKFILE：$TRIM_TEMP_TPKFILE"
 
 # 根据用户选择执行相应逻辑
 if [ "${DATA_ACTION}" = "delete" ]; then
