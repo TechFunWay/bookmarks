@@ -1,5 +1,5 @@
 appname               = techfunway.bookmarks
-version               = 1.2.0
+version               = 1.2.1
 display_name          = 网址收藏夹
 desc                  = 网址收藏夹，收藏自己的网址功能，支持点击跳转<br>支持多级文件夹，文件夹下添加网址<br>支持自动识别网址名称和网址图标,支持排序和增删改查<br>支持搜索功能，支持按网址名称搜索<br>手机端适配
 arch                  = x86_64
@@ -10,4 +10,4 @@ distributor           = 科技智趣坊
 distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway.bookmarks.Application
-changelog             = 1、PC端新增搜索功能，支持按网址名称搜索<br>2、手机端适配<br><strong>⚠️注意：如果升级失败，请先保留数据卸载后重装<strong>
+changelog             = 1、优化网页title获取<br>2、优化手机端和PC端适配跳转<br><strong>⚠️注意：如果升级失败，请先保留数据卸载后重装<strong>
