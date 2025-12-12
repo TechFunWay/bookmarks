@@ -1098,6 +1098,8 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 
 		// 4. 尝试从页面文本中提取第一个有意义的文本作为标题
 		if title == "" {
+			// 用原生go从网址parsedURL获取网页内容
+			title, err = getPageTitle(rawURL)
 		}
 
 		// 5. 如果所有方法都失败，使用已解析的主机名或URL
@@ -1286,4 +1288,50 @@ func handleIntranetURL(urlStr string) string {
 	}
 
 	return urlStr
+}
+
+func getPageTitle(url string) (string, error) {
+	// 1. 发送HTTP请求
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 2. 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("非200状态码: %d", resp.StatusCode)
+	}
+
+	// 3. 解析HTML并提取<title>
+	doc, err := html.Parse(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("HTML解析失败: %w", err)
+	}
+
+	title, found := findTitle(doc)
+	if !found {
+		return "", fmt.Errorf("未找到<title>标签")
+	}
+	return strings.TrimSpace(title), nil
+}
+
+// 递归遍历DOM树查找<title>
+func findTitle(n *html.Node) (string, bool) {
+	// 在<head>内搜索<title>
+	if n.Type == html.ElementNode && n.Data == "head" {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "title" && c.FirstChild != nil {
+				return c.FirstChild.Data, true
+			}
+		}
+	}
+
+	// 深度优先遍历子节点
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if title, found := findTitle(c); found {
+			return title, true
+		}
+	}
+	return "", false
 }
