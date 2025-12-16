@@ -19,6 +19,16 @@
         <div class="theme-toggle-btn" @click="toggleTheme"></div>
         <span class="theme-toggle-icon sun-icon">☀️</span>
       </div>
+      <div class="header-buttons">
+        <button class="tertiary" @click="exportBookmarks">
+          <span>📤</span>
+          <span>导出</span>
+        </button>
+        <button class="tertiary" @click="showImportDialog">
+          <span>📥</span>
+          <span>导入</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -379,6 +389,47 @@
       </div>
     </div>
   </transition>
+
+  <!-- 导入选项模态框 -->
+  <transition name="fade">
+    <div v-if="importDialog.visible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">导入选项</h3>
+        <div class="form-group">
+          <p>请选择导入方式：</p>
+          <div class="import-options">
+            <div class="import-option">
+              <input type="radio" id="import-merge" v-model="importMode" value="merge" />
+              <label for="import-merge">
+                <span class="option-icon">🔄</span>
+                <span class="option-text">合并</span>
+                <span class="option-description">保留现有书签，添加新导入的书签</span>
+              </label>
+            </div>
+            <div class="import-option">
+              <input type="radio" id="import-replace" v-model="importMode" value="replace" />
+              <label for="import-replace">
+                <span class="option-icon">⚠️</span>
+                <span class="option-text">替换</span>
+                <span class="option-description">删除所有现有书签，使用导入的数据</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="primary" @click="handleFileUpload">
+            选择文件
+          </button>
+          <button type="button" class="secondary" @click="closeImportDialog">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- 隐藏的文件输入 -->
+  <input type="file" id="import-file-input" ref="importFileInput" accept=".json" style="display: none" @change="importBookmarks" />
 </div>
 </body>
 </html>
