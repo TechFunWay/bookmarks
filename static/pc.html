@@ -14,11 +14,6 @@
   <header class="app-header" @click="handleHeaderClick">
     <h1>网址收藏夹<span class="subtitle-artistic">每天都很哇塞</span></h1>
     <div class="header-actions">
-      <div class="theme-toggle">
-        <span class="theme-toggle-icon moon-icon">🌙</span>
-        <div class="theme-toggle-btn" @click="toggleTheme"></div>
-        <span class="theme-toggle-icon sun-icon">☀️</span>
-      </div>
       <div class="header-buttons">
         <button class="tertiary" @click="exportBookmarks">
           <span>📤</span>
@@ -28,6 +23,15 @@
           <span>📥</span>
           <span>导入</span>
         </button>
+        <button class="tertiary" @click="showEdgeImportDialog">
+          <span>🔄</span>
+          <span>导入Edge</span>
+        </button>
+      </div>
+      <div class="theme-toggle">
+        <span class="theme-toggle-icon moon-icon">🌙</span>
+        <div class="theme-toggle-btn" @click="toggleTheme"></div>
+        <span class="theme-toggle-icon sun-icon">☀️</span>
       </div>
     </div>
   </header>
@@ -401,16 +405,20 @@
             <div class="import-option">
               <input type="radio" id="import-merge" v-model="importMode" value="merge" />
               <label for="import-merge">
-                <span class="option-icon">🔄</span>
-                <span class="option-text">合并</span>
+                <div class="option-header">
+                  <span class="option-icon">🔄</span>
+                  <span class="option-text">合并</span>
+                </div>
                 <span class="option-description">保留现有书签，添加新导入的书签</span>
               </label>
             </div>
             <div class="import-option">
               <input type="radio" id="import-replace" v-model="importMode" value="replace" />
               <label for="import-replace">
-                <span class="option-icon">⚠️</span>
-                <span class="option-text">替换</span>
+                <div class="option-header">
+                  <span class="option-icon">⚠️</span>
+                  <span class="option-text">替换</span>
+                </div>
                 <span class="option-description">删除所有现有书签，使用导入的数据</span>
               </label>
             </div>
@@ -428,8 +436,52 @@
     </div>
   </transition>
 
+  <!-- Edge导入选项模态框 -->
+  <transition name="fade">
+    <div v-if="edgeImportDialog.visible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">导入Edge书签</h3>
+        <div class="form-group">
+          <p>请选择Edge书签导入方式：</p>
+          <div class="import-options">
+            <div class="import-option">
+              <input type="radio" id="edge-import-merge" v-model="edgeImportMode" value="merge" />
+              <label for="edge-import-merge">
+                <div class="option-header">
+                  <span class="option-icon">🔄</span>
+                  <span class="option-text">合并</span>
+                </div>
+                <span class="option-description">保留现有书签，添加新导入的Edge书签</span>
+              </label>
+            </div>
+            <div class="import-option">
+              <input type="radio" id="edge-import-replace" v-model="edgeImportMode" value="replace" />
+              <label for="edge-import-replace">
+                <div class="option-header">
+                  <span class="option-icon">⚠️</span>
+                  <span class="option-text">替换</span>
+                </div>
+                <span class="option-description">删除所有现有书签，使用导入的Edge数据</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="primary" @click="handleEdgeFileUpload">
+            选择Edge HTML文件
+          </button>
+          <button type="button" class="secondary" @click="closeEdgeImportDialog">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <!-- 隐藏的文件输入 -->
   <input type="file" id="import-file-input" ref="importFileInput" accept=".json" style="display: none" @change="importBookmarks" />
+  <!-- Edge导入隐藏的文件输入 -->
+  <input type="file" id="edge-import-file-input" ref="edgeImportFileInput" accept=".html" style="display: none" @change="importEdgeBookmarks" />
 </div>
 </body>
 </html>
