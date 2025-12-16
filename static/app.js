@@ -211,6 +211,12 @@ const app = createApp({
         },
         importMode: 'merge', // 导入模式：merge 或 replace
         importFileInput: null,
+        // Edge导入功能相关状态
+        edgeImportDialog: {
+          visible: false
+        },
+        edgeImportMode: 'merge', // Edge导入模式：merge 或 replace
+        edgeImportFileInput: null,
         searchQuery: "",
         clearSearchBtnVisible: false,
         searchResultVisible: false,
@@ -438,6 +444,67 @@ const app = createApp({
         fileInput.click();
       }
     },
+    showEdgeImportDialog() {
+      // 显示Edge导入选项对话框
+      this.edgeImportDialog.visible = true;
+      this.edgeImportMode = 'merge'; // 默认选择合并模式
+    },
+    closeEdgeImportDialog() {
+      // 关闭Edge导入选项对话框
+      this.edgeImportDialog.visible = false;
+      // 重置文件输入
+      const fileInput = document.getElementById('edge-import-file-input');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    },
+    handleEdgeFileUpload() {
+      // 触发Edge文件选择
+      const fileInput = document.getElementById('edge-import-file-input');
+      if (fileInput) {
+        fileInput.click();
+      }
+    },
+    async importEdgeBookmarks(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const html = e.target.result;
+          
+          // 发送导入Edge书签请求
+          const response = await fetch('/api/import-edge', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              html: html,
+              mode: this.edgeImportMode
+            }),
+          });
+          
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || '导入失败');
+          }
+          
+          // 导入成功，重新加载树结构
+          await this.loadTree();
+          this.showToast('Edge书签导入成功', 'success');
+          this.closeEdgeImportDialog();
+          
+        } catch (error) {
+          this.showToast(error.message || '导入失败，请检查文件格式', 'error');
+        } finally {
+          // 重置文件输入
+          event.target.value = '';
+        }
+      };
+      reader.readAsText(file);
+    },
     loadSavedTheme() {
       const savedTheme = localStorage.getItem('bookmark-manager-theme');
       if (savedTheme) {
@@ -467,17 +534,17 @@ const app = createApp({
       }
     },
     getFaviconUrl(item) {
-      // 如果是内网地址，不显示favicon，返回空字符串让前端显示默认图标
-      if (this.isIntranetUrl(item.url)) {
-        return '';
-      }
-      
-      // 如果有明确的favicon_url，优先使用
+      // 如果有明确的favicon_url，优先使用，无论是否是内网地址
       if (item.favicon_url && item.favicon_url.trim()) {
         return item.favicon_url.trim();
       }
       
-      // 如果没有favicon_url，则使用默认的 /favicon.ico 路径
+      // 如果是内网地址且没有favicon_url，不显示favicon，返回空字符串让前端显示默认图标
+      if (this.isIntranetUrl(item.url)) {
+        return '';
+      }
+      
+      // 如果没有favicon_url且不是内网地址，则使用默认的 /favicon.ico 路径
       try {
         const url = new URL(item.url);
         return `${url.protocol}//${url.host}/favicon.ico`;
