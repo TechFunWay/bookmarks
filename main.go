@@ -111,6 +111,7 @@ func main() {
 		r.Put("/nodes/{id}", s.handleUpdateNode)
 		r.Delete("/nodes/{id}", s.handleDeleteNode)
 		r.Post("/nodes/reorder", s.handleReorderNodes)
+		r.Post("/import", s.handleImport)
 	})
 
 	fileServer := http.FileServer(http.Dir("./static"))
@@ -390,6 +391,169 @@ func (s *server) handleReorderNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type importRequest struct {
+	Bookmarks []*node `json:"bookmarks"`
+	Mode      string  `json:"mode"` // merge 或 replace
+}
+
+type importStats struct {
+	Folders   int `json:"folders"`
+	Bookmarks int `json:"bookmarks"`
+	Skipped   int `json:"skipped"`
+}
+
+func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
+	var req importRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if len(req.Bookmarks) == 0 {
+		respondError(w, http.StatusBadRequest, errors.New("no bookmarks to import"))
+		return
+	}
+
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 如果是replace模式，先删除所有数据
+	if req.Mode == "replace" {
+		if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
+	// 递归导入节点
+	stats := &importStats{}
+	if err = s.importNodes(tx, r.Context(), req.Bookmarks, nil, req.Mode, stats); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "imported",
+		"stats":  stats,
+	})
+}
+
+func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, parentID *int64, mode string, stats *importStats) error {
+	for pos, node := range nodes {
+		// 插入当前节点
+		var newID int64
+		var err error
+
+		switch node.Type {
+		case nodeTypeFolder:
+			// 检查文件夹是否已存在
+			var exists bool
+			if mode == "merge" {
+				var count int
+				if parentID == nil {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ?", nodeTypeFolder, node.Title).Scan(&count); err != nil {
+						return err
+					}
+				} else {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ?", nodeTypeFolder, *parentID, node.Title).Scan(&count); err != nil {
+						return err
+					}
+				}
+				exists = count > 0
+			}
+
+			if exists {
+				// 文件夹已存在，获取其ID并继续导入子节点
+				if parentID == nil {
+					if err = tx.QueryRowContext(ctx, "SELECT id FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ?", nodeTypeFolder, node.Title).Scan(&newID); err != nil {
+						return err
+					}
+				} else {
+					if err = tx.QueryRowContext(ctx, "SELECT id FROM nodes WHERE type = ? AND parent_id = ? AND title = ?", nodeTypeFolder, *parentID, node.Title).Scan(&newID); err != nil {
+						return err
+					}
+				}
+				stats.Skipped++
+			} else {
+				// 插入文件夹
+				res, err := tx.ExecContext(ctx, `
+					INSERT INTO nodes (parent_id, type, title, position)
+					VALUES (?, ?, ?, ?)
+				`, parentID, nodeTypeFolder, node.Title, pos)
+				if err != nil {
+					return err
+				}
+				newID, err = res.LastInsertId()
+				if err != nil {
+					return err
+				}
+				stats.Folders++
+			}
+
+			// 递归导入子节点
+			if len(node.Children) > 0 {
+				if err = s.importNodes(tx, ctx, node.Children, &newID, mode, stats); err != nil {
+					return err
+				}
+			}
+
+		case nodeTypeBookmark:
+			if node.URL == nil {
+				stats.Skipped++
+				continue // 跳过无效的书签
+			}
+
+			// 检查书签是否已存在
+			var exists bool
+			if mode == "merge" {
+				var count int
+				if parentID == nil {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND url = ?", nodeTypeBookmark, node.Title, *node.URL).Scan(&count); err != nil {
+						return err
+					}
+				} else {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND url = ?", nodeTypeBookmark, *parentID, node.Title, *node.URL).Scan(&count); err != nil {
+						return err
+					}
+				}
+				exists = count > 0
+			}
+
+			if exists {
+				stats.Skipped++
+			} else {
+				// 插入书签
+				res, err := tx.ExecContext(ctx, `
+					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position)
+					VALUES (?, ?, ?, ?, ?, ?)
+				`, parentID, nodeTypeBookmark, node.Title, node.URL, node.FaviconURL, pos)
+				if err != nil {
+					return err
+				}
+				newID, err = res.LastInsertId()
+				if err != nil {
+					return err
+				}
+				stats.Bookmarks++
+			}
+		}
+	}
+	return nil
 }
 
 var (
