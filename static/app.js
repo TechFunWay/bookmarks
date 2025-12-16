@@ -205,6 +205,12 @@ const app = createApp({
         folderSelectorVisible: false,
         selectedFolderId: null,
         rightClickNode:{},
+        // 导入功能相关状态
+        importDialog: {
+          visible: false
+        },
+        importMode: 'merge', // 导入模式：merge 或 replace
+        importFileInput: null,
         searchQuery: "",
         clearSearchBtnVisible: false,
         searchResultVisible: false,
@@ -354,6 +360,83 @@ const app = createApp({
       
       // 应用新主题
       html.setAttribute('data-theme', newTheme);
+    },
+    exportBookmarks() {
+      // 导出所有书签数据
+      const data = this.tree;
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.showToast('导出成功', 'success');
+    },
+    importBookmarks(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const json = e.target.result;
+          const data = JSON.parse(json);
+          
+          // 发送导入请求
+          const response = await fetch('/api/import', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              bookmarks: data,
+              mode: this.importMode
+            }),
+          });
+          
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || '导入失败');
+          }
+          
+          // 导入成功，重新加载树结构
+          await this.loadTree();
+          this.showToast('导入成功', 'success');
+          this.closeImportDialog();
+          
+        } catch (error) {
+          this.showToast(error.message || '导入失败，请检查文件格式', 'error');
+        } finally {
+          // 重置文件输入
+          event.target.value = '';
+        }
+      };
+      reader.readAsText(file);
+    },
+    showImportDialog() {
+      // 显示导入选项对话框
+      this.importDialog.visible = true;
+      this.importMode = 'merge'; // 默认选择合并模式
+    },
+    closeImportDialog() {
+      // 关闭导入选项对话框
+      this.importDialog.visible = false;
+      // 重置文件输入
+      const fileInput = document.getElementById('import-file-input');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    },
+    handleFileUpload() {
+      // 触发文件选择
+      const fileInput = document.getElementById('import-file-input');
+      if (fileInput) {
+        fileInput.click();
+      }
     },
     loadSavedTheme() {
       const savedTheme = localStorage.getItem('bookmark-manager-theme');
