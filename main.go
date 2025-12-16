@@ -58,11 +58,16 @@ func main() {
 	flag.Parse()                                      // 缺少此行将导致获取默认值
 	fmt.Println("数据路径:", *dataUrl)
 	fmt.Println("监听端口:", *port)
-	// 创建目录
+	// 创建数据目录
 	if _, err := os.Stat(*dataUrl); os.IsNotExist(err) {
 		if err := os.Mkdir(*dataUrl, 0755); err != nil {
-			log.Fatalf("failed to create directory: %v", err)
+			log.Fatalf("failed to create data directory: %v", err)
 		}
+	}
+
+	// 创建图标存储目录
+	if err := os.MkdirAll("static/icons", 0755); err != nil {
+		log.Fatalf("failed to create icons directory: %v", err)
 	}
 
 	db, err := sql.Open("sqlite", *dataUrl+"data.db?_foreign_keys=on")
@@ -112,6 +117,7 @@ func main() {
 		r.Delete("/nodes/{id}", s.handleDeleteNode)
 		r.Post("/nodes/reorder", s.handleReorderNodes)
 		r.Post("/import", s.handleImport)
+		r.Post("/import-edge", s.handleEdgeImport)
 	})
 
 	fileServer := http.FileServer(http.Dir("./static"))
@@ -451,6 +457,282 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		"status": "imported",
 		"stats":  stats,
 	})
+}
+
+// Edge导入请求结构
+type edgeImportRequest struct {
+	HTML string `json:"html"` // Edge导出的HTML内容
+	Mode string `json:"mode"` // merge 或 replace
+}
+
+// 解析Edge HTML书签并导入
+func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
+	var req edgeImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("JSON解码失败: %v", err)
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if req.HTML == "" {
+		log.Println("HTML内容为空")
+		respondError(w, http.StatusBadRequest, errors.New("no html content to import"))
+		return
+	}
+
+	// 解析HTML内容为节点结构
+	nodes, err := parseEdgeHTML(req.HTML)
+	if err != nil {
+		log.Printf("HTML解析失败: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to parse HTML: %w", err))
+		return
+	}
+
+	if len(nodes) == 0 {
+		log.Println("未找到书签")
+		respondError(w, http.StatusBadRequest, errors.New("no bookmarks found in HTML"))
+		return
+	}
+
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		log.Printf("开启事务失败: %v", err)
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 如果是replace模式，先删除所有数据
+	if req.Mode == "replace" {
+		log.Println("执行replace模式，删除所有数据")
+		if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
+			log.Printf("删除数据失败: %v", err)
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
+	// 递归导入节点
+	stats := &importStats{}
+	log.Printf("开始导入节点，共%d个根节点", len(nodes))
+	if err = s.importNodes(tx, r.Context(), nodes, nil, req.Mode, stats); err != nil {
+		log.Printf("导入节点失败: %v", err)
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	log.Printf("导入节点成功，统计: 文件夹=%d, 书签=%d, 跳过=%d", stats.Folders, stats.Bookmarks, stats.Skipped)
+	if err = tx.Commit(); err != nil {
+		log.Printf("提交事务失败: %v", err)
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "imported",
+		"stats":  stats,
+	})
+}
+
+// 解析Edge导出的HTML书签
+func parseEdgeHTML(htmlContent string) ([]*node, error) {
+	// 解析HTML文档
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		log.Printf("HTML解析失败: %v", err)
+		return nil, err
+	}
+
+	// 查找body标签，从body开始解析
+	var body *html.Node
+	var findBody func(*html.Node)
+	findBody = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "body" {
+			body = n
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			findBody(c)
+			if body != nil {
+				return
+			}
+		}
+	}
+	findBody(doc)
+
+	if body == nil {
+		log.Println("未找到body标签")
+		return nil, errors.New("no body tag found")
+	}
+
+	// 解析书签树
+	nodes := []*node{}
+	var parentStack []*node
+	var currentParent *node
+
+	// 计数器，用于调试
+	depth := 0
+
+	var parseNodes func(*html.Node)
+	parseNodes = func(n *html.Node) {
+		depth++
+		defer func() {
+			depth--
+		}()
+
+		log.Printf("解析节点: 深度=%d, 类型=%s, 数据=%s", depth, n.Type, n.Data)
+
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode {
+				log.Printf("处理元素: 深度=%d, 标签=%s", depth, c.Data)
+
+				switch c.Data {
+				case "h3":
+					// 创建文件夹
+					folderName := extractText(c)
+					log.Printf("创建文件夹: 深度=%d, 名称=%s", depth, folderName)
+					if folderName == "" {
+						log.Printf("文件夹名称为空，跳过")
+						continue
+					}
+
+					newFolder := &node{
+						Type:  nodeTypeFolder,
+						Title: folderName,
+					}
+
+					// 添加到当前父文件夹
+					if currentParent != nil {
+						if currentParent.Children == nil {
+							currentParent.Children = []*node{}
+						}
+						currentParent.Children = append(currentParent.Children, newFolder)
+						log.Printf("将文件夹添加到父文件夹: 父文件夹=%s", currentParent.Title)
+					} else {
+						// 根文件夹
+						nodes = append(nodes, newFolder)
+						log.Printf("添加根文件夹: %s", folderName)
+					}
+
+					// 将新文件夹压入栈，并设置为当前父文件夹
+					parentStack = append(parentStack, newFolder)
+					currentParent = newFolder
+					log.Printf("更新当前父文件夹: %s, 栈深度=%d", currentParent.Title, len(parentStack))
+				case "a":
+					// 创建书签
+					bookmark := &node{
+						Type: nodeTypeBookmark,
+					}
+
+					// 提取URL和图标
+					var url string
+					var iconData string
+					for _, attr := range c.Attr {
+						attrKey := strings.ToLower(attr.Key)
+						switch attrKey {
+						case "href":
+							url = attr.Val
+							bookmark.URL = optionalString(url)
+						case "icon":
+							iconData = attr.Val
+							log.Printf("找到图标属性: %s, 值长度=%d", attr.Key, len(iconData))
+						}
+					}
+
+					if bookmark.URL == nil || *bookmark.URL == "" {
+						log.Printf("书签URL为空，跳过")
+						continue
+					}
+
+					// 提取标题
+					bookmark.Title = extractText(c)
+
+					// 直接保存base64图标到favicon_url
+					if iconData != "" {
+						log.Printf("保存base64图标: 长度=%d, 前30字符=%s", len(iconData), iconData[:min(30, len(iconData))])
+						bookmark.FaviconURL = optionalString(iconData)
+						log.Printf("图标保存到favicon_url: %t", bookmark.FaviconURL != nil)
+					}
+
+					log.Printf("创建书签: 深度=%d, 标题=%s, URL=%s, 有图标=%t", depth, bookmark.Title, *bookmark.URL, bookmark.FaviconURL != nil)
+
+					// 添加到当前父文件夹
+					if currentParent != nil {
+						if currentParent.Children == nil {
+							currentParent.Children = []*node{}
+						}
+						currentParent.Children = append(currentParent.Children, bookmark)
+						log.Printf("将书签添加到父文件夹: 父文件夹=%s", currentParent.Title)
+					} else {
+						// 根书签
+						nodes = append(nodes, bookmark)
+						log.Printf("添加根书签: %s", bookmark.Title)
+					}
+				case "dl":
+					// 进入文件夹层级，递归解析子节点
+					log.Printf("进入文件夹层级: 深度=%d", depth)
+					parseNodes(c)
+					// 解析完DL标签后，退出当前文件夹层级
+					if len(parentStack) > 0 {
+						// 弹出当前文件夹
+						currentFolder := parentStack[len(parentStack)-1]
+						parentStack = parentStack[:len(parentStack)-1]
+						// 设置新的当前父文件夹
+						if len(parentStack) > 0 {
+							currentParent = parentStack[len(parentStack)-1]
+						} else {
+							currentParent = nil
+						}
+						log.Printf("退出文件夹层级: 文件夹=%s, 新的当前父文件夹=%s, 栈深度=%d", currentFolder.Title, func() string {
+							if currentParent != nil {
+								return currentParent.Title
+							} else {
+								return "nil"
+							}
+						}(), len(parentStack))
+					}
+				case "dt":
+					// 解析DT标签内的内容
+					log.Printf("处理DT标签: 深度=%d", depth)
+					parseNodes(c)
+				case "p":
+					// 忽略P标签
+					log.Printf("忽略P标签: 深度=%d", depth)
+					continue
+				default:
+					log.Printf("未知标签: 深度=%d, 标签=%s", depth, c.Data)
+					continue
+				}
+			}
+		}
+	}
+
+	// 开始解析
+	log.Println("开始解析body标签")
+	parseNodes(body)
+
+	log.Printf("解析完成，共找到%d个根节点", len(nodes))
+	return nodes, nil
+}
+
+// 提取HTML节点的文本内容
+func extractText(n *html.Node) string {
+	var text strings.Builder
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			text.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(n)
+	return strings.TrimSpace(text.String())
 }
 
 func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, parentID *int64, mode string, stats *importStats) error {
