@@ -217,6 +217,8 @@ const app = createApp({
         },
         edgeImportMode: 'merge', // Edge导入模式：merge 或 replace
         edgeImportFileInput: null,
+        // 导出菜单状态
+        exportMenuVisible: false,
         searchQuery: "",
         clearSearchBtnVisible: false,
         searchResultVisible: false,
@@ -381,6 +383,80 @@ const app = createApp({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       this.showToast('导出成功', 'success');
+      this.exportMenuVisible = false; // 关闭导出菜单
+    },
+    exportEdgeBookmarks() {
+      // 导出为Edge兼容的HTML格式
+      const html = this.generateEdgeBookmarksHTML(this.tree);
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.showToast('导出成功', 'success');
+      this.exportMenuVisible = false; // 关闭导出菜单
+    },
+    generateEdgeBookmarksHTML(nodes) {
+      // 生成Edge兼容的HTML格式书签，包含图标信息
+      const now = Math.floor(Date.now() / 1000);
+      let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file.
+     It will be read and overwritten.
+     DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>`;
+      
+      // 递归生成HTML内容
+      html += this.generateEdgeBookmarksHTMLRecursive(nodes, 0, now);
+      
+      html += `
+</DL><p>`;
+      return html;
+    },
+    generateEdgeBookmarksHTMLRecursive(nodes, level, now) {
+      // 递归生成书签HTML，包含图标信息
+      let html = '';
+      
+      for (const node of nodes) {
+        const indent = '  '.repeat(level);
+        
+        if (node.type === 'folder') {
+          // 文件夹
+          html += `
+${indent}<DT><H3 ADD_DATE="${now}" LAST_MODIFIED="0">${node.title}</H3>
+${indent}<DL><p>`;
+          
+          if (node.children && node.children.length > 0) {
+            html += this.generateEdgeBookmarksHTMLRecursive(node.children, level + 1, now);
+          }
+          
+          html += `
+${indent}</DL><p>`;
+        } else if (node.type === 'bookmark') {
+          // 书签
+          const href = node.url || '';
+          const title = node.title || '';
+          const favicon = node.favicon_url || '';
+          let iconAttr = '';
+          if (favicon) {
+            iconAttr = ` ICON="${favicon}"`;
+          }
+          html += `
+${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
+        }
+      }
+      
+      return html;
+    },
+    toggleExportMenu() {
+      // 切换导出菜单的显示状态
+      this.exportMenuVisible = !this.exportMenuVisible;
     },
     importBookmarks(event) {
       const file = event.target.files[0];
@@ -902,10 +978,6 @@ const app = createApp({
     },
     toggleTreeActions() {
       this.treeActionsVisible = !this.treeActionsVisible;
-      // 如果当前选中的是【所有网址】文件夹，确保编辑模式为关闭
-      if (this.selectedNodeId === 'all-bookmarks') {
-        this.treeActionsVisible = false;
-      }
       if (this.treeActionsVisible) {
         this.hideContextMenu();
       }
