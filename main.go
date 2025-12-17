@@ -461,8 +461,9 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 
 // Edge导入请求结构
 type edgeImportRequest struct {
-	HTML string `json:"html"` // Edge导出的HTML内容
-	Mode string `json:"mode"` // merge 或 replace
+	HTML     string `json:"html"`      // Edge导出的HTML内容
+	Mode     string `json:"mode"`      // merge 或 replace
+	ParentID *int64 `json:"parent_id"` // 导入到指定的父文件夹ID
 }
 
 // 解析Edge HTML书签并导入
@@ -518,8 +519,8 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 
 	// 递归导入节点
 	stats := &importStats{}
-	log.Printf("开始导入节点，共%d个根节点", len(nodes))
-	if err = s.importNodes(tx, r.Context(), nodes, nil, req.Mode, stats); err != nil {
+	log.Printf("开始导入节点，共%d个根节点，父文件夹ID=%v", len(nodes), req.ParentID)
+	if err = s.importNodes(tx, r.Context(), nodes, req.ParentID, req.Mode, stats); err != nil {
 		log.Printf("导入节点失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
