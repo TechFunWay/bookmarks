@@ -9,6 +9,11 @@ const BookmarkNode = {
     globalActionsVisible: { type: Boolean, default: false },
   },
   emits: ["add-folder", "add-bookmark", "edit", "delete", "select", "move", "context"],
+  data() {
+    return {
+      collapsed: false, // 文件夹折叠状态
+    };
+  },
   computed: {
     isFolder() {
       return this.node.type === "folder";
@@ -24,6 +29,19 @@ const BookmarkNode = {
     bookmarkCount() {
       // 计算当前文件夹及其子文件夹中的书签数量
       return this.countBookmarks(this.node);
+    },
+    hasChildren() {
+      // 检查是否有子文件夹
+      if (!this.node.children || this.node.children.length === 0) {
+        return false;
+      }
+      // 检查是否至少有一个子文件夹
+      for (const child of this.node.children) {
+        if (child.type === 'folder') {
+          return true;
+        }
+      }
+      return false;
     },
   },
   methods: {
@@ -86,19 +104,24 @@ const BookmarkNode = {
         this.longPressTimer = null;
       }
     },
+    toggleCollapse(event) {
+      // 切换文件夹折叠状态
+      event.stopPropagation(); // 防止触发select事件
+      this.collapsed = !this.collapsed;
+    },
   },
   template: `
     <li class="tree-item" v-if="isFolder">
       <div :class="['tree-row', { selected: isSelected }]" :style="indentStyle" @contextmenu.prevent="onContextMenu" @touchstart="startLongPress" @touchend="endLongPress" @touchcancel="endLongPress">
         <button class="node-main" type="button" @click="onSelect">
-            <span class="node-icon">
+            <span class="node-icon" @click="hasChildren && toggleCollapse($event)">
               <template v-if="isFolder">
-                <span v-if="level === 0">📁</span>
-                <span v-else>🗂️</span>
-              </template>
-              <template v-else>
-                <img v-if="getFaviconUrl && getFaviconUrl(node)" :src="getFaviconUrl(node)" alt="favicon" />
-                <span v-else>🔖</span>
+                <span v-if="hasChildren">
+                  {{ collapsed ? '▶️' : '▼️' }}
+                </span>
+                <span v-else>
+                  {{ level === 0 ? '📁' : '🗂️' }}
+                </span>
               </template>
             </span>
             <span class="node-title" :title="node.title">
@@ -128,7 +151,7 @@ const BookmarkNode = {
           </button>
         </div>
       </div>
-      <ul v-if="node.children && node.children.length" class="children">
+      <ul v-if="hasChildren && !collapsed" class="children">
         <bookmark-node
           v-for="child in node.children"
           :key="child.id"
@@ -217,6 +240,8 @@ const app = createApp({
         },
         edgeImportMode: 'merge', // Edge导入模式：merge 或 replace
         edgeImportFileInput: null,
+        edgeImportParentId: null, // 导入Edge书签的父文件夹ID
+        edgeFolderSelectorVisible: false, // Edge导入文件夹选择器可见状态
         // 导出菜单状态
         exportMenuVisible: false,
         searchQuery: "",
@@ -524,6 +549,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       // 显示Edge导入选项对话框
       this.edgeImportDialog.visible = true;
       this.edgeImportMode = 'merge'; // 默认选择合并模式
+      this.edgeImportParentId = null; // 默认导入到根目录
     },
     closeEdgeImportDialog() {
       // 关闭Edge导入选项对话框
@@ -540,6 +566,27 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       if (fileInput) {
         fileInput.click();
       }
+    },
+    // Edge导入文件夹选择相关方法
+    showEdgeFolderSelector() {
+      // 显示Edge导入文件夹选择器
+      this.edgeFolderSelectorVisible = true;
+    },
+    closeEdgeFolderSelector() {
+      // 关闭Edge导入文件夹选择器
+      this.edgeFolderSelectorVisible = false;
+    },
+    selectEdgeImportParentFolder(folderId) {
+      // 选择导入目标文件夹
+      this.edgeImportParentId = folderId;
+    },
+    confirmEdgeFolderSelection() {
+      // 确认Edge导入文件夹选择
+      this.edgeFolderSelectorVisible = false;
+    },
+    cancelEdgeFolderSelection() {
+      // 取消Edge导入文件夹选择
+      this.edgeFolderSelectorVisible = false;
     },
     async importEdgeBookmarks(event) {
       const file = event.target.files[0];
@@ -558,7 +605,8 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             },
             body: JSON.stringify({
               html: html,
-              mode: this.edgeImportMode
+              mode: this.edgeImportMode,
+              parent_id: this.edgeImportParentId
             }),
           });
           
