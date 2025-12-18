@@ -234,6 +234,8 @@ const app = createApp({
         },
         importMode: 'merge', // 导入模式：merge 或 replace
         importFileInput: null,
+        importParentId: null, // 导入JSON书签的父文件夹ID
+        folderSelectorVisible: false, // 导入文件夹选择器可见状态
         // Edge导入功能相关状态
         edgeImportDialog: {
           visible: false
@@ -242,6 +244,8 @@ const app = createApp({
         edgeImportFileInput: null,
         edgeImportParentId: null, // 导入Edge书签的父文件夹ID
         edgeFolderSelectorVisible: false, // Edge导入文件夹选择器可见状态
+        edgeImportFile: null, // 选中的Edge导入文件
+        edgeConfirmImportVisible: false, // Edge导入确认对话框可见状态
         // 导出菜单状态
         exportMenuVisible: false,
         searchQuery: "",
@@ -493,7 +497,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           const json = e.target.result;
           const data = JSON.parse(json);
           
-          // 发送导入请求
+          // 发送导入请求，添加parent_id参数
           const response = await fetch('/api/import', {
             method: 'POST',
             headers: {
@@ -501,7 +505,8 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             },
             body: JSON.stringify({
               bookmarks: data,
-              mode: this.importMode
+              mode: this.importMode,
+              parent_id: this.importParentId
             }),
           });
           
@@ -528,6 +533,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       // 显示导入选项对话框
       this.importDialog.visible = true;
       this.importMode = 'merge'; // 默认选择合并模式
+      this.importParentId = null; // 默认导入到根目录
     },
     closeImportDialog() {
       // 关闭导入选项对话框
@@ -592,6 +598,16 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       const file = event.target.files[0];
       if (!file) return;
       
+      // 保存选中的文件，显示确认对话框
+      this.edgeImportFile = file;
+      this.edgeConfirmImportVisible = true;
+      
+      // 重置文件输入
+      event.target.value = '';
+    },
+    async confirmEdgeImportBookmarks() {
+      if (!this.edgeImportFile) return;
+      
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
@@ -619,15 +635,19 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           await this.loadTree();
           this.showToast('Edge书签导入成功', 'success');
           this.closeEdgeImportDialog();
+          this.closeEdgeConfirmImportDialog();
           
         } catch (error) {
           this.showToast(error.message || '导入失败，请检查文件格式', 'error');
-        } finally {
-          // 重置文件输入
-          event.target.value = '';
+          this.closeEdgeConfirmImportDialog();
         }
       };
-      reader.readAsText(file);
+      reader.readAsText(this.edgeImportFile);
+    },
+    closeEdgeConfirmImportDialog() {
+      // 关闭Edge导入确认对话框
+      this.edgeConfirmImportVisible = false;
+      this.edgeImportFile = null;
     },
     loadSavedTheme() {
       const savedTheme = localStorage.getItem('bookmark-manager-theme');
