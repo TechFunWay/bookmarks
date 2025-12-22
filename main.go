@@ -32,11 +32,33 @@ import (
 const (
 	nodeTypeFolder   = "folder"
 	nodeTypeBookmark = "bookmark"
+
+	// 日志模式常量
+	logModeDebug   = "debug"
+	logModeRelease = "release"
+	defaultLogMode = logModeRelease
 )
 
 type server struct {
 	db         *sql.DB
 	httpClient *http.Client
+}
+
+// 全局日志配置
+var (
+	logMode string
+)
+
+// Debug 调试日志函数，仅在debug模式下打印
+func Debug(format string, v ...interface{}) {
+	if logMode == logModeDebug {
+		log.Printf(format, v...)
+	}
+}
+
+// Error 错误日志函数，在所有模式下都打印
+func Error(format string, v ...interface{}) {
+	log.Printf(format, v...)
 }
 
 type node struct {
@@ -53,9 +75,21 @@ type node struct {
 }
 
 func main() {
-	dataUrl := flag.String("dataUrl", "./", "数据存储路径") // 定义字符串参数
-	port := flag.String("port", "8901", "服务器监听端口")    // 定义端口参数
-	flag.Parse()                                      // 缺少此行将导致获取默认值
+	dataUrl := flag.String("dataUrl", "./", "数据存储路径")                              // 定义字符串参数
+	port := flag.String("port", "8901", "服务器监听端口")                                 // 定义端口参数
+	logModeFlag := flag.String("logmode", defaultLogMode, "日志模式: debug 或 release") // 日志模式参数
+	flag.Parse()                                                                   // 缺少此行将导致获取默认值
+
+	// 初始化日志模式：先检查命令行参数，再检查环境变量，最后使用默认值
+	logMode = *logModeFlag
+	if envLogMode := os.Getenv("LOG_MODE"); envLogMode != "" {
+		logMode = envLogMode
+	}
+
+	// 验证日志模式
+	if logMode != logModeDebug && logMode != logModeRelease {
+		log.Fatalf("无效的日志模式: %s, 必须是 debug 或 release", logMode)
+	}
 	fmt.Println("数据路径:", *dataUrl)
 	fmt.Println("监听端口:", *port)
 	// 创建数据目录
@@ -124,7 +158,8 @@ func main() {
 	r.Handle("/*", fileServer)
 
 	addr := ":" + *port
-	log.Printf("Bookmark server running on %s", addr)
+	Debug("Bookmark server running on %s", addr)
+
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server exited: %v", err)
 	}
@@ -470,13 +505,13 @@ type edgeImportRequest struct {
 func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 	var req edgeImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("JSON解码失败: %v", err)
+		Error("JSON解码失败: %v", err)
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
 		return
 	}
 
 	if req.HTML == "" {
-		log.Println("HTML内容为空")
+		Error("HTML内容为空")
 		respondError(w, http.StatusBadRequest, errors.New("no html content to import"))
 		return
 	}
@@ -484,20 +519,20 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 	// 解析HTML内容为节点结构
 	nodes, err := parseEdgeHTML(req.HTML)
 	if err != nil {
-		log.Printf("HTML解析失败: %v", err)
+		Error("HTML解析失败: %v", err)
 		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to parse HTML: %w", err))
 		return
 	}
 
 	if len(nodes) == 0 {
-		log.Println("未找到书签")
+		Error("未找到书签")
 		respondError(w, http.StatusBadRequest, errors.New("no bookmarks found in HTML"))
 		return
 	}
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		log.Printf("开启事务失败: %v", err)
+		Error("开启事务失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -509,9 +544,9 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 
 	// 如果是replace模式，先删除所有数据
 	if req.Mode == "replace" {
-		log.Println("执行replace模式，删除所有数据")
+		Debug("执行replace模式，删除所有数据")
 		if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
-			log.Printf("删除数据失败: %v", err)
+			Error("删除数据失败: %v", err)
 			respondError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -519,16 +554,16 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 
 	// 递归导入节点
 	stats := &importStats{}
-	log.Printf("开始导入节点，共%d个根节点，父文件夹ID=%v", len(nodes), req.ParentID)
+	Debug("开始导入节点，共%d个根节点，父文件夹ID=%v", len(nodes), req.ParentID)
 	if err = s.importNodes(tx, r.Context(), nodes, req.ParentID, req.Mode, stats); err != nil {
-		log.Printf("导入节点失败: %v", err)
+		Error("导入节点失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	log.Printf("导入节点成功，统计: 文件夹=%d, 书签=%d, 跳过=%d", stats.Folders, stats.Bookmarks, stats.Skipped)
+	Debug("导入节点成功，统计: 文件夹=%d, 书签=%d, 跳过=%d", stats.Folders, stats.Bookmarks, stats.Skipped)
 	if err = tx.Commit(); err != nil {
-		log.Printf("提交事务失败: %v", err)
+		Error("提交事务失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -544,7 +579,7 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 	// 解析HTML文档
 	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {
-		log.Printf("HTML解析失败: %v", err)
+		Error("HTML解析失败: %v", err)
 		return nil, err
 	}
 
@@ -566,7 +601,7 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 	findBody(doc)
 
 	if body == nil {
-		log.Println("未找到body标签")
+		Error("未找到body标签")
 		return nil, errors.New("no body tag found")
 	}
 
@@ -585,19 +620,19 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 			depth--
 		}()
 
-		log.Printf("解析节点: 深度=%d, 类型=%s, 数据=%s", depth, n.Type, n.Data)
+		Debug("解析节点: 深度=%d, 类型=%s, 数据=%s", depth, n.Type, n.Data)
 
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == html.ElementNode {
-				log.Printf("处理元素: 深度=%d, 标签=%s", depth, c.Data)
+				Debug("处理元素: 深度=%d, 标签=%s", depth, c.Data)
 
 				switch c.Data {
 				case "h3":
 					// 创建文件夹
 					folderName := extractText(c)
-					log.Printf("创建文件夹: 深度=%d, 名称=%s", depth, folderName)
+					Debug("创建文件夹: 深度=%d, 名称=%s", depth, folderName)
 					if folderName == "" {
-						log.Printf("文件夹名称为空，跳过")
+						Debug("文件夹名称为空，跳过")
 						continue
 					}
 
@@ -612,17 +647,17 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 							currentParent.Children = []*node{}
 						}
 						currentParent.Children = append(currentParent.Children, newFolder)
-						log.Printf("将文件夹添加到父文件夹: 父文件夹=%s", currentParent.Title)
+						Debug("将文件夹添加到父文件夹: 父文件夹=%s", currentParent.Title)
 					} else {
 						// 根文件夹
 						nodes = append(nodes, newFolder)
-						log.Printf("添加根文件夹: %s", folderName)
+						Debug("添加根文件夹: %s", folderName)
 					}
 
 					// 将新文件夹压入栈，并设置为当前父文件夹
 					parentStack = append(parentStack, newFolder)
 					currentParent = newFolder
-					log.Printf("更新当前父文件夹: %s, 栈深度=%d", currentParent.Title, len(parentStack))
+					Debug("更新当前父文件夹: %s, 栈深度=%d", currentParent.Title, len(parentStack))
 				case "a":
 					// 创建书签
 					bookmark := &node{
@@ -640,12 +675,12 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 							bookmark.URL = optionalString(url)
 						case "icon":
 							iconData = attr.Val
-							log.Printf("找到图标属性: %s, 值长度=%d", attr.Key, len(iconData))
+							Debug("找到图标属性: %s, 值长度=%d", attr.Key, len(iconData))
 						}
 					}
 
 					if bookmark.URL == nil || *bookmark.URL == "" {
-						log.Printf("书签URL为空，跳过")
+						Debug("书签URL为空，跳过")
 						continue
 					}
 
@@ -654,12 +689,12 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 
 					// 直接保存base64图标到favicon_url
 					if iconData != "" {
-						log.Printf("保存base64图标: 长度=%d, 前30字符=%s", len(iconData), iconData[:min(30, len(iconData))])
+						Debug("保存base64图标: 长度=%d, 前30字符=%s", len(iconData), iconData[:min(30, len(iconData))])
 						bookmark.FaviconURL = optionalString(iconData)
-						log.Printf("图标保存到favicon_url: %t", bookmark.FaviconURL != nil)
+						Debug("图标保存到favicon_url: %t", bookmark.FaviconURL != nil)
 					}
 
-					log.Printf("创建书签: 深度=%d, 标题=%s, URL=%s, 有图标=%t", depth, bookmark.Title, *bookmark.URL, bookmark.FaviconURL != nil)
+					Debug("创建书签: 深度=%d, 标题=%s, URL=%s, 有图标=%t", depth, bookmark.Title, *bookmark.URL, bookmark.FaviconURL != nil)
 
 					// 添加到当前父文件夹
 					if currentParent != nil {
@@ -667,15 +702,15 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 							currentParent.Children = []*node{}
 						}
 						currentParent.Children = append(currentParent.Children, bookmark)
-						log.Printf("将书签添加到父文件夹: 父文件夹=%s", currentParent.Title)
+						Debug("将书签添加到父文件夹: 父文件夹=%s", currentParent.Title)
 					} else {
 						// 根书签
 						nodes = append(nodes, bookmark)
-						log.Printf("添加根书签: %s", bookmark.Title)
+						Debug("添加根书签: %s", bookmark.Title)
 					}
 				case "dl":
 					// 进入文件夹层级，递归解析子节点
-					log.Printf("进入文件夹层级: 深度=%d", depth)
+					Debug("进入文件夹层级: 深度=%d", depth)
 					parseNodes(c)
 					// 解析完DL标签后，退出当前文件夹层级
 					if len(parentStack) > 0 {
@@ -688,7 +723,7 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 						} else {
 							currentParent = nil
 						}
-						log.Printf("退出文件夹层级: 文件夹=%s, 新的当前父文件夹=%s, 栈深度=%d", currentFolder.Title, func() string {
+						Debug("退出文件夹层级: 文件夹=%s, 新的当前父文件夹=%s, 栈深度=%d", currentFolder.Title, func() string {
 							if currentParent != nil {
 								return currentParent.Title
 							} else {
@@ -698,14 +733,14 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 					}
 				case "dt":
 					// 解析DT标签内的内容
-					log.Printf("处理DT标签: 深度=%d", depth)
+					Debug("处理DT标签: 深度=%d", depth)
 					parseNodes(c)
 				case "p":
 					// 忽略P标签
-					log.Printf("忽略P标签: 深度=%d", depth)
+					Debug("忽略P标签: 深度=%d", depth)
 					continue
 				default:
-					log.Printf("未知标签: 深度=%d, 标签=%s", depth, c.Data)
+					Debug("未知标签: 深度=%d, 标签=%s", depth, c.Data)
 					continue
 				}
 			}
@@ -713,10 +748,10 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 	}
 
 	// 开始解析
-	log.Println("开始解析body标签")
+	Debug("开始解析body标签")
 	parseNodes(body)
 
-	log.Printf("解析完成，共找到%d个根节点", len(nodes))
+	Debug("解析完成，共找到%d个根节点", len(nodes))
 	return nodes, nil
 }
 
@@ -1441,7 +1476,7 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 		// 获取最终的URL（跟随重定向后）
 		finalURL = resp.Request.URL.String()
 		if finalURL != rawURL {
-			log.Printf("URL重定向: %s -> %s", rawURL, finalURL)
+			Debug("URL重定向: %s -> %s", rawURL, finalURL)
 		}
 
 		defer resp.Body.Close()
@@ -1451,7 +1486,7 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 		if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
 			gz, err := gzip.NewReader(resp.Body)
 			if err != nil {
-				log.Printf("无法创建gzip读取器: %v", err)
+				Debug("无法创建gzip读取器: %v", err)
 				// 尝试作为普通内容继续处理，不立即放弃
 				bodyReader = resp.Body
 			} else {
@@ -1469,14 +1504,14 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 		// 对于403错误，尝试不同的策略
 		if resp.StatusCode == 403 {
 			// 记录错误但继续到下一个重试
-			log.Printf("Received 403 Forbidden for URL: %s, attempt: %d", rawURL, attempt+1)
+			Debug("Received 403 Forbidden for URL: %s, attempt: %d", rawURL, attempt+1)
 			lastErr = fmt.Errorf("remote status 403 Forbidden")
 			continue
 		}
 
 		// 对于其他错误状态码，直接使用URL信息作为备选
 		if resp.StatusCode >= 400 {
-			log.Printf("Received status %d for URL: %s", resp.StatusCode, rawURL)
+			Debug("Received status %d for URL: %s", resp.StatusCode, rawURL)
 			// 即使状态码错误，也尝试从URL获取基本信息
 			if hostname != "" {
 				return hostname, baseIconURL, nil
@@ -1577,7 +1612,7 @@ func (s *server) fetchMetadata(rawURL string) (string, string, error) {
 	}
 
 	// 如果所有重试都失败，返回URL信息作为备选
-	log.Printf("All %d attempts failed for URL: %s, last error: %v", maxRetries+1, rawURL, lastErr)
+	Error("All %d attempts failed for URL: %s, last error: %v", maxRetries+1, rawURL, lastErr)
 	if hostname != "" {
 		return hostname, baseIconURL, nil
 	}

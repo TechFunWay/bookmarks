@@ -9,6 +9,11 @@ const BookmarkNode = {
     globalActionsVisible: { type: Boolean, default: false },
   },
   emits: ["add-folder", "add-bookmark", "edit", "delete", "select", "move", "context"],
+  data() {
+    return {
+      collapsed: false, // 文件夹折叠状态
+    };
+  },
   computed: {
     isFolder() {
       return this.node.type === "folder";
@@ -24,6 +29,19 @@ const BookmarkNode = {
     bookmarkCount() {
       // 计算当前文件夹及其子文件夹中的书签数量
       return this.countBookmarks(this.node);
+    },
+    hasChildren() {
+      // 检查是否有子文件夹
+      if (!this.node.children || this.node.children.length === 0) {
+        return false;
+      }
+      // 检查是否至少有一个子文件夹
+      for (const child of this.node.children) {
+        if (child.type === 'folder') {
+          return true;
+        }
+      }
+      return false;
     },
   },
   methods: {
@@ -86,19 +104,24 @@ const BookmarkNode = {
         this.longPressTimer = null;
       }
     },
+    toggleCollapse(event) {
+      // 切换文件夹折叠状态
+      event.stopPropagation(); // 防止触发select事件
+      this.collapsed = !this.collapsed;
+    },
   },
   template: `
     <li class="tree-item" v-if="isFolder">
       <div :class="['tree-row', { selected: isSelected }]" :style="indentStyle" @contextmenu.prevent="onContextMenu" @touchstart="startLongPress" @touchend="endLongPress" @touchcancel="endLongPress">
         <button class="node-main" type="button" @click="onSelect">
-            <span class="node-icon">
+            <span class="node-icon" @click="hasChildren && toggleCollapse($event)">
               <template v-if="isFolder">
-                <span v-if="level === 0">📁</span>
-                <span v-else>🗂️</span>
-              </template>
-              <template v-else>
-                <img v-if="getFaviconUrl && getFaviconUrl(node)" :src="getFaviconUrl(node)" alt="favicon" />
-                <span v-else>🔖</span>
+                <span v-if="hasChildren">
+                  {{ collapsed ? '▶️' : '▼️' }}
+                </span>
+                <span v-else>
+                  {{ level === 0 ? '📁' : '🗂️' }}
+                </span>
               </template>
             </span>
             <span class="node-title" :title="node.title">
@@ -128,7 +151,7 @@ const BookmarkNode = {
           </button>
         </div>
       </div>
-      <ul v-if="node.children && node.children.length" class="children">
+      <ul v-if="hasChildren && !collapsed" class="children">
         <bookmark-node
           v-for="child in node.children"
           :key="child.id"
@@ -205,6 +228,26 @@ const app = createApp({
         folderSelectorVisible: false,
         selectedFolderId: null,
         rightClickNode:{},
+        // 导入功能相关状态
+        importDialog: {
+          visible: false
+        },
+        importMode: 'merge', // 导入模式：merge 或 replace
+        importFileInput: null,
+        importParentId: null, // 导入JSON书签的父文件夹ID
+        folderSelectorVisible: false, // 导入文件夹选择器可见状态
+        // Edge导入功能相关状态
+        edgeImportDialog: {
+          visible: false
+        },
+        edgeImportMode: 'merge', // Edge导入模式：merge 或 replace
+        edgeImportFileInput: null,
+        edgeImportParentId: null, // 导入Edge书签的父文件夹ID
+        edgeFolderSelectorVisible: false, // Edge导入文件夹选择器可见状态
+        edgeImportFile: null, // 选中的Edge导入文件
+        edgeConfirmImportVisible: false, // Edge导入确认对话框可见状态
+        // 导出菜单状态
+        exportMenuVisible: false,
         searchQuery: "",
         clearSearchBtnVisible: false,
         searchResultVisible: false,
@@ -355,6 +398,257 @@ const app = createApp({
       // 应用新主题
       html.setAttribute('data-theme', newTheme);
     },
+    exportBookmarks() {
+      // 导出所有书签数据
+      const data = this.tree;
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.showToast('导出成功', 'success');
+      this.exportMenuVisible = false; // 关闭导出菜单
+    },
+    exportEdgeBookmarks() {
+      // 导出为Edge兼容的HTML格式
+      const html = this.generateEdgeBookmarksHTML(this.tree);
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.showToast('导出成功', 'success');
+      this.exportMenuVisible = false; // 关闭导出菜单
+    },
+    generateEdgeBookmarksHTML(nodes) {
+      // 生成Edge兼容的HTML格式书签，包含图标信息
+      const now = Math.floor(Date.now() / 1000);
+      let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file.
+     It will be read and overwritten.
+     DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>`;
+      
+      // 递归生成HTML内容
+      html += this.generateEdgeBookmarksHTMLRecursive(nodes, 0, now);
+      
+      html += `
+</DL><p>`;
+      return html;
+    },
+    generateEdgeBookmarksHTMLRecursive(nodes, level, now) {
+      // 递归生成书签HTML，包含图标信息
+      let html = '';
+      
+      for (const node of nodes) {
+        const indent = '  '.repeat(level);
+        
+        if (node.type === 'folder') {
+          // 文件夹
+          html += `
+${indent}<DT><H3 ADD_DATE="${now}" LAST_MODIFIED="0">${node.title}</H3>
+${indent}<DL><p>`;
+          
+          if (node.children && node.children.length > 0) {
+            html += this.generateEdgeBookmarksHTMLRecursive(node.children, level + 1, now);
+          }
+          
+          html += `
+${indent}</DL><p>`;
+        } else if (node.type === 'bookmark') {
+          // 书签
+          const href = node.url || '';
+          const title = node.title || '';
+          const favicon = node.favicon_url || '';
+          let iconAttr = '';
+          if (favicon) {
+            iconAttr = ` ICON="${favicon}"`;
+          }
+          html += `
+${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
+        }
+      }
+      
+      return html;
+    },
+    toggleExportMenu() {
+      // 切换导出菜单的显示状态
+      this.exportMenuVisible = !this.exportMenuVisible;
+    },
+    importBookmarks(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const json = e.target.result;
+          const data = JSON.parse(json);
+          
+          // 发送导入请求，添加parent_id参数
+          const response = await fetch('/api/import', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              bookmarks: data,
+              mode: this.importMode,
+              parent_id: this.importParentId
+            }),
+          });
+          
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || '导入失败');
+          }
+          
+          // 导入成功，重新加载树结构
+          await this.loadTree();
+          this.showToast('导入成功', 'success');
+          this.closeImportDialog();
+          
+        } catch (error) {
+          this.showToast(error.message || '导入失败，请检查文件格式', 'error');
+        } finally {
+          // 重置文件输入
+          event.target.value = '';
+        }
+      };
+      reader.readAsText(file);
+    },
+    showImportDialog() {
+      // 显示导入选项对话框
+      this.importDialog.visible = true;
+      this.importMode = 'merge'; // 默认选择合并模式
+      this.importParentId = null; // 默认导入到根目录
+    },
+    closeImportDialog() {
+      // 关闭导入选项对话框
+      this.importDialog.visible = false;
+      // 重置文件输入
+      const fileInput = document.getElementById('import-file-input');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    },
+    handleFileUpload() {
+      // 触发文件选择
+      const fileInput = document.getElementById('import-file-input');
+      if (fileInput) {
+        fileInput.click();
+      }
+    },
+    showEdgeImportDialog() {
+      // 显示Edge导入选项对话框
+      this.edgeImportDialog.visible = true;
+      this.edgeImportMode = 'merge'; // 默认选择合并模式
+      this.edgeImportParentId = null; // 默认导入到根目录
+    },
+    closeEdgeImportDialog() {
+      // 关闭Edge导入选项对话框
+      this.edgeImportDialog.visible = false;
+      // 重置文件输入
+      const fileInput = document.getElementById('edge-import-file-input');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    },
+    handleEdgeFileUpload() {
+      // 触发Edge文件选择
+      const fileInput = document.getElementById('edge-import-file-input');
+      if (fileInput) {
+        fileInput.click();
+      }
+    },
+    // Edge导入文件夹选择相关方法
+    showEdgeFolderSelector() {
+      // 显示Edge导入文件夹选择器
+      this.edgeFolderSelectorVisible = true;
+    },
+    closeEdgeFolderSelector() {
+      // 关闭Edge导入文件夹选择器
+      this.edgeFolderSelectorVisible = false;
+    },
+    selectEdgeImportParentFolder(folderId) {
+      // 选择导入目标文件夹
+      this.edgeImportParentId = folderId;
+    },
+    confirmEdgeFolderSelection() {
+      // 确认Edge导入文件夹选择
+      this.edgeFolderSelectorVisible = false;
+    },
+    cancelEdgeFolderSelection() {
+      // 取消Edge导入文件夹选择
+      this.edgeFolderSelectorVisible = false;
+    },
+    async importEdgeBookmarks(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      // 保存选中的文件，显示确认对话框
+      this.edgeImportFile = file;
+      this.edgeConfirmImportVisible = true;
+      
+      // 重置文件输入
+      event.target.value = '';
+    },
+    async confirmEdgeImportBookmarks() {
+      if (!this.edgeImportFile) return;
+      
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const html = e.target.result;
+          
+          // 发送导入Edge书签请求
+          const response = await fetch('/api/import-edge', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              html: html,
+              mode: this.edgeImportMode,
+              parent_id: this.edgeImportParentId
+            }),
+          });
+          
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || '导入失败');
+          }
+          
+          // 导入成功，重新加载树结构
+          await this.loadTree();
+          this.showToast('Edge书签导入成功', 'success');
+          this.closeEdgeImportDialog();
+          this.closeEdgeConfirmImportDialog();
+          
+        } catch (error) {
+          this.showToast(error.message || '导入失败，请检查文件格式', 'error');
+          this.closeEdgeConfirmImportDialog();
+        }
+      };
+      reader.readAsText(this.edgeImportFile);
+    },
+    closeEdgeConfirmImportDialog() {
+      // 关闭Edge导入确认对话框
+      this.edgeConfirmImportVisible = false;
+      this.edgeImportFile = null;
+    },
     loadSavedTheme() {
       const savedTheme = localStorage.getItem('bookmark-manager-theme');
       if (savedTheme) {
@@ -384,17 +678,17 @@ const app = createApp({
       }
     },
     getFaviconUrl(item) {
-      // 如果是内网地址，不显示favicon，返回空字符串让前端显示默认图标
-      if (this.isIntranetUrl(item.url)) {
-        return '';
-      }
-      
-      // 如果有明确的favicon_url，优先使用
+      // 如果有明确的favicon_url，优先使用，无论是否是内网地址
       if (item.favicon_url && item.favicon_url.trim()) {
         return item.favicon_url.trim();
       }
       
-      // 如果没有favicon_url，则使用默认的 /favicon.ico 路径
+      // 如果是内网地址且没有favicon_url，不显示favicon，返回空字符串让前端显示默认图标
+      if (this.isIntranetUrl(item.url)) {
+        return '';
+      }
+      
+      // 如果没有favicon_url且不是内网地址，则使用默认的 /favicon.ico 路径
       try {
         const url = new URL(item.url);
         return `${url.protocol}//${url.host}/favicon.ico`;
@@ -752,10 +1046,6 @@ const app = createApp({
     },
     toggleTreeActions() {
       this.treeActionsVisible = !this.treeActionsVisible;
-      // 如果当前选中的是【所有网址】文件夹，确保编辑模式为关闭
-      if (this.selectedNodeId === 'all-bookmarks') {
-        this.treeActionsVisible = false;
-      }
       if (this.treeActionsVisible) {
         this.hideContextMenu();
       }
