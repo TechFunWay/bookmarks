@@ -284,9 +284,21 @@ button {
   gap: 1.5rem;
 }
 
+.header-buttons .tertiary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .header-buttons {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
+}
+
+.header-buttons .tertiary {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8rem;
+  gap: 0.375rem;
 }
 
 .app-title {
@@ -719,6 +731,12 @@ button {
 .bookmark-path {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.bookmark-created {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .bookmark-actions {
@@ -1721,6 +1739,102 @@ button.primary.danger:active {
   line-height: 1.4;
 }
 
+/* 背景设置样式 */
+.background-type-options {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.background-type-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.background-type-option:hover {
+  border-color: var(--primary);
+  background: var(--card-bg-hover);
+}
+
+.background-type-option input[type="radio"] {
+  accent-color: var(--primary);
+}
+
+/* 颜色选择器样式 */
+.color-picker-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.color-picker-container input[type="color"] {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.preset-colors {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.preset-color {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.preset-color:hover {
+  transform: scale(1.2);
+  border-color: var(--primary);
+  box-shadow: 0 0 10px var(--glow);
+}
+
+/* 图片上传样式 */
+.image-upload-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.image-preview {
+  margin-top: 0.5rem;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* 背景设置模态框按钮样式 */
+.theme-toggle button.tertiary.small {
+  margin-left: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8rem;
+}
+
 /* 搜索功能样式 */
 .search-container {
   display: flex;
@@ -1733,7 +1847,7 @@ button.primary.danger:active {
 .search-input-wrapper {
   position: relative;
   flex: 1;
-  max-width: 400px;
+  max-width: 800px;
 }
 
 .search-input {
