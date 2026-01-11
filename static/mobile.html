@@ -765,7 +765,9 @@
                       </span>
                       <div class="bookmark-info">
                         <span class="bookmark-title">{{ item.title }}</span>
-                        <span class="bookmark-url">{{ item.url }}</span>
+                        <span class="bookmark-created" v-if="item.updated_at">
+                          更新于: {{ new Date(item.updated_at).toLocaleString() }}
+                        </span>
                       </div>
                     </a>
                     
@@ -843,7 +845,9 @@
                     </span>
                     <div class="bookmark-info">
                       <span class="bookmark-title">{{ item.title }}</span>
-                      <span class="bookmark-url">{{ item.url }}</span>
+                      <span class="bookmark-created" v-if="item.updated_at">
+                        更新于: {{ new Date(item.updated_at).toLocaleString() }}
+                      </span>
                     </div>
                   </a>
                   
