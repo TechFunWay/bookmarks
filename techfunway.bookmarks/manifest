@@ -1,7 +1,7 @@
 appname               = techfunway.bookmarks
-version               = 1.3.0
+version               = 1.4.0
 display_name          = 网址收藏夹
-desc                  = 网址收藏夹，收藏自己的网址功能，支持点击跳转<br>支持多级文件夹，文件夹下添加网址<br>支持自动识别网址名称和网址图标,支持排序和增删改查<br>支持搜索功能，支持按网址名称搜索<br>支持导入导出html格式的浏览器书签<br>手机端适配
+desc                  = 网址收藏夹，收藏自己的网址功能，支持点击跳转<br>1、支持多级文件夹，文件夹下添加网址<br>2、支持自动识别网址名称和网址图标,支持排序和增删改查<br>3、支持搜索功能，支持按网址名称搜索<br>4、支持导入导出html格式的浏览器书签<br>5、支持手机端<br>6、支持自定义端口
 arch                  = x86_64
 source                = thirdparty
 maintainer            = 科技智趣坊
@@ -10,4 +10,4 @@ distributor           = 科技智趣坊
 distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway.bookmarks.Application
-changelog             = 1、增加导出导入功能<br>2、支持导入浏览器收藏夹html文件<br>3、能导入到指定文件夹下<br><strong>⚠️注意：如果升级失败，请先保留数据卸载后重装<strong>
+changelog             = 1、新增：支持更换背景颜色和背景图片<br>2、优化：导出导出按钮大小优化<br>3、优化：书签列表去掉网址显示，新增更新时间显示<br>4、支持：服务自定义端口<br><strong>⚠️注意：如果升级失败，请先保留数据卸载后重装<strong>

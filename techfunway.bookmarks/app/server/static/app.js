@@ -225,7 +225,7 @@ const app = createApp({
           targetParentId: null,
           nodeId: null,
         },
-        folderSelectorVisible: false,
+        bookmarkFolderSelectorVisible: false,
         selectedFolderId: null,
         rightClickNode:{},
         // 导入功能相关状态
@@ -235,7 +235,7 @@ const app = createApp({
         importMode: 'merge', // 导入模式：merge 或 replace
         importFileInput: null,
         importParentId: null, // 导入JSON书签的父文件夹ID
-        folderSelectorVisible: false, // 导入文件夹选择器可见状态
+        importFolderSelectorVisible: false, // 导入文件夹选择器可见状态
         // Edge导入功能相关状态
         edgeImportDialog: {
           visible: false
@@ -246,6 +246,8 @@ const app = createApp({
         edgeFolderSelectorVisible: false, // Edge导入文件夹选择器可见状态
         edgeImportFile: null, // 选中的Edge导入文件
         edgeConfirmImportVisible: false, // Edge导入确认对话框可见状态
+        importFile: null, // 选中的JSON导入文件
+        confirmImportVisible: false, // JSON导入确认对话框可见状态
         // 导出菜单状态
         exportMenuVisible: false,
         searchQuery: "",
@@ -254,6 +256,30 @@ const app = createApp({
         searchResultCount: 0,
         searchResults: [],
         isSearching: false,
+        // 背景设置相关状态
+        backgroundModal: {
+          visible: false
+        },
+        backgroundSettings: {
+          color: '',
+          image: '',
+          type: 'default' // default, color, image
+        },
+        // 保存原始背景设置，用于取消时恢复
+        originalBackgroundSettings: null,
+        // 预设背景颜色
+        presetColors: [
+          '#0c0c0c',
+          '#1a1a2e',
+          '#16213e',
+          '#0f3460',
+          '#533483',
+          '#f8fafc',
+          '#f1f5f9',
+          '#e2e8f0',
+          '#cbd5e1',
+          '#94a3b8'
+        ]
       };
     },
   computed: {
@@ -345,6 +371,7 @@ const app = createApp({
   },
   mounted() {
     this.loadSavedTheme(); // 加载保存的主题
+    this.loadBackgroundSettings(); // 加载保存的背景设置
     this.loadTree();
     window.addEventListener("scroll", this.hideContextMenu, true);
     window.addEventListener("resize", this.hideContextMenu);
@@ -356,7 +383,7 @@ const app = createApp({
   methods: {
     showFolderSelector() {
       this.selectedFolderId = this.modal.parentId || null;
-      this.folderSelectorVisible = true;
+      this.bookmarkFolderSelectorVisible = true;
     },
     selectFolder(folderId) {
       this.selectedFolderId = folderId;
@@ -365,11 +392,26 @@ const app = createApp({
       this.searchResults = [];
     },
     confirmFolderSelection() {
-      this.modal.parentId = this.selectedFolderId;
-      this.folderSelectorVisible = false;
+      // 如果是普通书签文件夹选择器
+      if (this.bookmarkFolderSelectorVisible) {
+        this.modal.parentId = this.selectedFolderId;
+        this.bookmarkFolderSelectorVisible = false;
+      } 
+      // 如果是导入文件夹选择器
+      else if (this.importFolderSelectorVisible) {
+        this.importFolderSelectorVisible = false;
+      }
     },
     cancelFolderSelection() {
-      this.folderSelectorVisible = false;
+      // 关闭所有可能的文件夹选择器
+      this.bookmarkFolderSelectorVisible = false;
+      this.importFolderSelectorVisible = false;
+    },
+    showImportFolderSelector() {
+      this.importFolderSelectorVisible = true;
+    },
+    selectImportParentFolder(folderId) {
+      this.importParentId = folderId;
     },
     getAllFolders() {
       // 获取所有文件夹节点
@@ -534,6 +576,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.importDialog.visible = true;
       this.importMode = 'merge'; // 默认选择合并模式
       this.importParentId = null; // 默认导入到根目录
+      this.importFolderSelectorVisible = false; // 确保导入文件夹选择器初始状态为隐藏
     },
     closeImportDialog() {
       // 关闭导入选项对话框
@@ -649,11 +692,143 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.edgeConfirmImportVisible = false;
       this.edgeImportFile = null;
     },
+    closeConfirmImportDialog() {
+      // 关闭JSON导入确认对话框
+      this.confirmImportVisible = false;
+      this.importFile = null;
+    },
     loadSavedTheme() {
       const savedTheme = localStorage.getItem('bookmark-manager-theme');
       if (savedTheme) {
         document.documentElement.setAttribute('data-theme', savedTheme);
       }
+    },
+    // 背景设置相关方法
+    async loadBackgroundSettings() {
+      try {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const config = await response.json();
+          if (config['background']) {
+            try {
+              const settings = JSON.parse(config['background']);
+              this.backgroundSettings = settings;
+              this.applyBackgroundSettings(settings);
+            } catch (e) {
+              console.error('Failed to parse background settings:', e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load background settings:', e);
+        // 如果从服务器加载失败，尝试从localStorage加载作为备份
+        const saved = localStorage.getItem('bookmark-manager-background');
+        if (saved) {
+          try {
+            const settings = JSON.parse(saved);
+            this.backgroundSettings = settings;
+            this.applyBackgroundSettings(settings);
+            // 将localStorage中的设置保存到数据库
+            this.saveBackgroundSettings();
+          } catch (e) {
+            console.error('Failed to parse background settings from localStorage:', e);
+          }
+        }
+      }
+    },
+    async saveBackgroundSettings() {
+      try {
+        const response = await fetch('/api/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            key: 'background',
+            value: JSON.stringify(this.backgroundSettings)
+          })
+        });
+        if (!response.ok) {
+          throw new Error('Failed to save background settings');
+        }
+        // 同时保存到localStorage作为备份
+        localStorage.setItem('bookmark-manager-background', JSON.stringify(this.backgroundSettings));
+      } catch (e) {
+        console.error('Failed to save background settings:', e);
+        // 如果保存到服务器失败，只保存到localStorage
+        localStorage.setItem('bookmark-manager-background', JSON.stringify(this.backgroundSettings));
+      }
+    },
+    applyBackgroundSettings(settings) {
+      const body = document.body;
+      switch (settings.type) {
+        case 'color':
+          // 直接设置background简写属性，包含所有背景相关设置
+          body.style.background = settings.color;
+          // 确保没有其他背景属性干扰
+          body.style.backgroundImage = 'none';
+          body.style.backgroundSize = 'auto';
+          body.style.backgroundRepeat = 'repeat';
+          body.style.backgroundPosition = '0 0';
+          body.style.backgroundAttachment = 'scroll';
+          break;
+        case 'image':
+          body.style.background = `url('${settings.image}') center center / cover no-repeat fixed`;
+          break;
+        default: // default
+          // 使用img目录下的background.jpg作为默认背景
+          body.style.background = `url('/img/background.jpg') center center / cover no-repeat fixed`;
+          break;
+      }
+    },
+    openBackgroundModal() {
+      // 保存原始背景设置，用于取消时恢复
+      this.originalBackgroundSettings = JSON.parse(JSON.stringify(this.backgroundSettings));
+      this.backgroundModal.visible = true;
+    },
+    closeBackgroundModal() {
+      this.backgroundModal.visible = false;
+    },
+    saveBackgroundSettingsAndClose() {
+      // 保存背景设置并关闭模态框
+      this.saveBackgroundSettings();
+      this.backgroundModal.visible = false;
+    },
+    cancelBackgroundSettings() {
+      // 恢复原始背景设置
+      if (this.originalBackgroundSettings) {
+        this.backgroundSettings = JSON.parse(JSON.stringify(this.originalBackgroundSettings));
+        this.applyBackgroundSettings(this.backgroundSettings);
+      }
+      this.backgroundModal.visible = false;
+    },
+    handleImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target.result;
+        this.backgroundSettings = {
+          type: 'image',
+          color: '',
+          image: imageUrl
+        };
+        this.applyBackgroundSettings(this.backgroundSettings);
+      };
+      reader.readAsDataURL(file);
+      
+      // 重置文件输入
+      event.target.value = '';
+    },
+    resetBackground() {
+      this.backgroundSettings = {
+        type: 'default',
+        color: '',
+        image: ''
+      };
+      this.applyBackgroundSettings(this.backgroundSettings);
+      this.saveBackgroundSettings();
     },
     isIntranetUrl(url) {
       if (!url) return false;
@@ -1296,6 +1471,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             url: node.url,
             favicon_url: node.favicon_url,
             path: trail.length > 0 ? trail.join(" / ") : "",
+            updated_at: node.updated_at,
             raw: node,
           });
         }

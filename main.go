@@ -152,6 +152,8 @@ func main() {
 		r.Post("/nodes/reorder", s.handleReorderNodes)
 		r.Post("/import", s.handleImport)
 		r.Post("/import-edge", s.handleEdgeImport)
+		r.Get("/config", s.handleGetConfig)
+		r.Post("/config", s.handleUpdateConfig)
 	})
 
 	fileServer := http.FileServer(http.Dir("./static"))
@@ -166,31 +168,115 @@ func main() {
 }
 
 func initializeDB(db *sql.DB) error {
-	schema := `
-	PRAGMA foreign_keys = ON;
-	CREATE TABLE IF NOT EXISTS nodes (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		parent_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-		type TEXT NOT NULL CHECK (type IN ('folder', 'bookmark')),
-		title TEXT NOT NULL,
-		url TEXT,
-		favicon_url TEXT,
-		position INTEGER NOT NULL DEFAULT 0,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);
-	CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
-	CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);
+	// 启用外键约束
+	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		return err
+	}
 
-	CREATE TRIGGER IF NOT EXISTS trg_nodes_updated_at
-	AFTER UPDATE ON nodes
-	BEGIN
-		UPDATE nodes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-	END;
-	`
+	// 创建nodes表（如果不存在）
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS nodes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			parent_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+			type TEXT NOT NULL CHECK (type IN ('folder', 'bookmark')),
+			title TEXT NOT NULL,
+			url TEXT,
+			favicon_url TEXT,
+			position INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`); err != nil {
+		return err
+	}
 
-	_, err := db.Exec(schema)
-	return err
+	// 创建nodes表索引（如果不存在）
+	if _, err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
+		CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);
+	`); err != nil {
+		return err
+	}
+
+	// 创建nodes表的updated_at触发器（如果不存在）
+	if _, err := db.Exec(`
+		CREATE TRIGGER IF NOT EXISTS trg_nodes_updated_at
+		AFTER UPDATE ON nodes
+		BEGIN
+			UPDATE nodes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+		END;
+	`); err != nil {
+		return err
+	}
+
+	// 数据库版本管理：创建version表（如果不存在）
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS version (
+			id INTEGER PRIMARY KEY,
+			version INTEGER NOT NULL,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`); err != nil {
+		return err
+	}
+
+	// 检查当前数据库版本
+	var version int
+	err := db.QueryRow("SELECT version FROM version WHERE id = 1").Scan(&version)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
+	// 如果版本表为空，插入初始版本1
+	if err == sql.ErrNoRows {
+		if _, err := db.Exec("INSERT INTO version (id, version) VALUES (1, 1)"); err != nil {
+			return err
+		}
+		version = 1
+	}
+
+	// 执行数据库升级
+	if err := upgradeDatabase(db, version); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// upgradeDatabase 执行数据库升级
+func upgradeDatabase(db *sql.DB, currentVersion int) error {
+	// 升级到版本2：添加配置表
+	if currentVersion < 2 {
+		if _, err := db.Exec(`
+			CREATE TABLE IF NOT EXISTS config (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL,
+				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			);
+		`); err != nil {
+			return err
+		}
+
+		// 创建config表的updated_at触发器
+		if _, err := db.Exec(`
+			CREATE TRIGGER IF NOT EXISTS trg_config_updated_at
+			AFTER UPDATE ON config
+			BEGIN
+				UPDATE config SET updated_at = CURRENT_TIMESTAMP WHERE key = NEW.key;
+			END;
+		`); err != nil {
+			return err
+		}
+
+		// 更新版本号
+		if _, err := db.Exec("UPDATE version SET version = 2 WHERE id = 1"); err != nil {
+			return err
+		}
+		currentVersion = 2
+	}
+
+	return nil
 }
 
 func (s *server) handleGetTree(w http.ResponseWriter, r *http.Request) {
@@ -436,7 +522,8 @@ func (s *server) handleReorderNodes(w http.ResponseWriter, r *http.Request) {
 
 type importRequest struct {
 	Bookmarks []*node `json:"bookmarks"`
-	Mode      string  `json:"mode"` // merge 或 replace
+	Mode      string  `json:"mode"`      // merge 或 replace
+	ParentID  *int64  `json:"parent_id"` // 导入到指定的父文件夹ID
 }
 
 type importStats struct {
@@ -478,7 +565,7 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 
 	// 递归导入节点
 	stats := &importStats{}
-	if err = s.importNodes(tx, r.Context(), req.Bookmarks, nil, req.Mode, stats); err != nil {
+	if err = s.importNodes(tx, r.Context(), req.Bookmarks, req.ParentID, req.Mode, stats); err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -1731,6 +1818,74 @@ func respondJSON(w http.ResponseWriter, status int, payload any) {
 func respondError(w http.ResponseWriter, status int, err error) {
 	respondJSON(w, status, map[string]string{
 		"error": err.Error(),
+	})
+}
+
+// handleGetConfig 获取配置
+func (s *server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	// 获取所有配置项
+	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM config")
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+
+	// 构建配置响应
+	config := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		config[key] = value
+	}
+
+	if err := rows.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, config)
+}
+
+// updateConfigRequest 更新配置请求
+
+type updateConfigRequest struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// handleUpdateConfig 更新配置
+func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	var req updateConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	// 验证请求数据
+	if req.Key == "" {
+		respondError(w, http.StatusBadRequest, errors.New("key is required"))
+		return
+	}
+
+	// 插入或更新配置
+	_, err := s.db.ExecContext(r.Context(), `
+		INSERT INTO config (key, value) 
+		VALUES (?, ?) 
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, req.Key, req.Value)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// 返回更新后的配置
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"key":   req.Key,
+		"value": req.Value,
 	})
 }
 
