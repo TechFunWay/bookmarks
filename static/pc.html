@@ -36,6 +36,10 @@
         <span class="theme-toggle-icon moon-icon">🌙</span>
         <div class="theme-toggle-btn" @click="toggleTheme"></div>
         <span class="theme-toggle-icon sun-icon">☀️</span>
+        <button class="tertiary small" @click="openBackgroundModal" style="margin-left: 1rem;">
+          <span>🎨</span>
+          <span>背景</span>
+        </button>
       </div>
     </div>
   </header>
@@ -181,9 +185,11 @@
                     <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
                       {{ item.title }}
                     </a>
-                    <span class="bookmark-url">{{ item.url }}</span>
                     <span class="bookmark-path" v-if="item.path">
                           {{ item.path }}
+                        </span>
+                    <span class="bookmark-created" v-if="item.updated_at">
+                          更新于: {{ new Date(item.updated_at).toLocaleString() }}
                         </span>
                   </div>
                 </div>
@@ -368,12 +374,17 @@
   </transition>
 
   <transition name="fade">
-    <div v-if="folderSelectorVisible" class="modal-backdrop">
+    <div v-if="bookmarkFolderSelectorVisible" class="modal-backdrop">
       <div class="modal">
         <h3 class="modal-title">选择文件夹</h3>
         <div class="form-group">
           <label>目标文件夹</label>
           <div class="folder-selector">
+            <div class="folder-option" @click="selectFolder(null)">
+              <span class="action-icon">🏠</span>
+              <span class="action-text">根目录</span>
+              <span class="selected-indicator" v-if="selectedFolderId === null">✓</span>
+            </div>
             <div
                     v-for="folder in getAllFolders()"
                     :key="folder.id"
@@ -404,7 +415,7 @@
       <div class="modal">
         <h3 class="modal-title">导入选项</h3>
         <div class="modal-subtitle">
-          <button type="button" class="folder-select-btn" @click="showFolderSelector">
+          <button type="button" class="folder-select-btn" @click="showImportFolderSelector">
             <span class="action-icon">📁</span>
             <span>{{ importParentId ? getFolderPath(importParentId) : '选择导入目标文件夹' }}</span>
           </button>
@@ -448,7 +459,7 @@
 
   <!-- 导入文件夹选择模态框 -->
   <transition name="fade">
-    <div v-if="folderSelectorVisible" class="modal-backdrop">
+    <div v-if="importFolderSelectorVisible" class="modal-backdrop">
       <div class="modal">
         <h3 class="modal-title">选择导入目标文件夹</h3>
         <div class="form-group">
@@ -604,6 +615,124 @@
           </button>
           <button type="button" class="secondary" @click="closeEdgeConfirmImportDialog">
             取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- JSON导入确认对话框 -->
+  <transition name="fade">
+    <div v-if="confirmImportVisible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">确认导入JSON书签</h3>
+        <div class="form-group">
+          <p>您确定要导入选中的JSON书签吗？</p>
+          <div class="import-summary">
+            <div class="summary-item">
+              <span class="summary-label">文件名称：</span>
+              <span class="summary-value">{{ importFile ? importFile.name : '' }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">导入方式：</span>
+              <span class="summary-value">{{ importMode === 'merge' ? '合并' : '替换' }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">导入位置：</span>
+              <span class="summary-value">{{ importParentId ? getFolderPath(importParentId) : '根目录' }}</span>
+            </div>
+          </div>
+          <p class="warning-text" v-if="importMode === 'replace'">
+            ⚠️  替换模式会删除所有现有书签，请注意数据安全！
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="primary" @click="confirmImportBookmarks">
+            确认导入
+          </button>
+          <button type="button" class="secondary" @click="closeConfirmImportDialog">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- 背景设置模态框 -->
+  <transition name="fade">
+    <div v-if="backgroundModal.visible" class="modal-backdrop">
+      <div class="modal" style="width: 500px;">
+        <h3 class="modal-title">背景设置</h3>
+        <div class="form-group">
+          <p>请选择背景类型：</p>
+          <div class="background-type-options">
+            <label class="background-type-option">
+              <input type="radio" v-model="backgroundSettings.type" value="default" @change="applyBackgroundSettings(backgroundSettings)" />
+              <span>默认背景</span>
+            </label>
+            <label class="background-type-option">
+              <input type="radio" v-model="backgroundSettings.type" value="color" @change="if(!backgroundSettings.color) { backgroundSettings.color = '#1a1a2e'; } applyBackgroundSettings(backgroundSettings)" />
+              <span>纯色背景</span>
+            </label>
+            <label class="background-type-option">
+              <input type="radio" v-model="backgroundSettings.type" value="image" @change="applyBackgroundSettings(backgroundSettings)" />
+              <span>图片背景</span>
+            </label>
+          </div>
+        </div>
+        
+        <!-- 纯色背景设置 -->
+        <div class="form-group" v-if="backgroundSettings.type === 'color'">
+          <label>选择颜色：</label>
+          <div class="color-picker-container">
+            <input type="color" v-model="backgroundSettings.color" @change="backgroundSettings.type='color'; applyBackgroundSettings(backgroundSettings)" />
+            <div class="preset-colors">
+              <div 
+                v-for="color in presetColors" 
+                :key="color" 
+                class="preset-color" 
+                :style="{ backgroundColor: color }" 
+                @click="backgroundSettings.type='color'; backgroundSettings.color=color; applyBackgroundSettings(backgroundSettings)"
+              ></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 图片背景设置 -->
+        <div class="form-group" v-if="backgroundSettings.type === 'image'">
+          <label>上传背景图片：</label>
+          <div class="image-upload-container">
+            <input 
+              type="file" 
+              accept="image/*" 
+              @change="handleImageUpload" 
+              style="display: none;" 
+              ref="backgroundImageInput"
+              id="background-image-input"
+            />
+            <button 
+              type="button" 
+              class="tertiary" 
+              @click="$refs.backgroundImageInput.click()"
+            >
+              <span>📁</span>
+              <span>选择图片</span>
+            </button>
+            <div class="image-preview" v-if="backgroundSettings.image">
+              <img :src="backgroundSettings.image" alt="背景图片预览" />
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-actions">
+          <button type="button" class="secondary" @click="resetBackground">
+            重置背景
+          </button>
+          <button type="button" class="secondary" @click="cancelBackgroundSettings">
+            取消
+          </button>
+          <button type="button" class="primary" @click="saveBackgroundSettingsAndClose">
+            保存
           </button>
         </div>
       </div>
