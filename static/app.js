@@ -279,7 +279,9 @@ const app = createApp({
           '#e2e8f0',
           '#cbd5e1',
           '#94a3b8'
-        ]
+        ],
+        // 每行显示数量设置
+        itemsPerRow: 1
       };
     },
   computed: {
@@ -368,13 +370,6 @@ const app = createApp({
           return "";
       }
     },
-  },
-  mounted() {
-    this.loadSavedTheme(); // 加载保存的主题
-    this.loadBackgroundSettings(); // 加载保存的背景设置
-    this.loadTree();
-    window.addEventListener("scroll", this.hideContextMenu, true);
-    window.addEventListener("resize", this.hideContextMenu);
   },
   beforeUnmount() {
     window.removeEventListener("scroll", this.hideContextMenu, true);
@@ -1688,6 +1683,27 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         this.showToast(error.message || "搜索失败", "error");
       }
     },
+    // 设置每行显示数量
+    setItemsPerRow(num) {
+      this.itemsPerRow = num;
+      // 保存到本地存储
+      localStorage.setItem('bookmarks_itemsPerRow', num.toString());
+    },
+  },
+  mounted() {
+    this.loadSavedTheme(); // 加载保存的主题
+    this.loadBackgroundSettings(); // 加载保存的背景设置
+    this.loadTree();
+    window.addEventListener("scroll", this.hideContextMenu, true);
+    window.addEventListener("resize", this.hideContextMenu);
+    // 从本地存储加载每行显示数量设置
+    const savedItemsPerRow = localStorage.getItem('bookmarks_itemsPerRow');
+    if (savedItemsPerRow) {
+      const num = parseInt(savedItemsPerRow);
+      if (num >= 1 && num <= 6) {
+        this.itemsPerRow = num;
+      }
+    }
   },
 });
 
