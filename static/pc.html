@@ -40,6 +40,10 @@
           <span>🎨</span>
           <span>背景</span>
         </button>
+        <button class="tertiary small" @click="openConfigModal" style="margin-left: 1rem;">
+          <span>⚙️</span>
+          <span>配置</span>
+        </button>
       </div>
     </div>
   </header>
@@ -196,6 +200,9 @@
                     <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
                       {{ item.title }}
                     </a>
+                    <span class="bookmark-url" v-if="config.showUrlInList">
+                      {{ item.url }}
+                    </span>
                     <span class="bookmark-path" v-if="item.path">
                           {{ item.path }}
                         </span>
@@ -265,6 +272,36 @@
         <span class="action-icon">🗑️</span>
         <span class="action-text">删除</span>
       </button>
+    </div>
+  </transition>
+
+  <!-- 配置模态框 -->
+  <transition name="modal">
+    <div class="modal-overlay" v-if="configModal.visible" @click="closeConfigModal">
+      <div class="modal-container" @click.stop>
+        <div class="modal-header">
+          <h3>应用配置</h3>
+          <button class="modal-close" @click="closeConfigModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="config-item">
+            <div class="config-item-label">
+              <span>显示URL地址</span>
+              <span class="config-item-desc">在网址列表中显示URL地址</span>
+            </div>
+            <div class="config-item-control">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="config.showUrlInList" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="secondary" @click="closeConfigModal">取消</button>
+          <button class="primary" @click="saveConfigAndClose">保存</button>
+        </div>
+      </div>
     </div>
   </transition>
 
