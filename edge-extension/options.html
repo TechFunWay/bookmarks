@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>书签同步助手 - 选项</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: white;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      font-size: 24px;
+      margin-top: 0;
+      margin-bottom: 24px;
+      color: #333;
+      text-align: center;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: #4CAF50;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    }
+    .form-select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+      background-color: white;
+    }
+    .form-range {
+      width: 100%;
+      margin: 10px 0;
+    }
+    .range-value {
+      display: inline-block;
+      width: 60px;
+      font-size: 14px;
+      color: #666;
+      text-align: right;
+    }
+    .save-button {
+      padding: 12px 24px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .save-button:hover {
+      background-color: #45a049;
+    }
+    .save-button:active {
+      background-color: #3d8b40;
+    }
+    .save-button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .status-message {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      display: none;
+    }
+    .status-message.success {
+      background-color: #e8f5e8;
+      color: #2e7d32;
+      border: 1px solid #c8e6c9;
+      display: block;
+    }
+    .status-message.error {
+      background-color: #ffebee;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+      display: block;
+    }
+    .form-note {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+      font-style: italic;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-top: 30px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    .reset-button {
+      padding: 10px 20px;
+      background-color: #f5f5f5;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-left: 10px;
+      transition: background-color 0.2s;
+    }
+    .reset-button:hover {
+      background-color: #e0e0e0;
+    }
+    .button-group {
+      margin-top: 30px;
+      display: flex;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>书签同步助手 - 选项</h1>
+    
+    <div class="section-title">服务器配置</div>
+    
+    <div class="form-group">
+      <label class="form-label" for="serverUrl">服务器地址</label>
+      <input 
+        type="text" 
+        id="serverUrl" 
+        class="form-input" 
+        placeholder="http://localhost:8901"
+      >
+      <div class="form-note">请输入后端服务的完整地址，包括协议和端口</div>
+    </div>
+    
+    <div class="section-title">同步配置</div>
+    
+    <div class="form-group">
+      <label class="form-label" for="syncInterval">同步间隔</label>
+      <input 
+        type="range" 
+        id="syncInterval" 
+        class="form-range" 
+        min="1" 
+        max="60" 
+        value="5"
+      >
+      <div>
+        <span>1分钟</span>
+        <span class="range-value" id="syncIntervalValue">5分钟</span>
+        <span>60分钟</span>
+      </div>
+      <div class="form-note">设置自动同步的时间间隔</div>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label" for="syncDirection">同步方向</label>
+      <select id="syncDirection" class="form-select">
+        <option value="unidirectional">单向同步 (浏览器 → 后端)</option>
+        <option value="bidirectional">双向同步</option>
+      </select>
+      <div class="form-note">选择书签同步的方向</div>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label" for="firstSyncMode">首次同步模式</label>
+      <select id="firstSyncMode" class="form-select">
+        <option value="merge">合并模式</option>
+        <option value="replace">替换模式</option>
+      </select>
+      <div class="form-note">首次同步时，合并或替换后端的书签</div>
+    </div>
+    
+    <div class="button-group">
+      <button id="saveButton" class="save-button">保存配置</button>
+      <button id="resetButton" class="reset-button">恢复默认</button>
+    </div>
+    
+    <div id="statusMessage" class="status-message"></div>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
