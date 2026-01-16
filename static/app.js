@@ -281,7 +281,14 @@ const app = createApp({
           '#94a3b8'
         ],
         // 每行显示数量设置
-        itemsPerRow: 1
+        itemsPerRow: 1,
+        // 配置相关
+        config: {
+          showUrlInList: true // 默认显示URL
+        },
+        configModal: {
+          visible: false
+        }
       };
     },
   computed: {
@@ -1689,10 +1696,63 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       // 保存到本地存储
       localStorage.setItem('bookmarks_itemsPerRow', num.toString());
     },
+    // 加载配置
+    async loadConfig() {
+      try {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const configData = await response.json();
+          // 更新配置，使用默认值作为回退
+          this.config.showUrlInList = configData.show_url_in_list !== undefined ? 
+            configData.show_url_in_list === 'true' : true;
+        }
+      } catch (error) {
+        console.error('加载配置失败:', error);
+        // 使用默认配置
+        this.config.showUrlInList = true;
+      }
+    },
+    // 保存配置
+    async saveConfig() {
+      try {
+        const response = await fetch('/api/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            key: 'show_url_in_list',
+            value: this.config.showUrlInList.toString(),
+          }),
+        });
+        if (response.ok) {
+          this.showToast('配置保存成功', 'success');
+        } else {
+          throw new Error('保存配置失败');
+        }
+      } catch (error) {
+        console.error('保存配置失败:', error);
+        this.showToast('配置保存失败', 'error');
+      }
+    },
+    // 打开配置模态框
+    openConfigModal() {
+      this.configModal.visible = true;
+    },
+    // 关闭配置模态框
+    closeConfigModal() {
+      this.configModal.visible = false;
+    },
+    // 保存配置并关闭模态框
+    async saveConfigAndClose() {
+      await this.saveConfig();
+      this.closeConfigModal();
+    }
   },
   mounted() {
     this.loadSavedTheme(); // 加载保存的主题
     this.loadBackgroundSettings(); // 加载保存的背景设置
+    this.loadConfig(); // 加载配置
     this.loadTree();
     window.addEventListener("scroll", this.hideContextMenu, true);
     window.addEventListener("resize", this.hideContextMenu);
