@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>书签同步助手</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 16px;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+    }
+    .container {
+      background-color: white;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      font-size: 18px;
+      margin-top: 0;
+      margin-bottom: 16px;
+      color: #333;
+      text-align: center;
+    }
+    .status-section {
+      margin-bottom: 16px;
+    }
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .status-label {
+      color: #666;
+    }
+    .status-value {
+      color: #333;
+      font-weight: 500;
+    }
+    .sync-button {
+      width: 100%;
+      padding: 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 12px;
+      transition: background-color 0.2s;
+    }
+    .sync-button:hover {
+      background-color: #45a049;
+    }
+    .sync-button:active {
+      background-color: #3d8b40;
+    }
+    .sync-button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .options-link {
+      display: block;
+      text-align: center;
+      font-size: 14px;
+      color: #1976D2;
+      text-decoration: none;
+      padding: 8px;
+      border-radius: 4px;
+      transition: background-color 0.2s;
+    }
+    .options-link:hover {
+      background-color: #e3f2fd;
+    }
+    .sync-status {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .sync-status.success {
+      background-color: #e8f5e8;
+      color: #2e7d32;
+    }
+    .sync-status.error {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+    .sync-status.syncing {
+      background-color: #e3f2fd;
+      color: #1565c0;
+    }
+    .status-icon {
+      margin-right: 8px;
+      font-size: 16px;
+    }
+    .last-sync {
+      font-size: 12px;
+      color: #999;
+      text-align: center;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>书签同步助手</h1>
+    
+    <div id="syncStatus" class="sync-status">
+      <span class="status-icon">📋</span>
+      <span id="statusMessage">就绪</span>
+    </div>
+    
+    <div class="status-section">
+      <div class="status-item">
+        <span class="status-label">服务器地址:</span>
+        <span id="serverUrl" class="status-value">加载中...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">同步方向:</span>
+        <span id="syncDirection" class="status-value">加载中...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">同步间隔:</span>
+        <span id="syncInterval" class="status-value">加载中...</span>
+      </div>
+    </div>
+    
+    <button id="syncButton" class="sync-button">立即同步</button>
+    
+    <a href="options.html" target="_blank" class="options-link">⚙️ 选项设置</a>
+    
+    <div id="lastSync" class="last-sync">
+      最后同步: 从未
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
