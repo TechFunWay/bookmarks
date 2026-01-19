@@ -250,6 +250,16 @@ const app = createApp({
         confirmImportVisible: false, // JSON导入确认对话框可见状态
         // 导出菜单状态
         exportMenuVisible: false,
+        // 更新书签信息相关状态
+        updateMetadataDialog: {
+          visible: false,
+          targetFolderId: null,
+          targetFolderName: '',
+          updating: false,
+          currentIndex: 0,
+          totalCount: 0,
+          currentBookmarkTitle: ''
+        },
         searchQuery: "",
         clearSearchBtnVisible: false,
         searchResultVisible: false,
@@ -263,7 +273,8 @@ const app = createApp({
         backgroundSettings: {
           color: '',
           image: '',
-          type: 'default' // default, color, image
+          type: 'default', // default, color, image
+          panelOpacity: 90 // 面板透明度，默认90%
         },
         // 保存原始背景设置，用于取消时恢复
         originalBackgroundSettings: null,
@@ -279,7 +290,16 @@ const app = createApp({
           '#e2e8f0',
           '#cbd5e1',
           '#94a3b8'
-        ]
+        ],
+        // 每行显示数量设置
+        itemsPerRow: 1,
+        // 配置相关
+        config: {
+          showUrlInList: true // 默认显示URL
+        },
+        configModal: {
+          visible: false
+        }
       };
     },
   computed: {
@@ -369,13 +389,6 @@ const app = createApp({
       }
     },
   },
-  mounted() {
-    this.loadSavedTheme(); // 加载保存的主题
-    this.loadBackgroundSettings(); // 加载保存的背景设置
-    this.loadTree();
-    window.addEventListener("scroll", this.hideContextMenu, true);
-    window.addEventListener("resize", this.hideContextMenu);
-  },
   beforeUnmount() {
     window.removeEventListener("scroll", this.hideContextMenu, true);
     window.removeEventListener("resize", this.hideContextMenu);
@@ -439,6 +452,9 @@ const app = createApp({
       
       // 应用新主题
       html.setAttribute('data-theme', newTheme);
+      
+      // 重新应用面板透明度
+      this.applyPanelOpacity(this.backgroundSettings.panelOpacity);
     },
     exportBookmarks() {
       // 导出所有书签数据
@@ -637,6 +653,121 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       // 取消Edge导入文件夹选择
       this.edgeFolderSelectorVisible = false;
     },
+    showUpdateMetadataDialog() {
+      // 显示更新书签信息对话框
+      this.updateMetadataDialog.visible = true;
+      this.updateMetadataDialog.targetFolderId = null;
+      this.updateMetadataDialog.targetFolderName = '';
+    },
+    closeUpdateMetadataDialog() {
+      // 关闭更新书签信息对话框
+      this.updateMetadataDialog.visible = false;
+    },
+    handleStartUpdate() {
+      // 处理开始更新按钮点击
+      console.log('handleStartUpdate 被调用，targetFolderId:', this.updateMetadataDialog.targetFolderId);
+      this.updateFolderMetadata(this.updateMetadataDialog.targetFolderId);
+    },
+    async updateFolderMetadata(folderId) {
+      console.log('updateFolderMetadata 被调用，folderId:', folderId);
+      
+      // 更新指定文件夹及其子文件夹中的所有书签信息
+      const folder = this.findNodeById(folderId, this.tree);
+      if (!folder || folder.type !== 'folder') {
+        this.showToast('请选择文件夹', 'error');
+        return;
+      }
+
+      const bookmarks = this.collectBookmarks([folder]);
+      console.log('找到书签数量:', bookmarks.length);
+      
+      if (bookmarks.length === 0) {
+        this.showToast('该文件夹下没有书签', 'warning');
+        return;
+      }
+
+      // 开始更新
+      this.updateMetadataDialog.updating = true;
+      this.updateMetadataDialog.currentIndex = 0;
+      this.updateMetadataDialog.totalCount = bookmarks.length;
+      this.updateMetadataDialog.currentBookmarkTitle = '';
+      
+      console.log('开始更新，总数:', this.updateMetadataDialog.totalCount);
+      console.log('updating状态:', this.updateMetadataDialog.updating);
+      
+      let successCount = 0;
+      let failCount = 0;
+      let skipCount = 0;
+
+      for (const bookmark of bookmarks) {
+        // 跳过没有URL的书签
+        if (!bookmark.url || bookmark.url.trim() === '') {
+          console.log('跳过没有URL的书签:', bookmark.title);
+          skipCount++;
+          this.updateMetadataDialog.currentIndex++;
+          continue;
+        }
+
+        // 验证URL格式
+        try {
+          new URL(bookmark.url);
+        } catch (error) {
+          console.error('URL格式无效:', bookmark.url, error);
+          failCount++;
+          this.updateMetadataDialog.currentIndex++;
+          continue;
+        }
+
+        // 更新当前书签标题
+        this.updateMetadataDialog.currentBookmarkTitle = bookmark.title;
+
+        try {
+          console.log('正在更新书签:', bookmark.title, 'ID:', bookmark.id, 'URL:', bookmark.url);
+          await this.updateBookmarkMetadata(bookmark.id, bookmark.url);
+          successCount++;
+        } catch (error) {
+          console.error('更新书签失败:', bookmark.title, error);
+          failCount++;
+        }
+
+        this.updateMetadataDialog.currentIndex++;
+      }
+
+      // 更新完成
+      this.updateMetadataDialog.updating = false;
+      this.updateMetadataDialog.currentBookmarkTitle = '';
+
+      if (successCount > 0) {
+        this.showToast(`成功更新 ${successCount} 个书签的信息`, 'success');
+      }
+      if (failCount > 0) {
+        this.showToast(`更新失败 ${failCount} 个书签`, 'error');
+      }
+      if (skipCount > 0) {
+        this.showToast(`跳过 ${skipCount} 个无效书签`, 'warning');
+      }
+
+      this.closeUpdateMetadataDialog();
+    },
+    async updateBookmarkMetadata(nodeId, url) {
+      // 更新单个书签的元数据（标题和图标）
+      const response = await fetch(`/api/nodes/${nodeId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: url
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || '更新失败');
+      }
+
+      return await response.json();
+    },
     async importEdgeBookmarks(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -712,6 +843,10 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           if (config['background']) {
             try {
               const settings = JSON.parse(config['background']);
+              // 确保有 panelOpacity 属性
+              if (typeof settings.panelOpacity === 'undefined') {
+                settings.panelOpacity = 90;
+              }
               this.backgroundSettings = settings;
               this.applyBackgroundSettings(settings);
             } catch (e) {
@@ -726,6 +861,10 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         if (saved) {
           try {
             const settings = JSON.parse(saved);
+            // 确保有 panelOpacity 属性
+            if (typeof settings.panelOpacity === 'undefined') {
+              settings.panelOpacity = 90;
+            }
             this.backgroundSettings = settings;
             this.applyBackgroundSettings(settings);
             // 将localStorage中的设置保存到数据库
@@ -780,6 +919,21 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           body.style.background = `url('/img/background.jpg') center center / cover no-repeat fixed`;
           break;
       }
+      // 应用面板透明度
+      this.applyPanelOpacity(settings.panelOpacity);
+    },
+    applyPanelOpacity(opacity) {
+      const opacityValue = opacity / 100;
+      const panels = document.querySelectorAll('.tree-panel, .list-panel');
+      const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+      
+      panels.forEach(panel => {
+        if (isLightTheme) {
+          panel.style.backgroundColor = `rgba(255, 255, 255, ${opacityValue * 0.9})`;
+        } else {
+          panel.style.backgroundColor = `rgba(0, 0, 0, ${opacityValue * 0.35})`;
+        }
+      });
     },
     openBackgroundModal() {
       // 保存原始背景设置，用于取消时恢复
@@ -1688,6 +1842,117 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         this.showToast(error.message || "搜索失败", "error");
       }
     },
+    // 设置每行显示数量
+    setItemsPerRow(num) {
+      this.itemsPerRow = num;
+      // 保存到数据库
+      this.saveItemsPerRow(num);
+    },
+    async saveItemsPerRow(num) {
+      try {
+        const response = await fetch('/api/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            key: 'items_per_row',
+            value: num.toString(),
+          }),
+        });
+        if (!response.ok) {
+          throw new Error('保存每页显示数量失败');
+        }
+      } catch (error) {
+        console.error('保存每页显示数量失败:', error);
+        // 保存到localStorage作为备份
+        localStorage.setItem('bookmarks_itemsPerRow', num.toString());
+      }
+    },
+    // 加载配置
+    async loadConfig() {
+      try {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const configData = await response.json();
+          // 更新配置，使用默认值作为回退
+          this.config.showUrlInList = configData.show_url_in_list !== undefined ? 
+            configData.show_url_in_list === 'true' : true;
+          // 加载每页显示数量
+          if (configData.items_per_row !== undefined) {
+            const num = parseInt(configData.items_per_row);
+            if (num >= 1 && num <= 6) {
+              this.itemsPerRow = num;
+            }
+          } else {
+            // 如果数据库中没有，尝试从localStorage加载
+            const savedItemsPerRow = localStorage.getItem('bookmarks_itemsPerRow');
+            if (savedItemsPerRow) {
+              const num = parseInt(savedItemsPerRow);
+              if (num >= 1 && num <= 6) {
+                this.itemsPerRow = num;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('加载配置失败:', error);
+        // 使用默认配置
+        this.config.showUrlInList = true;
+        // 尝试从localStorage加载每页显示数量
+        const savedItemsPerRow = localStorage.getItem('bookmarks_itemsPerRow');
+        if (savedItemsPerRow) {
+          const num = parseInt(savedItemsPerRow);
+          if (num >= 1 && num <= 6) {
+            this.itemsPerRow = num;
+          }
+        }
+      }
+    },
+    // 保存配置
+    async saveConfig() {
+      try {
+        const response = await fetch('/api/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            key: 'show_url_in_list',
+            value: this.config.showUrlInList.toString(),
+          }),
+        });
+        if (response.ok) {
+          this.showToast('配置保存成功', 'success');
+        } else {
+          throw new Error('保存配置失败');
+        }
+      } catch (error) {
+        console.error('保存配置失败:', error);
+        this.showToast('配置保存失败', 'error');
+      }
+    },
+    // 打开配置模态框
+    openConfigModal() {
+      this.configModal.visible = true;
+    },
+    // 关闭配置模态框
+    closeConfigModal() {
+      this.configModal.visible = false;
+    },
+    // 保存配置并关闭模态框
+    async saveConfigAndClose() {
+      await this.saveConfig();
+      this.closeConfigModal();
+    }
+  },
+  mounted() {
+    this.loadSavedTheme(); // 加载保存的主题
+    this.loadBackgroundSettings(); // 加载保存的背景设置
+    this.loadConfig(); // 加载配置（包括每页显示数量）
+    this.loadTree();
+    window.addEventListener("scroll", this.hideContextMenu, true);
+    window.addEventListener("resize", this.hideContextMenu);
   },
 });
 

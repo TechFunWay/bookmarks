@@ -9,7 +9,7 @@
   <script src="/vue.global.prod.js"></script>
   <script defer src="/app.js"></script>
 </head>
-<body>
+<body style="background: url(/img/background.jpg); background-size: cover;">
 <div id="app" @click="handleRootClick">
   <header class="app-header" @click="handleHeaderClick">
     <h1>网址收藏夹<span class="subtitle-artistic">每天都很哇塞</span></h1>
@@ -31,6 +31,10 @@
           <span>🔄</span>
           <span>导入Edge</span>
         </button>
+        <button class="tertiary" @click="showUpdateMetadataDialog">
+          <span>🔄</span>
+          <span>更新信息</span>
+        </button>
       </div>
       <div class="theme-toggle">
         <span class="theme-toggle-icon moon-icon">🌙</span>
@@ -39,6 +43,10 @@
         <button class="tertiary small" @click="openBackgroundModal" style="margin-left: 1rem;">
           <span>🎨</span>
           <span>背景</span>
+        </button>
+        <button class="tertiary small" @click="openConfigModal" style="margin-left: 1rem;">
+          <span>⚙️</span>
+          <span>配置</span>
         </button>
       </div>
     </div>
@@ -135,11 +143,22 @@
       </div>
       <div v-else>
         <div class="bookmark-content-container">
-          <div v-if="bookmarkEditMode" class="bookmark-toolbar">
+          <div class="bookmark-toolbar">
             <div class="toolbar-info">
-              <span class="toolbar-text">已选择 {{ selectedBookmarks.size }} 个项目</span>
+              <span class="toolbar-text">每行显示:</span>
+              <div class="items-per-row-controls">
+                <button 
+                  v-for="num in [1, 2, 3, 4, 5, 6]" 
+                  :key="num"
+                  class="tertiary very-small"
+                  :class="{ 'active': itemsPerRow === num }"
+                  @click="setItemsPerRow(num)"
+                >
+                  {{ num }}
+                </button>
+              </div>
             </div>
-            <div class="toolbar-actions">
+            <div v-if="bookmarkEditMode" class="toolbar-actions">
               <button class="tertiary small" @click="selectAllBookmarks">
                 {{ selectedBookmarks.size === displayBookmarks.length ? '取消全选' : '全选' }}
               </button>
@@ -158,7 +177,7 @@
             </div>
           </div>
           <div class="bookmark-scroll-container">
-            <ul class="bookmark-list">
+            <ul class="bookmark-list" :class="'grid-' + itemsPerRow">
               <li
                       v-for="item in displayBookmarks"
                       :key="item.id"
@@ -185,6 +204,9 @@
                     <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
                       {{ item.title }}
                     </a>
+                    <span class="bookmark-url" v-if="config.showUrlInList">
+                      {{ item.url }}
+                    </span>
                     <span class="bookmark-path" v-if="item.path">
                           {{ item.path }}
                         </span>
@@ -254,6 +276,36 @@
         <span class="action-icon">🗑️</span>
         <span class="action-text">删除</span>
       </button>
+    </div>
+  </transition>
+
+  <!-- 配置模态框 -->
+  <transition name="modal">
+    <div class="modal-overlay" v-if="configModal.visible" @click="closeConfigModal">
+      <div class="modal-container" @click.stop>
+        <div class="modal-header">
+          <h3>应用配置</h3>
+          <button class="modal-close" @click="closeConfigModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="config-item">
+            <div class="config-item-label">
+              <span>显示URL地址</span>
+              <span class="config-item-desc">在网址列表中显示URL地址</span>
+            </div>
+            <div class="config-item-control">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="config.showUrlInList" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="secondary" @click="closeConfigModal">取消</button>
+          <button class="primary" @click="saveConfigAndClose">保存</button>
+        </div>
+      </div>
     </div>
   </transition>
 
@@ -578,7 +630,53 @@
       </div>
     </div>
   </transition>
-
+  
+  <!-- 更新书签信息对话框 -->
+  <transition name="fade">
+    <div v-if="updateMetadataDialog.visible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">更新网址信息(图标和名称)</h3>
+        <div class="form-group">
+          <label>选择要更新的文件夹</label>
+          <div class="folder-selector">
+            <div class="folder-option" @click="updateMetadataDialog.targetFolderId = null; updateMetadataDialog.targetFolderName = '根目录'">
+              <span class="action-icon">🏠</span>
+              <span class="action-text">根目录</span>
+              <span class="selected-indicator" v-if="updateMetadataDialog.targetFolderId === null">✓</span>
+            </div>
+            <div
+                    v-for="folder in getAllFolders()"
+                    :key="folder.id"
+                    class="folder-option"
+                    @click="updateMetadataDialog.targetFolderId = folder.id; updateMetadataDialog.targetFolderName = folder.title"
+            >
+              <span class="action-icon">📁</span>
+              <span class="action-text">{{ getFolderPath(folder.id) }}</span>
+              <span class="selected-indicator" v-if="updateMetadataDialog.targetFolderId === folder.id">✓</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="updateMetadataDialog.updating" class="update-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: ((updateMetadataDialog.currentIndex || 0) / (updateMetadataDialog.totalCount || 1) * 100) + '%' }"></div>
+          </div>
+          <div class="progress-info">
+            <span class="progress-text">正在更新: {{ updateMetadataDialog.currentBookmarkTitle || '准备中...' }}</span>
+            <span class="progress-count">{{ updateMetadataDialog.currentIndex || 0 }} / {{ updateMetadataDialog.totalCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="modal-actions" v-if="!updateMetadataDialog.updating">
+          <button type="button" class="primary" @click="handleStartUpdate" :disabled="updateMetadataDialog.targetFolderId === null">
+            开始更新
+          </button>
+          <button type="button" class="secondary" @click="closeUpdateMetadataDialog">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+  
   <!-- 隐藏的文件输入 -->
   <input type="file" id="import-file-input" ref="importFileInput" accept=".json" style="display: none" @change="importBookmarks" />
   <!-- Edge导入隐藏的文件输入 -->
@@ -720,6 +818,25 @@
             </button>
             <div class="image-preview" v-if="backgroundSettings.image">
               <img :src="backgroundSettings.image" alt="背景图片预览" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 面板透明度设置 -->
+        <div class="form-group">
+          <label>面板透明度：{{ backgroundSettings.panelOpacity }}%</label>
+          <div class="opacity-slider-container">
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              v-model.number="backgroundSettings.panelOpacity" 
+              @input="applyPanelOpacity(backgroundSettings.panelOpacity)"
+              class="opacity-slider"
+            />
+            <div class="opacity-value-display">
+              <span class="opacity-label">透明</span>
+              <span class="opacity-label">不透明</span>
             </div>
           </div>
         </div>
