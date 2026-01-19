@@ -40,8 +40,9 @@ const (
 )
 
 type server struct {
-	db         *sql.DB
-	httpClient *http.Client
+	db          *sql.DB
+	httpClient  *http.Client
+	faviconChan chan int64 // 图标获取任务队列
 }
 
 // 全局日志配置
@@ -108,7 +109,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(5)
+	db.SetMaxIdleConns(2)
 
 	if err := initializeDB(db); err != nil {
 		log.Fatalf("failed to initialize database: %v", err)
@@ -135,7 +137,11 @@ func main() {
 				return nil
 			},
 		},
+		faviconChan: make(chan int64, 100), // 缓冲队列，最多100个待处理任务
 	}
+
+	// 启动图标获取协程
+	go s.faviconWorker()
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -555,17 +561,63 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// 如果是replace模式，先删除所有数据
+	// 如果是replace模式，删除指定文件夹及其子节点，然后重新创建
 	if req.Mode == "replace" {
-		if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
-			respondError(w, http.StatusInternalServerError, err)
-			return
+		if req.ParentID != nil {
+			// 先获取要删除的文件夹信息
+			var folderTitle string
+			var folderPosition int
+			var folderParentID *int64
+			err := tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ?", *req.ParentID).Scan(&folderTitle, &folderPosition, &folderParentID)
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			Debug("Replace模式：删除文件夹 ID=%d, 标题=%s", *req.ParentID, folderTitle)
+
+			// 删除指定文件夹及其所有子节点
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ?", *req.ParentID); err != nil {
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			// 重新创建文件夹
+			res, err := tx.ExecContext(r.Context(), `
+				INSERT INTO nodes (parent_id, type, title, position)
+				VALUES (?, ?, ?, ?)
+			`, folderParentID, nodeTypeFolder, folderTitle, folderPosition)
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			// 获取新创建的文件夹ID
+			newFolderID, err := res.LastInsertId()
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			Debug("Replace模式：重新创建文件夹，新ID=%d", newFolderID)
+
+			// 更新parent_id为新创建的文件夹ID
+			req.ParentID = &newFolderID
+		} else {
+			// 如果没有指定parent_id，删除所有数据
+			Debug("Replace模式：删除所有数据")
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
 		}
 	}
 
 	// 递归导入节点
+	Debug("开始导入节点，parentID=%v, mode=%s", req.ParentID, req.Mode)
 	stats := &importStats{}
-	if err = s.importNodes(tx, r.Context(), req.Bookmarks, req.ParentID, req.Mode, stats); err != nil {
+	faviconQueue := []int64{}
+	if err = s.importNodes(tx, r.Context(), req.Bookmarks, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -573,6 +625,11 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 	if err = tx.Commit(); err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
+	}
+
+	// 异步获取图标
+	for _, nodeID := range faviconQueue {
+		s.queueFaviconFetch(nodeID)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -629,20 +686,68 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// 如果是replace模式，先删除所有数据
+	// 如果是replace模式
 	if req.Mode == "replace" {
-		Debug("执行replace模式，删除所有数据")
-		if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
-			Error("删除数据失败: %v", err)
-			respondError(w, http.StatusInternalServerError, err)
-			return
+		if req.ParentID != nil {
+			// 1. 先获取要删除的文件夹信息
+			var folderTitle string
+			var folderPosition int
+			var folderParentID *int64
+			err := tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ?", *req.ParentID).Scan(&folderTitle, &folderPosition, &folderParentID)
+			if err != nil {
+				Error("获取文件夹信息失败: %v", err)
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			Debug("Replace模式：删除文件夹 ID=%d, 标题=%s", *req.ParentID, folderTitle)
+
+			// 2. 删除指定文件夹及其所有子节点
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ?", *req.ParentID); err != nil {
+				Error("删除数据失败: %v", err)
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			// 3. 重新创建文件夹
+			res, err := tx.ExecContext(r.Context(), `
+				INSERT INTO nodes (parent_id, type, title, position)
+				VALUES (?, ?, ?, ?)
+			`, folderParentID, nodeTypeFolder, folderTitle, folderPosition)
+			if err != nil {
+				Error("创建文件夹失败: %v", err)
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			// 4. 获取新创建的文件夹ID
+			newFolderID, err := res.LastInsertId()
+			if err != nil {
+				Error("获取新文件夹ID失败: %v", err)
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			Debug("Replace模式：重新创建文件夹，新ID=%d", newFolderID)
+
+			// 5. 更新parent_id为新创建的文件夹ID
+			req.ParentID = &newFolderID
+		} else {
+			// 如果没有指定parent_id，删除所有数据
+			Debug("执行replace模式，删除所有数据")
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
+				Error("删除数据失败: %v", err)
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
 		}
 	}
 
 	// 递归导入节点
 	stats := &importStats{}
 	Debug("开始导入节点，共%d个根节点，父文件夹ID=%v", len(nodes), req.ParentID)
-	if err = s.importNodes(tx, r.Context(), nodes, req.ParentID, req.Mode, stats); err != nil {
+	faviconQueue := []int64{}
+	if err = s.importNodes(tx, r.Context(), nodes, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
 		Error("导入节点失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -653,6 +758,11 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		Error("提交事务失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
+	}
+
+	// 异步获取图标
+	for _, nodeID := range faviconQueue {
+		s.queueFaviconFetch(nodeID)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -858,7 +968,33 @@ func extractText(n *html.Node) string {
 	return strings.TrimSpace(text.String())
 }
 
-func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, parentID *int64, mode string, stats *importStats) error {
+func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, parentID *int64, mode string, stats *importStats, fetchMetadata bool, faviconQueue *[]int64) error {
+	// 在merge模式下，验证parent_id是否存在，如果不存在则创建
+	// 在replace模式下，如果parent_id不存在，也创建一个临时文件夹
+	if parentID != nil {
+		var count int
+		var err error
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE id = ?", *parentID).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			// parent_id不存在，创建一个临时文件夹
+			Debug("警告：parent_id %d 不存在，创建临时文件夹", *parentID)
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO nodes (parent_id, type, title, position)
+				VALUES (NULL, ?, ?, 0)
+			`, nodeTypeFolder, "临时文件夹")
+			if err != nil {
+				return err
+			}
+			newParentID, err := res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			parentID = &newParentID
+		}
+	}
+
 	for pos, node := range nodes {
 		// 插入当前节点
 		var newID int64
@@ -866,7 +1002,7 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 
 		switch node.Type {
 		case nodeTypeFolder:
-			// 检查文件夹是否已存在
+			// 检查文件夹是否已存在（仅在merge模式下检查）
 			var exists bool
 			if mode == "merge" {
 				var count int
@@ -912,7 +1048,7 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 
 			// 递归导入子节点
 			if len(node.Children) > 0 {
-				if err = s.importNodes(tx, ctx, node.Children, &newID, mode, stats); err != nil {
+				if err = s.importNodes(tx, ctx, node.Children, &newID, mode, stats, fetchMetadata, faviconQueue); err != nil {
 					return err
 				}
 			}
@@ -923,7 +1059,7 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 				continue // 跳过无效的书签
 			}
 
-			// 检查书签是否已存在
+			// 检查书签是否已存在（仅在merge模式下检查）
 			var exists bool
 			if mode == "merge" {
 				var count int
@@ -942,11 +1078,18 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 			if exists {
 				stats.Skipped++
 			} else {
+				// 如果没有图标，根据参数决定是否自动获取
+				var favicon *string
+				if node.FaviconURL != nil {
+					tmp := *node.FaviconURL
+					favicon = &tmp
+				}
+
 				// 插入书签
 				res, err := tx.ExecContext(ctx, `
 					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position)
 					VALUES (?, ?, ?, ?, ?, ?)
-				`, parentID, nodeTypeBookmark, node.Title, node.URL, node.FaviconURL, pos)
+				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, pos)
 				if err != nil {
 					return err
 				}
@@ -955,6 +1098,11 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 					return err
 				}
 				stats.Bookmarks++
+
+				// 如果需要获取图标且没有图标，加入异步队列
+				if fetchMetadata && favicon == nil {
+					*faviconQueue = append(*faviconQueue, newID)
+				}
 			}
 		}
 	}
@@ -1038,7 +1186,8 @@ func (s *server) loadTree(ctx context.Context) ([]*node, error) {
 		}
 		parent := nodeMap[*n.ParentID]
 		if parent == nil {
-			roots = append(roots, n)
+			// 父节点不存在，可能是数据损坏，跳过该节点
+			Debug("警告：节点 %d 的父节点 %d 不存在，跳过", n.ID, *n.ParentID)
 			continue
 		}
 		parent.Children = append(parent.Children, n)
@@ -1971,4 +2120,56 @@ func findTitle(n *html.Node) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// faviconWorker 异步图标获取工作协程
+func (s *server) faviconWorker() {
+	for nodeID := range s.faviconChan {
+		// 获取书签信息
+		var url string
+		err := s.db.QueryRow("SELECT url FROM nodes WHERE id = ? AND type = ?", nodeID, nodeTypeBookmark).Scan(&url)
+		if err != nil {
+			Error("获取书签 %d 信息失败: %v", nodeID, err)
+			continue
+		}
+
+		// 如果已经有图标，跳过
+		var existingFavicon sql.NullString
+		err = s.db.QueryRow("SELECT favicon_url FROM nodes WHERE id = ?", nodeID).Scan(&existingFavicon)
+		if err == nil && existingFavicon.Valid && existingFavicon.String != "" {
+			Debug("书签 %d 已有图标，跳过", nodeID)
+			continue
+		}
+
+		// 获取图标
+		_, icon, err := s.fetchMetadata(url)
+		if err != nil {
+			Debug("获取书签 %d 图标失败: %v", nodeID, err)
+			continue
+		}
+
+		if icon == "" {
+			Debug("书签 %d 没有找到图标", nodeID)
+			continue
+		}
+
+		// 更新数据库
+		_, err = s.db.Exec("UPDATE nodes SET favicon_url = ? WHERE id = ?", icon, nodeID)
+		if err != nil {
+			Error("更新书签 %d 图标失败: %v", nodeID, err)
+			continue
+		}
+
+		Debug("成功更新书签 %d 的图标", nodeID)
+	}
+}
+
+// queueFaviconFetch 将书签ID加入图标获取队列
+func (s *server) queueFaviconFetch(nodeID int64) {
+	select {
+	case s.faviconChan <- nodeID:
+		Debug("书签 %d 已加入图标获取队列", nodeID)
+	default:
+		Debug("图标获取队列已满，跳过书签 %d", nodeID)
+	}
 }
