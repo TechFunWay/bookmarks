@@ -31,6 +31,10 @@
           <span>🔄</span>
           <span>导入Edge</span>
         </button>
+        <button class="tertiary" @click="showUpdateMetadataDialog">
+          <span>🔄</span>
+          <span>更新信息</span>
+        </button>
       </div>
       <div class="theme-toggle">
         <span class="theme-toggle-icon moon-icon">🌙</span>
@@ -626,7 +630,53 @@
       </div>
     </div>
   </transition>
-
+  
+  <!-- 更新书签信息对话框 -->
+  <transition name="fade">
+    <div v-if="updateMetadataDialog.visible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">更新网址信息(图标和名称)</h3>
+        <div class="form-group">
+          <label>选择要更新的文件夹</label>
+          <div class="folder-selector">
+            <div class="folder-option" @click="updateMetadataDialog.targetFolderId = null; updateMetadataDialog.targetFolderName = '根目录'">
+              <span class="action-icon">🏠</span>
+              <span class="action-text">根目录</span>
+              <span class="selected-indicator" v-if="updateMetadataDialog.targetFolderId === null">✓</span>
+            </div>
+            <div
+                    v-for="folder in getAllFolders()"
+                    :key="folder.id"
+                    class="folder-option"
+                    @click="updateMetadataDialog.targetFolderId = folder.id; updateMetadataDialog.targetFolderName = folder.title"
+            >
+              <span class="action-icon">📁</span>
+              <span class="action-text">{{ getFolderPath(folder.id) }}</span>
+              <span class="selected-indicator" v-if="updateMetadataDialog.targetFolderId === folder.id">✓</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="updateMetadataDialog.updating" class="update-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: ((updateMetadataDialog.currentIndex || 0) / (updateMetadataDialog.totalCount || 1) * 100) + '%' }"></div>
+          </div>
+          <div class="progress-info">
+            <span class="progress-text">正在更新: {{ updateMetadataDialog.currentBookmarkTitle || '准备中...' }}</span>
+            <span class="progress-count">{{ updateMetadataDialog.currentIndex || 0 }} / {{ updateMetadataDialog.totalCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="modal-actions" v-if="!updateMetadataDialog.updating">
+          <button type="button" class="primary" @click="handleStartUpdate" :disabled="updateMetadataDialog.targetFolderId === null">
+            开始更新
+          </button>
+          <button type="button" class="secondary" @click="closeUpdateMetadataDialog">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+  
   <!-- 隐藏的文件输入 -->
   <input type="file" id="import-file-input" ref="importFileInput" accept=".json" style="display: none" @change="importBookmarks" />
   <!-- Edge导入隐藏的文件输入 -->
@@ -768,6 +818,25 @@
             </button>
             <div class="image-preview" v-if="backgroundSettings.image">
               <img :src="backgroundSettings.image" alt="背景图片预览" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 面板透明度设置 -->
+        <div class="form-group">
+          <label>面板透明度：{{ backgroundSettings.panelOpacity }}%</label>
+          <div class="opacity-slider-container">
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              v-model.number="backgroundSettings.panelOpacity" 
+              @input="applyPanelOpacity(backgroundSettings.panelOpacity)"
+              class="opacity-slider"
+            />
+            <div class="opacity-value-display">
+              <span class="opacity-label">透明</span>
+              <span class="opacity-label">不透明</span>
             </div>
           </div>
         </div>
