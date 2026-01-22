@@ -639,6 +639,14 @@
   </head>
   <body>
     <div id="app" class="mobile-container" @click="handleRootClick">
+      <!-- 加载提示 -->
+      <transition name="fade">
+        <div v-if="loading" class="loading-overlay">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">正在加载数据...</div>
+        </div>
+      </transition>
+
       <header class="mobile-header" @click="handleHeaderClick">
         <h1>收藏夹</h1>
         <div class="header-actions">
