@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"golang.org/x/net/html"
 	_ "modernc.org/sqlite"
 )
@@ -164,6 +166,7 @@ func main() {
 
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/*", fileServer)
+	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
 	addr := ":" + *port
 	Debug("Bookmark server running on %s", addr)
@@ -884,13 +887,21 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 					// 提取标题
 					bookmark.Title = extractText(c)
 
-					// 直接保存base64图标到favicon_url
+					// 处理base64图标，保存到本地文件
 					if iconData != "" {
-						Debug("保存base64图标: 长度=%d, 前30字符=%s", len(iconData), iconData[:min(30, len(iconData))])
-						bookmark.FaviconURL = optionalString(iconData)
-						Debug("图标保存到favicon_url: %t", bookmark.FaviconURL != nil)
+						Debug("处理图标数据: 长度=%d, 前30字符=%s", len(iconData), iconData[:min(30, len(iconData))])
+						// 保存base64图标到本地文件
+						localPath, err := saveBase64Icon(iconData)
+						if err != nil {
+							Error("保存base64图标失败: %v", err)
+							// 保存失败时，仍然使用原始base64数据
+							bookmark.FaviconURL = optionalString(iconData)
+						} else {
+							// 保存成功，使用本地路径
+							bookmark.FaviconURL = optionalString(localPath)
+							Debug("图标保存成功: %s", localPath)
+						}
 					}
-
 					Debug("创建书签: 深度=%d, 标题=%s, URL=%s, 有图标=%t", depth, bookmark.Title, *bookmark.URL, bookmark.FaviconURL != nil)
 
 					// 添加到当前父文件夹
@@ -2047,6 +2058,66 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// saveBase64Icon 保存base64图标到本地文件
+func saveBase64Icon(iconData string) (string, error) {
+	// 检查是否是base64数据
+	if !strings.HasPrefix(iconData, "data:image/") {
+		// 不是base64数据，直接返回原值
+		return iconData, nil
+	}
+
+	// 解析base64数据
+	parts := strings.SplitN(iconData, ";base64,", 2)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid base64 data format")
+	}
+
+	// 获取文件扩展名
+	mimeType := parts[0]
+	var ext string
+	switch {
+	case strings.Contains(mimeType, "image/png"):
+		ext = ".png"
+	case strings.Contains(mimeType, "image/jpeg"):
+		ext = ".jpg"
+	case strings.Contains(mimeType, "image/gif"):
+		ext = ".gif"
+	case strings.Contains(mimeType, "image/webp"):
+		ext = ".webp"
+	case strings.Contains(mimeType, "image/svg"):
+		ext = ".svg"
+	default:
+		ext = ".png" // 默认使用png
+	}
+
+	// 解码base64数据
+	decoded, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64: %w", err)
+	}
+
+	// 按日期格式创建目录 (YYYYMMDD)
+	dateDir := time.Now().Format("20060102")
+	iconDir := fmt.Sprintf("static/icons/%s", dateDir)
+
+	// 创建目录
+	if err := os.MkdirAll(iconDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create icon directory: %w", err)
+	}
+
+	// 生成文件名（使用UUID避免冲突）
+	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+	filePath := fmt.Sprintf("%s/%s", iconDir, filename)
+
+	// 保存文件
+	if err := os.WriteFile(filePath, decoded, 0644); err != nil {
+		return "", fmt.Errorf("failed to save icon file: %w", err)
+	}
+
+	// 返回相对路径（注意：静态文件服务器从 ./static 目录提供服务）
+	return fmt.Sprintf("/icons/%s/%s", dateDir, filename), nil
 }
 
 // handleIntranetURL 处理内网地址的特殊逻辑
