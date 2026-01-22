@@ -11,6 +11,14 @@
 </head>
 <body style="background: url(/img/background.jpg); background-size: cover;">
 <div id="app" @click="handleRootClick">
+  <!-- 加载提示 -->
+  <transition name="fade">
+    <div v-if="loading" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">正在加载数据...</div>
+    </div>
+  </transition>
+
   <header class="app-header" @click="handleHeaderClick">
     <h1>网址收藏夹<span class="subtitle-artistic">每天都很哇塞</span></h1>
     <div class="header-actions">

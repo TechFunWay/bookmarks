@@ -1947,6 +1947,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     }
   },
   mounted() {
+    this.loading = true; // 初始加载状态
     this.loadSavedTheme(); // 加载保存的主题
     this.loadBackgroundSettings(); // 加载保存的背景设置
     this.loadConfig(); // 加载配置（包括每页显示数量）
