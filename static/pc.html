@@ -147,7 +147,15 @@
         </div>
       </div>
       <div v-if="displayBookmarks.length === 0" class="placeholder">
-        暂无收藏的网址。
+        <div class="empty-state">
+          <div class="empty-icon">📚</div>
+          <h3 class="empty-title">暂无收藏的网址</h3>
+          <p class="empty-description">点击"添加网址"按钮开始收藏你喜欢的网站吧！</p>
+          <button class="primary" @click="openAddBookmark(null)">
+            <span>➕</span>
+            <span>添加第一个网址</span>
+          </button>
+        </div>
       </div>
       <div v-else>
         <div class="bookmark-content-container">

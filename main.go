@@ -1192,8 +1192,11 @@ func (s *server) loadTree(ctx context.Context) ([]*node, error) {
 		}
 		parent.Children = append(parent.Children, n)
 	}
-
 	sortNodes(roots)
+	// 确保 roots 不是 nil，避免返回 null
+	if roots == nil {
+		roots = []*node{}
+	}
 	return roots, nil
 }
 
