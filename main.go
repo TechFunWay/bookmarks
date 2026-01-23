@@ -336,9 +336,22 @@ func (s *server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadGateway, fmt.Errorf("metadata fetch failed: %w", err))
 		return
 	}
+
+	// 下载并保存图标到本地文件
+	var savedIcon string
+	if icon != "" {
+		savedIcon, err = s.downloadAndSaveIcon(icon)
+		if err != nil {
+			Debug("下载并保存图标失败: %v, 使用原始URL", err)
+			savedIcon = icon // 保存失败时使用原始URL
+		} else {
+			Debug("图标保存成功: %s", savedIcon)
+		}
+	}
+
 	resp := map[string]*string{
 		"title":       optionalString(title),
-		"favicon_url": optionalString(icon),
+		"favicon_url": optionalString(savedIcon),
 		"url":         optionalString(normalized),
 	}
 	respondJSON(w, http.StatusOK, resp)
@@ -2113,6 +2126,83 @@ func saveBase64Icon(iconData string) (string, error) {
 
 	// 保存文件
 	if err := os.WriteFile(filePath, decoded, 0644); err != nil {
+		return "", fmt.Errorf("failed to save icon file: %w", err)
+	}
+
+	// 返回相对路径（注意：静态文件服务器从 ./static 目录提供服务）
+	return fmt.Sprintf("/icons/%s/%s", dateDir, filename), nil
+}
+
+// downloadAndSaveIcon 下载图标URL并保存到本地文件
+func (s *server) downloadAndSaveIcon(iconURL string) (string, error) {
+	// 检查是否是HTTP/HTTPS URL
+	if !strings.HasPrefix(iconURL, "http://") && !strings.HasPrefix(iconURL, "https://") {
+		// 不是HTTP URL，直接返回原值
+		return iconURL, nil
+	}
+
+	// 创建HTTP请求
+	req, err := http.NewRequest("GET", iconURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// 设置用户代理，避免被拒绝
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+
+	// 发送请求
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download icon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("icon download failed with status: %d", resp.StatusCode)
+	}
+
+	// 读取响应体
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read icon data: %w", err)
+	}
+
+	// 检测内容类型并确定扩展名
+	contentType := resp.Header.Get("Content-Type")
+	var ext string
+	switch {
+	case strings.Contains(contentType, "image/png"):
+		ext = ".png"
+	case strings.Contains(contentType, "image/jpeg"):
+		ext = ".jpg"
+	case strings.Contains(contentType, "image/gif"):
+		ext = ".gif"
+	case strings.Contains(contentType, "image/webp"):
+		ext = ".webp"
+	case strings.Contains(contentType, "image/svg"):
+		ext = ".svg"
+	case strings.Contains(contentType, "image/x-icon"):
+		ext = ".ico"
+	default:
+		ext = ".ico" // 默认使用ico
+	}
+
+	// 按日期格式创建目录 (YYYYMMDD)
+	dateDir := time.Now().Format("20060102")
+	iconDir := fmt.Sprintf("static/icons/%s", dateDir)
+
+	// 创建目录
+	if err := os.MkdirAll(iconDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create icon directory: %w", err)
+	}
+
+	// 生成文件名（使用UUID避免冲突）
+	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+	filePath := fmt.Sprintf("%s/%s", iconDir, filename)
+
+	// 保存文件
+	if err := os.WriteFile(filePath, imageData, 0644); err != nil {
 		return "", fmt.Errorf("failed to save icon file: %w", err)
 	}
 
