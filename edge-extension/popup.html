@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>书签同步助手</title>
+  <title>【网址收藏夹】同步助手</title>
   <style>
     body {
       width: 300px;
@@ -111,7 +111,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>书签同步助手</h1>
+    <h1>【网址收藏夹】同步助手</h1>
     
     <div id="syncStatus" class="sync-status">
       <span class="status-icon">📋</span>
@@ -124,12 +124,20 @@
         <span id="serverUrl" class="status-value">加载中...</span>
       </div>
       <div class="status-item">
-        <span class="status-label">同步方向:</span>
-        <span id="syncDirection" class="status-value">加载中...</span>
+        <span class="status-label">同步方式:</span>
+        <span id="syncMode" class="status-value">加载中...</span>
       </div>
       <div class="status-item">
         <span class="status-label">同步间隔:</span>
         <span id="syncInterval" class="status-value">加载中...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">同步状态:</span>
+        <span id="syncStatusText" class="status-value">加载中...</span>
+      </div>
+      <div class="status-item" id="folderSyncStatus" style="display: none;">
+        <span class="status-label">同步文件夹:</span>
+        <span id="syncFolders" class="status-value">加载中...</span>
       </div>
     </div>
     
