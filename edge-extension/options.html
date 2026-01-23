@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>书签同步助手 - 选项</title>
+  <title>【网址收藏夹】同步助手 - 选项</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -147,7 +147,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>书签同步助手 - 选项</h1>
+    <h1>【网址收藏夹】同步助手 - 选项</h1>
     
     <div class="section-title">服务器配置</div>
     
@@ -165,39 +165,70 @@
     <div class="section-title">同步配置</div>
     
     <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" id="enableAutoSync">
+        启用自动同步
+      </label>
+      <div class="form-note">启用后，插件会自动同步书签（定时和书签变更时）</div>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label" for="syncScope">同步到哪里</label>
+      <select id="syncScope" class="form-select">
+        <option value="all">同步到根目录</option>
+        <option value="folder">同步到应用指定文件夹</option>
+        <option value="edge-to-app">从Edge指定目录同步到应用指定目录</option>
+      </select>
+      <div class="form-note">选择同步方式：全部同步到根目录、同步到应用指定文件夹、或从Edge指定目录同步到应用指定目录</div>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label" for="syncMode">同步方式</label>
+      <select id="syncMode" class="form-select">
+        <option value="merge">合并同步（浏览器和应用合并）</option>
+        <option value="replace">替换同步（浏览器覆盖应用）</option>
+      </select>
+      <div class="form-note">选择同步方式：合并会保留两边的内容，替换会用浏览器书签覆盖应用书签</div>
+    </div>
+    
+    <div class="form-group">
       <label class="form-label" for="syncInterval">同步间隔</label>
       <input 
         type="range" 
         id="syncInterval" 
         class="form-range" 
         min="1" 
-        max="60" 
+        max="1440" 
         value="5"
       >
       <div>
         <span>1分钟</span>
         <span class="range-value" id="syncIntervalValue">5分钟</span>
-        <span>60分钟</span>
+        <span>1天</span>
       </div>
-      <div class="form-note">设置自动同步的时间间隔</div>
+      <div class="form-note">设置自动同步的时间间隔（1分钟到1天）</div>
     </div>
     
-    <div class="form-group">
-      <label class="form-label" for="syncDirection">同步方向</label>
-      <select id="syncDirection" class="form-select">
-        <option value="unidirectional">单向同步 (浏览器 → 后端)</option>
-        <option value="bidirectional">双向同步</option>
+    <div class="section-title" id="folderSyncSectionTitle" style="display: none;">文件夹同步配置</div>
+    
+    <div class="form-group" id="edgeFolderConfig" style="display: none;">
+      <label class="form-label" for="edgeFolder">Edge文件夹</label>
+      <select id="edgeFolder" class="form-select">
+        <option value="">选择Edge文件夹...</option>
       </select>
-      <div class="form-note">选择书签同步的方向</div>
+      <div class="form-note">选择Edge浏览器中要同步的文件夹</div>
     </div>
     
-    <div class="form-group">
-      <label class="form-label" for="firstSyncMode">首次同步模式</label>
-      <select id="firstSyncMode" class="form-select">
-        <option value="merge">合并模式</option>
-        <option value="replace">替换模式</option>
+    <div class="form-group" id="folderSyncConfig" style="display: none;">
+      <label class="form-label" for="appFolder">应用文件夹</label>
+      <select id="appFolder" class="form-select">
+        <option value="">选择应用文件夹...</option>
       </select>
-      <div class="form-note">首次同步时，合并或替换后端的书签</div>
+      <div class="form-note">选择应用中要同步的文件夹</div>
+    </div>
+    
+    <div class="form-group" id="refreshFolders" style="display: none;">
+      <button type="button" id="refreshFoldersBtn" class="reset-button">刷新文件夹列表</button>
     </div>
     
     <div class="button-group">
