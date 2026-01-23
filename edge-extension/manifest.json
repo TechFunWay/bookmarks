@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "书签同步助手",
+  "name": "【网址收藏夹】同步助手",
   "version": "1.0.0",
-  "description": "同步Edge浏览器书签到TechFunWay书签应用",
+  "description": "同步Edge浏览器书签到【网址收藏夹】应用",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
+    "64": "icons/icon64.png",
     "128": "icons/icon128.png"
   },
   "permissions": [
@@ -28,6 +29,7 @@
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
+      "64": "icons/icon64.png",
       "128": "icons/icon128.png"
     }
   },
