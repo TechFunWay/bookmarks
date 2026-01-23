@@ -3,8 +3,12 @@ const elements = {
   serverUrl: document.getElementById('serverUrl'),
   syncInterval: document.getElementById('syncInterval'),
   syncIntervalValue: document.getElementById('syncIntervalValue'),
-  syncDirection: document.getElementById('syncDirection'),
-  firstSyncMode: document.getElementById('firstSyncMode'),
+  syncMode: document.getElementById('syncMode'),
+  enableAutoSync: document.getElementById('enableAutoSync'),
+  syncScope: document.getElementById('syncScope'),
+  edgeFolder: document.getElementById('edgeFolder'),
+  appFolder: document.getElementById('appFolder'),
+  refreshFoldersBtn: document.getElementById('refreshFoldersBtn'),
   saveButton: document.getElementById('saveButton'),
   resetButton: document.getElementById('resetButton'),
   statusMessage: document.getElementById('statusMessage')
@@ -14,40 +18,77 @@ const elements = {
 const DEFAULT_CONFIG = {
   serverUrl: 'http://localhost:8901',
   syncInterval: 5,
-  syncDirection: 'bidirectional',
-  firstSyncMode: 'merge'
+  enableAutoSync: false,
+  syncScope: 'all',
+  syncMode: 'merge',
+  edgeFolderId: null,
+  edgeFolderName: '',
+  appFolderId: null,
+  appFolderName: '',
+  lastSyncTime: null
 };
 
 // 初始化页面
 async function initialize() {
-  console.log('选项页面初始化...');
+  console.log('【网址收藏夹】同步助手 - 选项初始化...');
   
-  // 加载配置
   await loadConfig();
   
-  // 绑定事件
   bindEvents();
   
-  console.log('选项页面初始化完成');
+  console.log('【网址收藏夹】同步助手 - 选项初始化完成');
 }
 
 // 加载配置
 async function loadConfig() {
   try {
+    console.log('开始加载配置...');
     const response = await chrome.runtime.sendMessage({ action: 'getConfig' });
+    console.log('getConfig响应:', response);
+    
     if (response && response.config) {
       const config = response.config;
+      console.log('配置对象:', config);
       
-      // 更新表单
       elements.serverUrl.value = config.serverUrl || DEFAULT_CONFIG.serverUrl;
       elements.syncInterval.value = config.syncInterval || DEFAULT_CONFIG.syncInterval;
-      elements.syncIntervalValue.textContent = `${config.syncInterval || DEFAULT_CONFIG.syncInterval}分钟`;
-      elements.syncDirection.value = config.syncDirection || DEFAULT_CONFIG.syncDirection;
-      elements.firstSyncMode.value = config.firstSyncMode || DEFAULT_CONFIG.firstSyncMode;
+      elements.syncIntervalValue.textContent = formatSyncInterval(config.syncInterval || DEFAULT_CONFIG.syncInterval);
+      elements.syncMode.value = config.syncMode || DEFAULT_CONFIG.syncMode;
+      elements.enableAutoSync.checked = config.enableAutoSync !== false;
+      elements.syncScope.value = config.syncScope || DEFAULT_CONFIG.syncScope;
+      
+      if (config.syncScope === 'folder') {
+        document.getElementById('folderSyncSectionTitle').style.display = 'block';
+        document.getElementById('folderSyncConfig').style.display = 'block';
+        document.getElementById('edgeFolderConfig').style.display = 'none';
+        document.getElementById('refreshFolders').style.display = 'block';
+        await loadFolderLists();
+        
+        if (config.appFolderId) {
+          elements.appFolder.value = config.appFolderId;
+        }
+      } else if (config.syncScope === 'edge-to-app') {
+        document.getElementById('folderSyncSectionTitle').style.display = 'block';
+        document.getElementById('folderSyncConfig').style.display = 'block';
+        document.getElementById('edgeFolderConfig').style.display = 'block';
+        document.getElementById('refreshFolders').style.display = 'block';
+        await loadFolderLists();
+        
+        if (config.edgeFolderId) {
+          elements.edgeFolder.value = config.edgeFolderId;
+        }
+        if (config.appFolderId) {
+          elements.appFolder.value = config.appFolderId;
+        }
+      } else {
+        document.getElementById('folderSyncSectionTitle').style.display = 'none';
+        document.getElementById('folderSyncConfig').style.display = 'none';
+        document.getElementById('edgeFolderConfig').style.display = 'none';
+        document.getElementById('refreshFolders').style.display = 'none';
+      }
       
       console.log('配置加载成功:', config);
     } else {
-      // 使用默认配置
       loadDefaultConfig();
       console.log('使用默认配置');
     }
@@ -61,81 +102,110 @@ async function loadConfig() {
 function loadDefaultConfig() {
   elements.serverUrl.value = DEFAULT_CONFIG.serverUrl;
   elements.syncInterval.value = DEFAULT_CONFIG.syncInterval;
-  elements.syncIntervalValue.textContent = `${DEFAULT_CONFIG.syncInterval}分钟`;
-  elements.syncDirection.value = DEFAULT_CONFIG.syncDirection;
-  elements.firstSyncMode.value = DEFAULT_CONFIG.firstSyncMode;
+  elements.syncIntervalValue.textContent = formatSyncInterval(DEFAULT_CONFIG.syncInterval);
+  elements.syncMode.value = DEFAULT_CONFIG.syncMode;
+  elements.enableAutoSync.checked = DEFAULT_CONFIG.enableAutoSync;
+  elements.syncScope.value = DEFAULT_CONFIG.syncScope;
 }
 
 // 绑定事件
 function bindEvents() {
-  // 同步间隔滑块
   elements.syncInterval.addEventListener('input', function() {
-    const value = this.value;
-    elements.syncIntervalValue.textContent = `${value}分钟`;
+    const value = parseInt(this.value);
+    elements.syncIntervalValue.textContent = formatSyncInterval(value);
   });
   
-  // 保存按钮
-  elements.saveButton.addEventListener('click', async () => {
-    console.log('保存配置按钮点击');
+  elements.enableAutoSync.addEventListener('change', function() {
+    console.log('启用自动同步:', this.checked);
+  });
+  
+  elements.syncScope.addEventListener('change', async function() {
+    console.log('同步到哪里:', this.value);
     
-    // 禁用按钮
-    elements.saveButton.disabled = true;
-    elements.saveButton.textContent = '保存中...';
-    
-    try {
-      // 获取表单值
-      const config = {
-        serverUrl: elements.serverUrl.value.trim(),
-        syncInterval: parseInt(elements.syncInterval.value),
-        syncDirection: elements.syncDirection.value,
-        firstSyncMode: elements.firstSyncMode.value
-      };
+    if (this.value === 'folder') {
+      document.getElementById('folderSyncSectionTitle').style.display = 'block';
+      document.getElementById('folderSyncConfig').style.display = 'block';
+      document.getElementById('edgeFolderConfig').style.display = 'none';
+      document.getElementById('refreshFolders').style.display = 'block';
+      await loadFolderLists();
       
-      // 验证配置
-      if (!validateConfig(config)) {
-        return;
-      }
+      elements.appFolder.value = '';
+      elements.edgeFolder.value = '';
+    } else if (this.value === 'edge-to-app') {
+      document.getElementById('folderSyncSectionTitle').style.display = 'block';
+      document.getElementById('folderSyncConfig').style.display = 'block';
+      document.getElementById('edgeFolderConfig').style.display = 'block';
+      document.getElementById('refreshFolders').style.display = 'block';
+      await loadFolderLists();
       
-      // 保存配置
-      const response = await chrome.runtime.sendMessage({ 
-        action: 'updateConfig',
-        config 
-      });
-      
-      if (response && response.status === 'success') {
-        showStatus('success', '配置保存成功');
-        console.log('配置保存成功:', config);
-      } else {
-        showStatus('error', '配置保存失败');
-        console.error('配置保存失败:', response);
-      }
-    } catch (error) {
-      console.error('保存配置失败:', error);
-      showStatus('error', '保存配置失败');
-    } finally {
-      // 启用按钮
-      elements.saveButton.disabled = false;
-      elements.saveButton.textContent = '保存配置';
+      elements.appFolder.value = '';
+      elements.edgeFolder.value = '';
+    } else {
+      document.getElementById('folderSyncSectionTitle').style.display = 'none';
+      document.getElementById('folderSyncConfig').style.display = 'none';
+      document.getElementById('edgeFolderConfig').style.display = 'none';
+      document.getElementById('refreshFolders').style.display = 'none';
+      elements.appFolder.value = '';
+      elements.edgeFolder.value = '';
     }
   });
   
-  // 重置按钮
-  elements.resetButton.addEventListener('click', () => {
-    console.log('重置配置按钮点击');
-    loadDefaultConfig();
-    showStatus('success', '已恢复默认配置');
+  elements.refreshFoldersBtn.addEventListener('click', loadFolderLists);
+  
+  elements.saveButton.addEventListener('click', async () => {
+    console.log('保存配置');
+    await saveConfig();
   });
+  
+  elements.resetButton.addEventListener('click', async () => {
+    console.log('恢复默认配置');
+    loadDefaultConfig();
+    await saveConfig();
+  });
+}
+
+// 保存配置
+async function saveConfig() {
+  try {
+    const config = {
+      serverUrl: elements.serverUrl.value.trim(),
+      syncInterval: parseInt(elements.syncInterval.value),
+      enableAutoSync: elements.enableAutoSync.checked,
+      syncScope: elements.syncScope.value,
+      syncMode: elements.syncMode.value,
+      edgeFolderId: elements.edgeFolder.value || null,
+      edgeFolderName: getSelectedFolderName('edgeFolder'),
+      appFolderId: elements.appFolder.value || null,
+      appFolderName: getSelectedFolderName('appFolder')
+    };
+    
+    if (!validateConfig(config)) {
+      return;
+    }
+    
+    const response = await chrome.runtime.sendMessage({ 
+      action: 'updateConfig',
+      config 
+    });
+    
+    if (response && response.status === 'success') {
+      showStatus('success', '配置保存成功');
+    } else {
+      showStatus('error', '配置保存失败');
+    }
+  } catch (error) {
+    console.error('保存配置失败:', error);
+    showStatus('error', '保存配置失败');
+  }
 }
 
 // 验证配置
 function validateConfig(config) {
-  // 验证服务器地址
   if (!config.serverUrl) {
     showStatus('error', '请输入服务器地址');
     return false;
   }
   
-  // 验证URL格式
   try {
     new URL(config.serverUrl);
   } catch (error) {
@@ -143,43 +213,152 @@ function validateConfig(config) {
     return false;
   }
   
-  // 验证同步间隔
-  if (isNaN(config.syncInterval) || config.syncInterval < 1 || config.syncInterval > 60) {
-    showStatus('error', '同步间隔必须在1-60分钟之间');
+  if (isNaN(config.syncInterval) || config.syncInterval < 1 || config.syncInterval > 1440) {
+    showStatus('error', '同步间隔必须在1-1440分钟之间');
     return false;
   }
   
-  // 验证同步方向
-  if (!['unidirectional', 'bidirectional'].includes(config.syncDirection)) {
-    showStatus('error', '同步方向无效');
+  if (!['all', 'folder', 'edge-to-app'].includes(config.syncScope)) {
+    showStatus('error', '同步范围无效');
     return false;
   }
   
-  // 验证首次同步模式
-  if (!['merge', 'replace'].includes(config.firstSyncMode)) {
-    showStatus('error', '首次同步模式无效');
+  if (config.syncScope === 'folder' && !config.appFolderId) {
+    showStatus('error', '请选择应用文件夹');
+    return false;
+  }
+  
+  if (config.syncScope === 'edge-to-app' && !config.edgeFolderId) {
+    showStatus('error', '请选择Edge文件夹');
+    return false;
+  }
+  
+  if (config.syncScope === 'edge-to-app' && !config.appFolderId) {
+    showStatus('error', '请选择应用文件夹');
     return false;
   }
   
   return true;
 }
 
-// 显示状态消息
+// 获取选中文件夹名称
+function getSelectedFolderName(selectId) {
+  const select = document.getElementById(selectId);
+  const selectedOption = select.options[select.selectedIndex];
+  if (selectedOption && selectedOption.value) {
+    const match = selectedOption.textContent.match(/^([^\(]+)\s*\(/);
+    return match ? match[1].trim() : selectedOption.textContent.trim();
+  }
+  return '';
+}
+
+// 加载文件夹列表
+async function loadFolderLists() {
+  try {
+    console.log('========== 开始加载文件夹列表 ==========');
+    console.log('当前 syncScope 值:', elements.syncScope.value);
+    
+    const syncScope = elements.syncScope.value;
+    
+    if (syncScope === 'edge-to-app') {
+      console.log('加载Edge文件夹列表...');
+      const edgeResponse = await chrome.runtime.sendMessage({ action: 'getEdgeFolders' });
+      console.log('Edge文件夹响应:', edgeResponse);
+      
+      if (edgeResponse && edgeResponse.folders) {
+        const edgeSelect = elements.edgeFolder;
+        edgeSelect.innerHTML = '<option value="">选择Edge文件夹...</option>';
+        
+        edgeResponse.folders.forEach(folder => {
+          const option = document.createElement('option');
+          option.value = folder.id;
+          option.textContent = `${folder.path} (${folder.children?.length || 0})`;
+          edgeSelect.appendChild(option);
+        });
+        
+        console.log('Edge文件夹列表加载成功，共', edgeResponse.folders.length, '个文件夹');
+      } else {
+        console.error('Edge文件夹列表加载失败，响应:', edgeResponse);
+      }
+      
+      console.log('加载应用文件夹列表...');
+      const appResponse = await chrome.runtime.sendMessage({ action: 'getAppFolders' });
+      console.log('应用文件夹响应:', appResponse);
+      
+      if (appResponse && appResponse.folders) {
+        const appSelect = elements.appFolder;
+        appSelect.innerHTML = '<option value="">选择应用文件夹...</option>';
+        
+        appResponse.folders.forEach(folder => {
+          const option = document.createElement('option');
+          option.value = folder.id;
+          option.textContent = `${folder.path} (${folder.children?.length || 0})`;
+          appSelect.appendChild(option);
+        });
+        
+        console.log('应用文件夹列表加载成功，共', appResponse.folders.length, '个文件夹');
+      } else {
+        console.error('应用文件夹列表加载失败，响应:', appResponse);
+      }
+    } else if (syncScope === 'folder') {
+      console.log('加载应用文件夹列表...');
+      const response = await chrome.runtime.sendMessage({ action: 'getAppFolders' });
+      console.log('应用文件夹响应:', response);
+      
+      if (response && response.folders) {
+        const select = elements.appFolder;
+        select.innerHTML = '<option value="">选择应用文件夹...</option>';
+        
+        response.folders.forEach(folder => {
+          const option = document.createElement('option');
+          option.value = folder.id;
+          option.textContent = `${folder.path} (${folder.children?.length || 0})`;
+          select.appendChild(option);
+        });
+        
+        console.log('应用文件夹列表加载成功，共', response.folders.length, '个文件夹');
+      } else {
+        console.error('应用文件夹列表加载失败，响应:', response);
+      }
+    }
+    console.log('========== 文件夹列表加载完成 ==========');
+  } catch (error) {
+    console.error('加载文件夹列表失败:', error);
+    console.error('错误堆栈:', error.stack);
+  }
+}
+
+// 显示状态
 function showStatus(type, message) {
-  // 移除旧的类
-  elements.statusMessage.className = 'status-message';
-  
-  // 添加新的类
-  elements.statusMessage.classList.add(type);
-  
-  // 更新消息
+  elements.statusMessage.className = `status-message ${type}`;
   elements.statusMessage.textContent = message;
+  elements.statusMessage.style.display = 'block';
   
-  // 3秒后隐藏消息
   setTimeout(() => {
     elements.statusMessage.style.display = 'none';
   }, 3000);
 }
 
+// 格式化同步间隔
+function formatSyncInterval(minutes) {
+  if (minutes < 60) {
+    return `${minutes}分钟`;
+  } else if (minutes < 1440) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (mins === 0) {
+      return `${hours}小时`;
+    }
+    return `${hours}小时${mins}分钟`;
+  } else {
+    const days = Math.floor(minutes / 1440);
+    const hours = (minutes % 1440) / 60;
+    if (hours === 0) {
+      return `${days}天`;
+    }
+    return `${days}天${Math.floor(hours)}小时`;
+  }
+}
+
 // 初始化
-initialize();
+document.addEventListener('DOMContentLoaded', initialize);
