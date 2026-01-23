@@ -46,8 +46,11 @@
 ### 系统要求
 - Go 1.21 或更高版本
 - 支持SQLite的操作系统（Windows/macOS/Linux）
+- Docker（可选，用于容器化部署）
 
 ### 安装步骤
+
+#### 方式一：直接运行
 
 1. **克隆或下载项目**
    ```bash
@@ -60,12 +63,12 @@
    ```bash
    go run main.go
    ```
-   
+
    - 自定义端口启动：
    ```bash
    go run main.go -port 3000
    ```
-   
+
    - 自定义数据路径和端口：
    ```bash
    go run main.go -dataUrl /path/to/data -port 8080
@@ -75,6 +78,112 @@
    - 默认访问地址：http://localhost:8901
    - 或访问您指定的端口地址
    - 查看所有可用选项：`go run main.go -h`
+
+#### 方式二：Docker部署（推荐）
+
+**快速启动（推荐新手使用）：**
+
+Linux/macOS用户：
+```bash
+cd docker
+./start.sh
+```
+
+Windows用户：
+```cmd
+cd docker
+start.bat
+```
+
+**详细使用指南：**
+
+请查看 [docker/README.md](docker/README.md) 获取完整的Docker部署指南，包括：
+- 快速启动
+- 自定义端口
+- 手动构建和运行
+- 常用命令
+- 故障排除
+
+**手动启动：**
+
+1. **使用docker-compose快速启动**
+   ```bash
+   cd docker
+   docker-compose up -d
+   ```
+   应用将在默认端口8901上运行，访问地址：http://localhost:8901
+
+2. **自定义端口启动**
+   ```bash
+   # 方法1：修改docker-compose.yml中的PORT环境变量
+   # 然后运行
+   cd docker
+   docker-compose up -d
+
+   # 方法2：命令行指定端口（例如使用8080端口）
+   cd docker
+   PORT=8080 docker-compose up -d
+   ```
+
+3. **手动构建和运行**
+   ```bash
+   # AMD64架构
+   docker build -f docker/Dockerfile.amd64 -t bookmarks:amd64 .
+   docker run -d -p 8901:8901 -v $(pwd)/data:/app/data bookmarks:amd64
+
+   # ARM64架构（如树莓派等）
+   docker build -f docker/Dockerfile.arm64 -t bookmarks:arm64 .
+   docker run -d -p 8901:8901 -v $(pwd)/data:/app/data bookmarks:arm64
+   ```
+
+4. **使用自定义端口运行**
+   ```bash
+   # 映射到8080端口
+   docker run -d -p 8080:8901 -v $(pwd)/data:/app/data bookmarks:amd64
+
+   # 映射到3000端口
+   docker run -d -p 3000:8901 -v $(pwd)/data:/app/data bookmarks:amd64
+   ```
+
+5. **停止和删除容器**
+   ```bash
+   cd docker
+   
+   # 停止容器
+   docker-compose down
+
+   # 停止并删除数据卷
+   docker-compose down -v
+   ```
+
+### Docker数据持久化
+
+应用的数据（SQLite数据库）默认存储在容器内的`/app/data`目录。为了防止数据丢失，建议使用Docker volume或绑定挂载：
+
+- **docker-compose方式**：已自动配置`../data:/app/data`挂载，数据会保存在宿主机的`./data`目录（相对于项目根目录）
+- **docker run方式**：使用`-v $(pwd)/data:/app/data`参数挂载
+
+### Docker常用命令
+
+```bash
+# 查看容器日志
+cd docker
+docker-compose logs -f bookmarks
+
+# 查看容器状态
+cd docker
+docker-compose ps
+
+# 重启容器
+cd docker
+docker-compose restart
+
+# 进入容器
+docker exec -it bookmarks sh
+
+# 查看容器健康状态
+docker inspect bookmarks | grep -A 10 Health
+```
 
 ### 自定义配置
 
@@ -263,6 +372,7 @@ go run main.go
 1. **端口被占用**
    - 检查8901端口是否被其他程序占用
    - 或修改代码中的端口配置
+   - Docker用户可以使用自定义端口：`docker run -p 8080:8901 ...`
 
 2. **数据库错误**
    - 确保有写入权限
@@ -275,6 +385,22 @@ go run main.go
 4. **HTTPS站点访问失败**
    - 应用支持自签名证书
    - 内网HTTPS站点可正常访问
+
+5. **Docker容器无法启动**
+   - 检查Docker是否正常运行：`docker ps`
+   - 查看容器日志：`docker-compose logs -f bookmarks`
+   - 确保端口未被占用
+   - 检查数据目录权限
+
+6. **Docker数据丢失**
+   - 确保使用了volume挂载：`-v $(pwd)/data:/app/data`
+   - 检查宿主机data目录是否有数据
+   - 避免使用`docker-compose down -v`（会删除数据卷）
+
+7. **Docker健康检查失败**
+   - 等待容器完全启动（最多30秒）
+   - 检查容器日志：`docker-compose logs bookmarks`
+   - 确认应用正常运行
 
 ### 日志查看
 - 启动时会显示服务器运行端口
