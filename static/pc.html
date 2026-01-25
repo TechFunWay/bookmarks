@@ -19,6 +19,43 @@
     </div>
   </transition>
 
+  <!-- 导出中提示 -->
+  <transition name="fade">
+    <div v-if="exporting" class="loading-overlay">
+      <div class="export-progress-container">
+        <div class="export-header">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">{{ exportMessage || '正在导出...' }}</div>
+          <button class="close-export-btn" @click="closeExportProgress">✕</button>
+        </div>
+        <div class="progress-info">
+          <span class="progress-text">{{ exportProgress }} / {{ totalExportItems }}</span>
+          <span class="progress-percentage">({{ Math.round((exportProgress / totalExportItems) * 100) }}%)</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" :style="{ width: `${(exportProgress / totalExportItems) * 100}%` }"></div>
+        </div>
+        <div class="export-results-container" v-if="exportResults.length > 0">
+          <div class="results-header">
+            <span>处理结果</span>
+            <span class="success-count">{{ exportSuccessCount }} 成功</span>
+            <span class="fail-count">{{ exportFailCount }} 失败</span>
+          </div>
+          <div class="results-list" ref="resultsList">
+            <div v-for="(result, index) in exportResults.slice(-10)" :key="index" class="result-item" :class="result.success ? 'success' : 'fail'">
+              <span class="result-icon">{{ result.success ? '✅' : '❌' }}</span>
+              <span class="result-title">{{ result.title }}</span>
+              <span class="result-message" v-if="result.message">{{ result.message }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="export-actions">
+          <button class="close-export-btn" @click="closeExportProgress">关闭</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <header class="app-header" @click="handleHeaderClick">
     <h1>网址收藏夹<span class="subtitle-artistic">每天都很哇塞</span></h1>
     <div class="header-actions">
