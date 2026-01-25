@@ -639,6 +639,14 @@
   </head>
   <body>
     <div id="app" class="mobile-container" @click="handleRootClick">
+      <!-- 加载提示 -->
+      <transition name="fade">
+        <div v-if="loading" class="loading-overlay">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">正在加载数据...</div>
+        </div>
+      </transition>
+
       <header class="mobile-header" @click="handleHeaderClick">
         <h1>收藏夹</h1>
         <div class="header-actions">
@@ -714,7 +722,11 @@
           <div v-if="selectedNodeId && selectedNodeId !== 'all-bookmarks'">
             <h3 style="font-size: 0.875rem; font-weight: 600; margin: 1rem 0 0.5rem 0;">网址</h3>
             <div v-if="currentFolderBookmarks.length === 0" class="placeholder">
-              暂无收藏的网址。
+              <div class="empty-state">
+                <div class="empty-icon">📚</div>
+                <h3 class="empty-title">暂无收藏</h3>
+                <p class="empty-description">点击右下角的 + 号添加网址</p>
+              </div>
             </div>
             <div v-else>
               <!-- 编辑模式工具栏 -->
@@ -794,7 +806,11 @@
         <!-- 网址列表视图 -->
         <div v-else-if="currentView === 'bookmarks'">
           <div v-if="displayBookmarks.length === 0" class="placeholder">
-            暂无收藏的网址。
+            <div class="empty-state">
+              <div class="empty-icon">📚</div>
+              <h3 class="empty-title">暂无收藏</h3>
+              <p class="empty-description">点击右下角的 + 号添加网址</p>
+            </div>
           </div>
           <div v-else>
             <!-- 编辑模式工具栏 -->
@@ -953,8 +969,8 @@
                   <label>图标地址</label>
                   <input
                     v-model="modal.form.favicon_url"
-                    type="url"
-                    placeholder="自动获取或手动输入"
+                    type="text"
+                    placeholder="自动获取或手动输入（支持网址、base64、本地路径）"
                   />
                 </div>
                 <div class="modal-actions">

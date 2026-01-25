@@ -11,6 +11,51 @@
 </head>
 <body style="background: url(/img/background.jpg); background-size: cover;">
 <div id="app" @click="handleRootClick">
+  <!-- 加载提示 -->
+  <transition name="fade">
+    <div v-if="loading" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">正在加载数据...</div>
+    </div>
+  </transition>
+
+  <!-- 导出中提示 -->
+  <transition name="fade">
+    <div v-if="exporting" class="loading-overlay">
+      <div class="export-progress-container">
+        <div class="export-header">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">{{ exportMessage || '正在导出...' }}</div>
+          <button class="close-export-btn" @click="closeExportProgress">✕</button>
+        </div>
+        <div class="progress-info">
+          <span class="progress-text">{{ exportProgress }} / {{ totalExportItems }}</span>
+          <span class="progress-percentage">({{ Math.round((exportProgress / totalExportItems) * 100) }}%)</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" :style="{ width: `${(exportProgress / totalExportItems) * 100}%` }"></div>
+        </div>
+        <div class="export-results-container" v-if="exportResults.length > 0">
+          <div class="results-header">
+            <span>处理结果</span>
+            <span class="success-count">{{ exportSuccessCount }} 成功</span>
+            <span class="fail-count">{{ exportFailCount }} 失败</span>
+          </div>
+          <div class="results-list" ref="resultsList">
+            <div v-for="(result, index) in exportResults.slice(-10)" :key="index" class="result-item" :class="result.success ? 'success' : 'fail'">
+              <span class="result-icon">{{ result.success ? '✅' : '❌' }}</span>
+              <span class="result-title">{{ result.title }}</span>
+              <span class="result-message" v-if="result.message">{{ result.message }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="export-actions">
+          <button class="close-export-btn" @click="closeExportProgress">关闭</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <header class="app-header" @click="handleHeaderClick">
     <h1>网址收藏夹<span class="subtitle-artistic">每天都很哇塞</span></h1>
     <div class="header-actions">
@@ -48,6 +93,7 @@
           <span>⚙️</span>
           <span>配置</span>
         </button>
+        <span class="version-info" style="margin-left: 1rem; color: #888; font-size: 0.8rem;">v{{ version }}</span>
       </div>
     </div>
   </header>
@@ -139,7 +185,15 @@
         </div>
       </div>
       <div v-if="displayBookmarks.length === 0" class="placeholder">
-        暂无收藏的网址。
+        <div class="empty-state">
+          <div class="empty-icon">📚</div>
+          <h3 class="empty-title">暂无收藏的网址</h3>
+          <p class="empty-description">点击"添加网址"按钮开始收藏你喜欢的网站吧！</p>
+          <button class="primary" @click="openAddBookmark(null)">
+            <span>➕</span>
+            <span>添加第一个网址</span>
+          </button>
+        </div>
       </div>
       <div v-else>
         <div class="bookmark-content-container">
@@ -348,8 +402,8 @@
             <label>图标地址</label>
             <input
                     v-model="modal.form.favicon_url"
-                    type="url"
-                    placeholder="自动获取或手动输入"
+                    type="text"
+                    placeholder="自动获取或手动输入（支持网址、base64、本地路径）"
             />
           </div>
           <div class="modal-actions">
