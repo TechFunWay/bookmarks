@@ -35,6 +35,9 @@ const (
 	nodeTypeFolder   = "folder"
 	nodeTypeBookmark = "bookmark"
 
+	// 应用版本
+	appVersion = "1.6.0"
+
 	// 日志模式常量
 	logModeDebug   = "debug"
 	logModeRelease = "release"
@@ -153,6 +156,7 @@ func main() {
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/tree", s.handleGetTree)
 		r.Get("/metadata", s.handleMetadata)
+		r.Get("/version", s.handleGetVersion)
 		r.Post("/folders", s.handleCreateFolder)
 		r.Post("/bookmarks", s.handleCreateBookmark)
 		r.Put("/nodes/{id}", s.handleUpdateNode)
@@ -2134,22 +2138,22 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 插入或更新配置
+	// 执行更新或插入操作
 	_, err := s.db.ExecContext(r.Context(), `
-		INSERT INTO config (key, value) 
-		VALUES (?, ?) 
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+		INSERT INTO config (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
 	`, req.Key, req.Value)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	// 返回更新后的配置
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"key":   req.Key,
-		"value": req.Value,
-	})
+	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
+}
+
+// handleGetVersion 返回应用版本信息
+func (s *server) handleGetVersion(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{"version": appVersion})
 }
 
 // 辅助函数：获取最小值

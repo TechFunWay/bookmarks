@@ -183,6 +183,7 @@ const app = createApp({
         loading: false,
         selectedNodeId: null,
         treeActionsVisible: false,
+        version: '',
         contextMenu: {
           visible: false,
           x: 0,
@@ -2164,6 +2165,18 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async saveConfigAndClose() {
       await this.saveConfig();
       this.closeConfigModal();
+    },
+    // 获取版本号
+    async loadVersion() {
+      try {
+        const response = await fetch('/api/version');
+        if (response.ok) {
+          const data = await response.json();
+          this.version = data.version;
+        }
+      } catch (error) {
+        console.error('获取版本号失败:', error);
+      }
     }
   },
   mounted() {
@@ -2172,6 +2185,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     this.loadBackgroundSettings(); // 加载保存的背景设置
     this.loadConfig(); // 加载配置（包括每页显示数量）
     this.loadTree();
+    this.loadVersion(); // 加载版本号
     window.addEventListener("scroll", this.hideContextMenu, true);
     window.addEventListener("resize", this.hideContextMenu);
   },
