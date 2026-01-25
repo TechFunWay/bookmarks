@@ -299,7 +299,16 @@ const app = createApp({
         },
         configModal: {
           visible: false
-        }
+        },
+        // 导出相关状态
+        exporting: false,
+        exportMessage: "",
+        exportProgress: 0,
+        totalExportItems: 0,
+        exportResults: [],
+        exportSuccessCount: 0,
+        exportFailCount: 0,
+        showExportDetails: false
       };
     },
   computed: {
@@ -456,36 +465,153 @@ const app = createApp({
       // 重新应用面板透明度
       this.applyPanelOpacity(this.backgroundSettings.panelOpacity);
     },
-    exportBookmarks() {
-      // 导出所有书签数据
-      const data = this.tree;
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      this.showToast('导出成功', 'success');
-      this.exportMenuVisible = false; // 关闭导出菜单
+    async exportBookmarks() {
+      try {
+        // 重置导出状态
+        this.exporting = true;
+        this.exportMessage = '正在准备导出数据...';
+        this.exportProgress = 0;
+        this.exportResults = [];
+        this.exportSuccessCount = 0;
+        this.exportFailCount = 0;
+        
+        // 复制数据，避免修改原始数据
+        const exportData = JSON.parse(JSON.stringify(this.tree));
+        
+        // 计算总书签数量
+        this.totalExportItems = this.countTotalBookmarks(exportData);
+        
+        this.exportMessage = '正在转换图片为base64...';
+        // 转换所有书签的图片为base64
+        await this.convertBookmarksImages(exportData);
+        
+        this.exportMessage = '正在生成导出文件...';
+        // 生成导出文件
+        const json = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // 显示导出结果
+        this.exportMessage = '导出完成！';
+        // 导出完成后，不自动关闭，等待用户手动关闭
+        this.exportMenuVisible = false; // 关闭导出菜单
+      } catch (error) {
+        console.error('导出失败:', error);
+        this.exportMessage = `导出失败: ${error.message}`;
+        // 导出失败后，不自动关闭，等待用户手动关闭
+      }
     },
-    exportEdgeBookmarks() {
-      // 导出为Edge兼容的HTML格式
-      const html = this.generateEdgeBookmarksHTML(this.tree);
-      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      this.showToast('导出成功', 'success');
-      this.exportMenuVisible = false; // 关闭导出菜单
+    // 手动关闭导出提示
+    closeExportProgress() {
+      this.exporting = false;
+      this.exportMessage = '';
+      this.exportProgress = 0;
+      this.exportResults = [];
+      this.exportSuccessCount = 0;
+      this.exportFailCount = 0;
+      this.showExportDetails = false;
+    },
+    async convertBookmarksImages(nodes) {
+      for (const node of nodes) {
+        if (node.type === 'bookmark') {
+          // 处理书签
+          let result = {
+            title: node.title,
+            success: true,
+            message: ''
+          };
+          
+          // 如果有favicon_url，尝试转换为base64
+          if (node.favicon_url) {
+            try {
+              // 转换图片为base64
+              node.favicon_url = await this.imageToBase64(node.favicon_url);
+              result.message = '图片转换成功';
+            } catch (error) {
+              console.error(`转换书签图片失败: ${node.title}`, error);
+              result.success = false;
+              result.message = `图片转换失败: ${error.message}`;
+              // 转换失败时保留原始URL
+            }
+          } else {
+            result.message = '无图片需要转换';
+          }
+          
+          // 更新导出进度
+          this.exportProgress++;
+          
+          // 更新成功和失败统计
+          if (result.success) {
+            this.exportSuccessCount++;
+          } else {
+            this.exportFailCount++;
+          }
+          
+          // 保存结果
+          this.exportResults.push(result);
+          
+          // 自动滚动结果列表到底部，显示最新结果
+          this.$nextTick(() => {
+            const resultsList = this.$refs.resultsList;
+            if (resultsList) {
+              resultsList.scrollTop = resultsList.scrollHeight;
+            }
+          });
+        } else if (node.type === 'folder' && node.children && node.children.length > 0) {
+          // 递归处理子文件夹
+          await this.convertBookmarksImages(node.children);
+        }
+      }
+    },
+    async exportEdgeBookmarks() {
+      try {
+        // 重置导出状态
+        this.exporting = true;
+        this.exportMessage = '正在准备导出数据...';
+        this.exportProgress = 0;
+        this.exportResults = [];
+        this.exportSuccessCount = 0;
+        this.exportFailCount = 0;
+        
+        // 复制数据，避免修改原始数据
+        const exportData = JSON.parse(JSON.stringify(this.tree));
+        
+        // 计算总书签数量
+        this.totalExportItems = this.countTotalBookmarks(exportData);
+        
+        this.exportMessage = '正在转换图片为base64...';
+        // 转换所有书签的图片为base64
+        await this.convertBookmarksImages(exportData);
+        
+        this.exportMessage = '正在生成HTML文件...';
+        // 生成导出文件
+        const html = this.generateEdgeBookmarksHTML(exportData);
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // 显示导出结果
+        this.exportMessage = '导出完成！';
+        // 导出完成后，不自动关闭，等待用户手动关闭
+        this.exportMenuVisible = false; // 关闭导出菜单
+      } catch (error) {
+        console.error('导出Edge书签失败:', error);
+        this.exportMessage = `导出失败: ${error.message}`;
+        // 导出失败后，不自动关闭，等待用户手动关闭
+      }
     },
     generateEdgeBookmarksHTML(nodes) {
       // 生成Edge兼容的HTML格式书签，包含图标信息
@@ -1006,6 +1132,66 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         return false;
       }
     },
+    countTotalBookmarks(nodes) {
+      // 递归计算总书签数量
+      let count = 0;
+      for (const node of nodes) {
+        if (node.type === 'bookmark') {
+          count++;
+        } else if (node.type === 'folder' && node.children && node.children.length > 0) {
+          count += this.countTotalBookmarks(node.children);
+        }
+      }
+      return count;
+    },
+    imageToBase64(url) {
+      return new Promise((resolve, reject) => {
+        // 如果已经是base64格式，直接返回
+        if (url.startsWith('data:')) {
+          resolve(url);
+          return;
+        }
+        
+        // 创建Image对象
+        const img = new Image();
+        // 允许跨域图片
+        img.crossOrigin = 'anonymous';
+        
+        img.onload = () => {
+          // 创建Canvas对象
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // 绘制图片到Canvas
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          
+          try {
+            // 转换为base64
+            const base64 = canvas.toDataURL('image/png');
+            resolve(base64);
+          } catch (error) {
+            console.error('转换图片到base64失败:', error);
+            reject(error);
+          }
+        };
+        
+        img.onerror = () => {
+          console.error('加载图片失败:', url);
+          reject(new Error('加载图片失败'));
+        };
+        
+        // 处理本地路径
+        let imageUrl = url;
+        if (url.startsWith('/') && !url.startsWith('//')) {
+          // 本地绝对路径，添加当前域名
+          imageUrl = window.location.origin + url;
+        }
+        
+        img.src = imageUrl;
+      });
+    },
     getFaviconUrl(item) {
       // 如果有明确的favicon_url，优先使用，无论是否是内网地址
       if (item.favicon_url && item.favicon_url.trim()) {
@@ -1029,11 +1215,19 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async loadTree() {
       this.loading = true;
       try {
-        const response = await fetch("/api/tree");
+        // 添加缓存控制头，确保每次都从服务器获取最新数据
+        const response = await fetch("/api/tree", {
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+          }
+        });
         if (!response.ok) {
           throw new Error("加载失败");
         }
         const data = await response.json();
+        console.log("加载树结构成功，节点数量:", data.length);
         this.tree = Array.isArray(data) ? data : [];
         if (this.selectedNodeId) {
           const current = this.findNodeById(this.selectedNodeId, this.tree);
@@ -1052,6 +1246,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           }
         }
       } catch (error) {
+        console.error("加载树结构失败:", error);
         this.showToast(error.message || "加载树结构失败", "error");
       } finally {
         this.loading = false;
@@ -1710,22 +1905,47 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       if (!ok) return;
       
       try {
-        const promises = Array.from(this.selectedBookmarks).map(id => 
-          fetch(`/api/nodes/${id}`, { method: "DELETE" })
-        );
-        const results = await Promise.all(promises);
+        const ids = Array.from(this.selectedBookmarks);
+        console.log("开始批量删除，IDs:", ids);
         
-        // 检查是否有失败的请求
-        const failedRequests = results.filter(res => !res.ok);
-        if (failedRequests.length > 0) {
-          throw new Error(`${failedRequests.length} 个删除操作失败`);
+        // 使用新的批量删除API，添加缓存控制
+        const response = await fetch(`/api/nodes/batch-delete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+          },
+          body: JSON.stringify({
+            ids: ids
+          })
+        });
+        
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || "批量删除失败");
+        }
+        
+        const result = await response.json();
+        console.log("批量删除结果:", result);
+        
+        // 检查删除结果
+        if (result.deleted_count === 0) {
+          throw new Error("没有删除任何网址，请检查选中的网址是否存在");
         }
         
         // 清理状态
         this.selectedBookmarks.clear();
         this.bookmarkEditMode = false;
         await this.loadTree();
-        this.showToast(`成功删除 ${count} 个网址`, "success");
+        
+        // 显示结果
+        if (result.deleted_count === result.requested_count) {
+          this.showToast(`成功删除 ${result.deleted_count} 个网址`, "success");
+        } else {
+          this.showToast(`成功删除 ${result.deleted_count} 个网址，${result.requested_count - result.deleted_count} 个网址删除失败`, "warning");
+        }
       } catch (error) {
         this.showToast(error.message || "批量删除失败", "error");
       }

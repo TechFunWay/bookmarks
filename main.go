@@ -157,6 +157,7 @@ func main() {
 		r.Post("/bookmarks", s.handleCreateBookmark)
 		r.Put("/nodes/{id}", s.handleUpdateNode)
 		r.Delete("/nodes/{id}", s.handleDeleteNode)
+		r.Post("/nodes/batch-delete", s.handleBatchDeleteNodes)
 		r.Post("/nodes/reorder", s.handleReorderNodes)
 		r.Post("/import", s.handleImport)
 		r.Post("/import-edge", s.handleEdgeImport)
@@ -513,6 +514,76 @@ func (s *server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+type batchDeleteRequest struct {
+	IDs []int64 `json:"ids"`
+}
+
+func (s *server) handleBatchDeleteNodes(w http.ResponseWriter, r *http.Request) {
+	var req batchDeleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		respondError(w, http.StatusBadRequest, errors.New("ids cannot be empty"))
+		return
+	}
+
+	Debug("批量删除请求开始，共 %d 个ID: %v", len(req.IDs), req.IDs)
+
+	// 使用事务批量删除
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		Debug("批量删除失败，开启事务失败: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to begin transaction: %w", err))
+		return
+	}
+	defer tx.Rollback()
+
+	// 准备删除语句
+	stmt, err := tx.PrepareContext(r.Context(), "DELETE FROM nodes WHERE id = ?")
+	if err != nil {
+		Debug("批量删除失败，准备语句失败: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to prepare statement: %w", err))
+		return
+	}
+	defer stmt.Close()
+
+	// 批量执行删除
+	var deletedCount int64
+	for _, id := range req.IDs {
+		res, err := stmt.ExecContext(r.Context(), id)
+		if err != nil {
+			Debug("批量删除失败，删除ID %d 时出错: %v", id, err)
+			respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to delete node %d: %w", id, err))
+			return
+		}
+		affected, _ := res.RowsAffected()
+		if affected > 0 {
+			Debug("成功删除ID: %d", id)
+			deletedCount += affected
+		} else {
+			Debug("未找到ID: %d，删除失败", id)
+		}
+	}
+
+	// 提交事务
+	if err := tx.Commit(); err != nil {
+		Debug("批量删除失败，提交事务失败: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to commit transaction: %w", err))
+		return
+	}
+
+	Debug("批量删除请求完成，请求 %d 个ID，成功删除 %d 个", len(req.IDs), deletedCount)
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":          "deleted",
+		"deleted_count":   deletedCount,
+		"requested_count": len(req.IDs),
+	})
 }
 
 type reorderRequest struct {
@@ -1178,6 +1249,7 @@ func (s *server) loadTree(ctx context.Context) ([]*node, error) {
 
 	nodeMap := make(map[int64]*node, len(rawNodes))
 	var roots []*node
+	var nodesWithoutValidParent []*node
 
 	for _, rn := range rawNodes {
 		n := &node{
@@ -1210,12 +1282,27 @@ func (s *server) loadTree(ctx context.Context) ([]*node, error) {
 		}
 		parent := nodeMap[*n.ParentID]
 		if parent == nil {
-			// 父节点不存在，可能是数据损坏，跳过该节点
-			Debug("警告：节点 %d 的父节点 %d 不存在，跳过", n.ID, *n.ParentID)
+			// 父节点不存在，将该节点作为根节点处理
+			Debug("节点 %d 的父节点 %d 不存在，作为根节点处理", n.ID, *n.ParentID)
+			n.ParentID = nil // 将父节点设置为nil，作为根节点
+			nodesWithoutValidParent = append(nodesWithoutValidParent, n)
 			continue
 		}
 		parent.Children = append(parent.Children, n)
 	}
+
+	// 如果没有根节点，将所有没有有效父节点的节点作为根节点
+	if len(roots) == 0 {
+		Debug("没有找到根节点，将 %d 个没有有效父节点的节点作为根节点", len(nodesWithoutValidParent))
+		roots = nodesWithoutValidParent
+	} else {
+		// 如果有根节点，但也有没有有效父节点的节点，将它们也作为根节点
+		if len(nodesWithoutValidParent) > 0 {
+			Debug("找到 %d 个根节点，另外添加 %d 个没有有效父节点的节点作为根节点", len(roots), len(nodesWithoutValidParent))
+			roots = append(roots, nodesWithoutValidParent...)
+		}
+	}
+
 	sortNodes(roots)
 	// 确保 roots 不是 nil，避免返回 null
 	if roots == nil {
