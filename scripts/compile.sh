@@ -1,0 +1,1 @@
+../.trae/skills/program-compiler/scripts/compile.sh
