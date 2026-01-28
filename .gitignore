@@ -16,5 +16,6 @@
 .idea
 .DS_Store
 data.db
-.development-note
+.development-note/documents
 /static/icons
+.vscode
