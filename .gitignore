@@ -16,5 +16,6 @@
 .idea
 .DS_Store
 data.db
-.trae
+.trae/documents
 /static/icons
+.vscode
