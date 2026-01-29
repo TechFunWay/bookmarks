@@ -289,8 +289,84 @@ package_platform() {
     awk -v changelog="$NEW_CHANGELOG" '/^maintainer_url        = .*/ {print; print "changelog             = " changelog; next} {print}' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp"
     mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
 
+    # 显示当前的 manifest 内容供用户确认
+    echo "\n=== 确认 manifest 内容 ==="
+    echo "当前版本: $VERSION"
+    echo "平台: $MANIFEST_PLATFORM"
+    echo "\n1. 当前 desc 内容:"
+    echo "----------------------------------------"
+    echo "$NEW_DESC"
+    echo "----------------------------------------"
+    echo "\n2. 当前 changelog 内容:"
+    echo "----------------------------------------"
+    echo "$NEW_CHANGELOG"
+    echo "----------------------------------------"
+    
+    # 交互式确认
+    while true; do
+        echo "\n请选择操作:"
+        echo "1. 直接使用当前内容继续打包"
+        echo "2. 修改 desc 内容"
+        echo "3. 修改 changelog 内容"
+        echo "4. 取消打包"
+        echo "\n请输入选项编号 (1-4):"
+        
+        read -r choice
+        
+        case $choice in
+            1)
+                echo "\n使用当前内容继续打包..."
+                break
+                ;;
+            2)
+                echo "\n请输入新的 desc 内容 (输入完成后按 Ctrl+D 结束):"
+                echo "提示: 可以使用 <br> 标签进行换行"
+                echo "----------------------------------------"
+                new_desc_input=$(cat)
+                echo "----------------------------------------"
+                
+                if [ -n "$new_desc_input" ]; then
+                    NEW_DESC="$new_desc_input"
+                    # 更新 manifest 文件中的 desc
+                    sed -i '' "/^desc                  = .*/d" "$MANIFEST_FILE"
+                    awk -v desc="$NEW_DESC" '/^display_name          = .*/ {print; print "desc                  = " desc; next} {print}' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp"
+                    mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+                    echo "\ndesc 内容已更新"
+                else
+                    echo "\n未输入内容，保持当前 desc"
+                fi
+                ;;
+            3)
+                echo "\n请输入新的 changelog 内容 (输入完成后按 Ctrl+D 结束):"
+                echo "提示: 可以使用 <br> 和 <strong> 等 HTML 标签"
+                echo "----------------------------------------"
+                new_changelog_input=$(cat)
+                echo "----------------------------------------"
+                
+                if [ -n "$new_changelog_input" ]; then
+                    NEW_CHANGELOG="$new_changelog_input"
+                    # 更新 manifest 文件中的 changelog
+                    sed -i '' "/^changelog             = .*/d" "$MANIFEST_FILE"
+                    awk -v changelog="$NEW_CHANGELOG" '/^maintainer_url        = .*/ {print; print "changelog             = " changelog; next} {print}' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp"
+                    mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+                    echo "\nchangelog 内容已更新"
+                else
+                    echo "\n未输入内容，保持当前 changelog"
+                fi
+                ;;
+            4)
+                echo "\n取消打包操作"
+                cd ..
+                return 1
+                ;;
+            *)
+                echo "\n无效选项，请重新输入"
+                ;;
+        esac
+    done
+
     # 进入 techfunway.bookmarks 目录执行打包
-    echo "执行应用打包..."
+    echo "\n=== 执行应用打包 ==="
     cd "techfunway.bookmarks"
 
     # 执行 fnpack build 命令
