@@ -1,0 +1,1 @@
+CREATE TABLE user_sessions (id INTEGER PRIMARY KEY); CREATE TABLE user_sessions (id INTEGER PRIMARY KEY);

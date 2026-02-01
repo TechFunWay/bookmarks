@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"bookmark/app/logger"
+	"bookmark/app/logic"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -38,7 +39,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "1.6.0"
+	appVersion = "v1.7.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -263,6 +264,13 @@ func initializeDB(db *sql.DB) error {
 	// 执行数据库升级
 	if err := upgradeDatabase(db, version); err != nil {
 		return err
+	}
+
+	// 执行系统升级
+	upgrader := logic.NewUpgrade(db, appVersion)
+	if err := upgrader.PerformUpgrade(); err != nil {
+		log.Printf("系统升级失败: %v", err)
+		// 注意：这里我们记录错误但不返回错误，以避免阻止系统启动
 	}
 
 	return nil
