@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"bookmark/app/logger"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -114,9 +116,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
-	db.SetMaxOpenConns(5)
+	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(2)
 
+	// 初始化数据库
 	if err := initializeDB(db); err != nil {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
@@ -148,8 +151,16 @@ func main() {
 	// 启动图标获取协程
 	go s.faviconWorker()
 
+	// 创建日志文件
+	logFile, err := logger.CreateLogFile()
+	if err != nil {
+		log.Fatalf("failed to create log file: %v", err)
+	}
+	defer logFile.Close()
+
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	// 使用自定义日志中间件而不是默认的middleware.Logger
+	r.Use(logger.LoggingMiddleware(logFile))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.AllowContentType("application/json", "text/plain", "application/x-www-form-urlencoded"))
 
