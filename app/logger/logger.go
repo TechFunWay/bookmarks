@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 )
 
@@ -20,8 +21,18 @@ func RotateLogFiles(logDir string) error {
 		return err
 	}
 
+	// 编译正则表达式来匹配日志文件名模式
+	accessLogPattern := regexp.MustCompile(`^access_\d{8}\.log$`)
+	upgradeLogPattern := regexp.MustCompile(`^upgrade_\d{8}\.log$`)
+
 	for _, file := range files {
 		if !file.Type().IsRegular() {
+			continue
+		}
+
+		// 检查文件名是否匹配日志文件模式
+		fileName := file.Name()
+		if !accessLogPattern.MatchString(fileName) && !upgradeLogPattern.MatchString(fileName) {
 			continue
 		}
 
