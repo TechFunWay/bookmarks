@@ -2551,3 +2551,31 @@ input:checked + .toggle-slider:before {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* 用户信息样式 */
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-name {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.user-info-mobile {
+  display: flex;
+  align-items: center;
+  margin-right: 0.5rem;
+}
+
+.user-info-mobile .user-name {
+  font-size: 0.8rem;
+  color: var(--text);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
