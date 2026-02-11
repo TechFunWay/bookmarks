@@ -519,79 +519,12 @@ func (u *Upgrade) removeCommentsFromStatement(stmt string) string {
 	return strings.Join(resultLines, "\n")
 }
 
-// isCompleteStatement 判断SQL语句是否完整
-func (u *Upgrade) isCompleteStatement(stmt string) bool {
-	// 简单的完整性检查，可以根据需要扩展
-	stmt = strings.TrimSpace(stmt)
-	return strings.HasSuffix(stmt, ";")
-}
-
-// executeBusinessLogic 执行特定版本的业务逻辑升级
-func (u *Upgrade) executeBusinessLogic(version string) error {
-	// 保留原有方法但使其为空实现，因为数据处理逻辑已分离到单独的方法中
-	// 所有数据处理逻辑现在都在 executeDataProcessingLogic 方法中处理
-	u.LogUpgrade("执行版本 %s 的业务逻辑升级（此方法已废弃，请使用数据处理逻辑方法）", version)
-	return nil
-}
-
-// upgradeToV1_7_0 版本1.7.0的特定升级逻辑
-func (u *Upgrade) upgradeToV1_7_0() error {
-	u.LogUpgrade("执行版本 v1.7.0 的特定升级逻辑")
-
-	// 示例：添加新配置项
-	_, err := u.db.Exec("INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)", "enable_feature_x", "true")
-	if err != nil {
-		return fmt.Errorf("添加配置项失败: %w", err)
-	}
-
-	return nil
-}
-
-// upgradeToV1_8_0 版本1.8.0的特定升级逻辑
-func (u *Upgrade) upgradeToV1_8_0() error {
-	u.LogUpgrade("执行版本 v1.8.0 的特定升级逻辑")
-
-	// 示例：更新某些数据
-	_, err := u.db.Exec("UPDATE nodes SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL")
-	if err != nil {
-		return fmt.Errorf("更新节点时间失败: %w", err)
-	}
-
-	return nil
-}
-
-// upgradeToV2_0_0 版本2.0.0的特定升级逻辑
-func (u *Upgrade) upgradeToV2_0_0() error {
-	u.LogUpgrade("执行版本 v2.0.0 的特定升级逻辑")
-
-	// 示例：创建新表
-	_, err := u.db.Exec(`
-		CREATE TABLE IF NOT EXISTS user_settings (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL,
-			key TEXT NOT NULL,
-			value TEXT NOT NULL,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	if err != nil {
-		return fmt.Errorf("创建用户设置表失败: %w", err)
-	}
-
-	return nil
-}
-
 // executeDataProcessingLogic 执行特定版本的数据处理业务逻辑
 func (u *Upgrade) executeDataProcessingLogic(version string) error {
 	// 这里可以添加特定版本的数据处理业务逻辑
 	switch version {
 	case "v1.7.0":
 		return u.processDataForV1_7_0()
-	case "v1.8.0":
-		return u.processDataForV1_8_0()
-	case "v2.0.0":
-		return u.processDataForV2_0_0()
 	default:
 		// 对于未特殊处理的版本，可以执行通用数据处理逻辑
 		u.LogUpgrade("执行版本 %s 的通用数据处理逻辑", version)
@@ -607,40 +540,6 @@ func (u *Upgrade) processDataForV1_7_0() error {
 	_, err := u.db.Exec("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", "feature_flag_v170", "enabled")
 	if err != nil {
 		return fmt.Errorf("更新配置项失败: %w", err)
-	}
-
-	return nil
-}
-
-// processDataForV1_8_0 版本1.8.0的数据处理业务逻辑
-func (u *Upgrade) processDataForV1_8_0() error {
-	u.LogUpgrade("执行版本 v1.8.0 的数据处理业务逻辑")
-
-	// 示例：迁移数据
-	_, err := u.db.Exec(`
-		UPDATE nodes 
-		SET updated_at = CURRENT_TIMESTAMP 
-		WHERE updated_at IS NULL OR updated_at = ''
-	`)
-	if err != nil {
-		return fmt.Errorf("更新节点时间失败: %w", err)
-	}
-
-	return nil
-}
-
-// processDataForV2_0_0 版本2.0.0的数据处理业务逻辑
-func (u *Upgrade) processDataForV2_0_0() error {
-	u.LogUpgrade("执行版本 v2.0.0 的数据处理业务逻辑")
-
-	// 示例：初始化用户设置
-	_, err := u.db.Exec(`
-		INSERT OR IGNORE INTO user_settings (user_id, key, value) 
-		SELECT 1, 'theme', 'light'
-		WHERE NOT EXISTS (SELECT 1 FROM user_settings WHERE user_id = 1 AND key = 'theme')
-	`)
-	if err != nil {
-		return fmt.Errorf("初始化用户设置失败: %w", err)
 	}
 
 	return nil
