@@ -48,26 +48,21 @@
     </div>
     
     <script>
-        // 改进的设备检测函数
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = 'login.html';
+                return false;
+            }
+            return true;
+        }
+
         function isMobileDevice() {
-            // 使用多种方法检测移动设备
             const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-            
-            // 通过媒体查询进一步确认
             const hasCoarsePointer = matchMedia('(pointer:coarse)').matches;
             const hoverNone = matchMedia('(hover:none)').matches;
-            
-            // 用户代理检测
             const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            
-            // 屏幕宽度检测
             const isSmallScreen = window.innerWidth <= 768;
-            
-            // 综合判断：
-            // 1. 如果用户代理明确表明是移动设备，则返回true
-            // 2. 如果屏幕较小且是触摸设备，则很可能是移动设备
-            // 3. 如果是触摸设备且有粗 pointer 和无悬停，则很可能是移动设备
-            // 4. 否则基于屏幕大小判断
             
             if (isMobileUA) {
                 return true;
@@ -84,19 +79,18 @@
             return isSmallScreen;
         }
         
-        // 重定向到对应的页面
         function redirectToAppropriateVersion() {
+            if (!checkAuth()) {
+                return;
+            }
+            
             if (isMobileDevice()) {
-                // 如果是移动设备，尝试跳转到mobile.html
-                // 如果mobile.html不存在，可以回退到pc.html
                 window.location.href = '/mobile.html';
             } else {
-                // 如果是桌面设备，跳转到pc.html
                 window.location.href = '/pc.html';
             }
         }
         
-        // 页面加载时执行重定向
         window.addEventListener('DOMContentLoaded', redirectToAppropriateVersion);
     </script>
 </body>

@@ -20,3 +20,4 @@ data.db
 /static/icons
 .vscode
 release
+/logs

@@ -179,6 +179,8 @@ const app = createApp({
   },
   data() {
       return {
+        currentUser: null,
+        token: localStorage.getItem('token') || null,
         tree: [],
         loading: false,
         selectedNodeId: null,
@@ -210,12 +212,11 @@ const app = createApp({
           type: "success",
           timer: null,
         },
-        // 自定义确认对话框
         confirmDialog: {
           visible: false,
           title: "确认操作",
           message: "",
-          type: "warning", // warning 或 info
+          type: "warning",
           confirmText: "确认",
           callback: null
         },
@@ -404,6 +405,55 @@ const app = createApp({
     window.removeEventListener("resize", this.hideContextMenu);
   },
   methods: {
+    checkAuth() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = 'login.html';
+        return false;
+      }
+      this.token = token;
+      this.loadCurrentUser();
+      return true;
+    },
+    async loadCurrentUser() {
+      try {
+        const response = await fetch('/api/auth/me', {
+          headers: {
+            'Authorization': this.token
+          }
+        });
+        if (response.ok) {
+          const user = await response.json();
+          this.currentUser = user;
+        } else {
+          localStorage.removeItem('token');
+          localStorage.removeItem('currentUser');
+          window.location.href = 'login.html';
+        }
+      } catch (error) {
+        console.error('加载用户信息失败:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('currentUser');
+        window.location.href = 'login.html';
+      }
+    },
+    async logout() {
+      try {
+        await fetch('/api/auth/logout', {
+          headers: {
+            'Authorization': this.token
+          }
+        });
+      } catch (error) {
+        console.error('登出失败:', error);
+      } finally {
+        localStorage.removeItem('token');
+        localStorage.removeItem('currentUser');
+        this.token = null;
+        this.currentUser = null;
+        window.location.href = 'login.html';
+      }
+    },
     showFolderSelector() {
       this.selectedFolderId = this.modal.parentId || null;
       this.bookmarkFolderSelectorVisible = true;
@@ -687,6 +737,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Authorization': this.token
             },
             body: JSON.stringify({
               bookmarks: data,
@@ -919,6 +970,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Authorization': this.token
             },
             body: JSON.stringify({
               html: html,
@@ -964,7 +1016,11 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     // 背景设置相关方法
     async loadBackgroundSettings() {
       try {
-        const response = await fetch('/api/config');
+        const response = await fetch('/api/config', {
+          headers: {
+            'Authorization': this.token
+          }
+        });
         if (response.ok) {
           const config = await response.json();
           if (config['background']) {
@@ -1007,7 +1063,8 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         const response = await fetch('/api/config', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': this.token
           },
           body: JSON.stringify({
             key: 'background',
@@ -1216,9 +1273,9 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async loadTree() {
       this.loading = true;
       try {
-        // 添加缓存控制头，确保每次都从服务器获取最新数据
         const response = await fetch("/api/tree", {
           headers: {
+            "Authorization": this.token,
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
             "Expires": "0"
@@ -1400,7 +1457,10 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       };
       const res = await fetch("/api/folders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": this.token
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1424,7 +1484,10 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       };
       const res = await fetch("/api/bookmarks", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": this.token
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1440,7 +1503,10 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       };
       const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": this.token
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1465,7 +1531,10 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       }
       const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": this.token
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1512,7 +1581,12 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       );
       if (!ok) return;
       try {
-        const res = await fetch(`/api/nodes/${node.id}`, { method: "DELETE" });
+        const res = await fetch(`/api/nodes/${node.id}`, { 
+          method: "DELETE",
+          headers: {
+            "Authorization": this.token
+          }
+        });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || "删除失败");
@@ -1549,7 +1623,10 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         };
         const res = await fetch("/api/nodes/reorder", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": this.token
+          },
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
@@ -1789,6 +1866,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
+            "Authorization": this.token
           },
           body: JSON.stringify({
             parent_id: newParentId,
@@ -1914,6 +1992,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "Authorization": this.token,
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
             "Expires": "0"
@@ -2075,6 +2154,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': this.token
           },
           body: JSON.stringify({
             key: 'items_per_row',
@@ -2093,7 +2173,11 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     // 加载配置
     async loadConfig() {
       try {
-        const response = await fetch('/api/config');
+        const response = await fetch('/api/config', {
+          headers: {
+            'Authorization': this.token
+          }
+        });
         if (response.ok) {
           const configData = await response.json();
           // 更新配置，使用默认值作为回退
@@ -2180,12 +2264,13 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     }
   },
   mounted() {
-    this.loading = true; // 初始加载状态
-    this.loadSavedTheme(); // 加载保存的主题
-    this.loadBackgroundSettings(); // 加载保存的背景设置
-    this.loadConfig(); // 加载配置（包括每页显示数量）
+    this.loading = true;
+    this.loadSavedTheme();
+    this.loadBackgroundSettings();
+    this.loadConfig();
+    this.checkAuth();
     this.loadTree();
-    this.loadVersion(); // 加载版本号
+    this.loadVersion();
     window.addEventListener("scroll", this.hideContextMenu, true);
     window.addEventListener("resize", this.hideContextMenu);
   },

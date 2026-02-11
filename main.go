@@ -30,6 +30,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/net/html"
 	_ "modernc.org/sqlite"
 )
@@ -83,6 +84,41 @@ type node struct {
 	UpdatedAt  string  `json:"updated_at,omitempty"`
 }
 
+type user struct {
+	ID        int64  `json:"id"`
+	Username  string `json:"username"`
+	Nickname  string `json:"nickname"`
+	Email     string `json:"email"`
+	Avatar    string `json:"avatar"`
+	IsActive  bool   `json:"is_active"`
+	IsAdmin   bool   `json:"is_admin"`
+	CreatedAt string `json:"created_at"`
+}
+
+type authRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type registerRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Nickname string `json:"nickname,omitempty"`
+	Email    string `json:"email,omitempty"`
+}
+
+type authResponse struct {
+	Token string `json:"token"`
+	User  *user  `json:"user"`
+}
+
+// 用户上下文键
+type contextKey string
+
+const (
+	userContextKey contextKey = "user"
+)
+
 func main() {
 	dataUrl := flag.String("dataUrl", "./", "数据存储路径")                              // 定义字符串参数
 	port := flag.String("port", "8901", "服务器监听端口")                                 // 定义端口参数
@@ -123,6 +159,12 @@ func main() {
 	// 初始化数据库
 	if err := initializeDB(db); err != nil {
 		log.Fatalf("failed to initialize database: %v", err)
+	}
+
+	// 执行系统升级
+	upgrader := logic.NewUpgrade(db, appVersion)
+	if err := upgrader.PerformUpgrade(); err != nil {
+		log.Printf("系统升级失败: %v", err)
 	}
 
 	// 创建支持自签名证书的HTTP客户端
@@ -166,19 +208,26 @@ func main() {
 	r.Use(middleware.AllowContentType("application/json", "text/plain", "application/x-www-form-urlencoded"))
 
 	r.Route("/api", func(r chi.Router) {
-		r.Get("/tree", s.handleGetTree)
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", s.handleRegister)
+			r.Post("/login", s.handleLogin)
+			r.Post("/logout", s.handleLogout)
+			r.Get("/me", s.authMiddleware(s.handleGetCurrentUser))
+			r.Get("/check", s.handleCheckAuth)
+		})
+		r.Get("/tree", s.authMiddleware(s.handleGetTree))
 		r.Get("/metadata", s.handleMetadata)
 		r.Get("/version", s.handleGetVersion)
-		r.Post("/folders", s.handleCreateFolder)
-		r.Post("/bookmarks", s.handleCreateBookmark)
-		r.Put("/nodes/{id}", s.handleUpdateNode)
-		r.Delete("/nodes/{id}", s.handleDeleteNode)
-		r.Post("/nodes/batch-delete", s.handleBatchDeleteNodes)
-		r.Post("/nodes/reorder", s.handleReorderNodes)
-		r.Post("/import", s.handleImport)
-		r.Post("/import-edge", s.handleEdgeImport)
-		r.Get("/config", s.handleGetConfig)
-		r.Post("/config", s.handleUpdateConfig)
+		r.Post("/folders", s.authMiddleware(s.handleCreateFolder))
+		r.Post("/bookmarks", s.authMiddleware(s.handleCreateBookmark))
+		r.Put("/nodes/{id}", s.authMiddleware(s.handleUpdateNode))
+		r.Delete("/nodes/{id}", s.authMiddleware(s.handleDeleteNode))
+		r.Post("/nodes/batch-delete", s.authMiddleware(s.handleBatchDeleteNodes))
+		r.Post("/nodes/reorder", s.authMiddleware(s.handleReorderNodes))
+		r.Post("/import", s.authMiddleware(s.handleImport))
+		r.Post("/import-edge", s.authMiddleware(s.handleEdgeImport))
+		r.Get("/config", s.authMiddleware(s.handleGetConfig))
+		r.Post("/config", s.authMiddleware(s.handleUpdateConfig))
 	})
 
 	fileServer := http.FileServer(http.Dir("./static"))
@@ -194,59 +243,33 @@ func main() {
 }
 
 func initializeDB(db *sql.DB) error {
-	// 启用外键约束
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		return err
+	var tableExists int
+	err := db.QueryRow("SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name='nodes'").Scan(&tableExists)
+	if err != nil {
+		return fmt.Errorf("检查表存在失败: %w", err)
 	}
 
-	// 创建nodes表（如果不存在）
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS nodes (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			parent_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-			type TEXT NOT NULL CHECK (type IN ('folder', 'bookmark')),
-			title TEXT NOT NULL,
-			url TEXT,
-			favicon_url TEXT,
-			position INTEGER NOT NULL DEFAULT 0,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`); err != nil {
-		return err
-	}
+	if tableExists == 0 {
+		log.Println("数据库表不存在，开始初始化")
+		sqlBytes, err := os.ReadFile("sql/init.sql")
+		if err != nil {
+			return fmt.Errorf("读取init.sql失败: %w", err)
+		}
 
-	// 创建nodes表索引（如果不存在）
-	if _, err := db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
-		CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);
-	`); err != nil {
-		return err
-	}
-
-	// 创建nodes表的updated_at触发器（如果不存在）
-	if _, err := db.Exec(`
-		CREATE TRIGGER IF NOT EXISTS trg_nodes_updated_at
-		AFTER UPDATE ON nodes
-		BEGIN
-			UPDATE nodes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-		END;
-	`); err != nil {
-		return err
-	}
-
-	// 执行系统升级
-	upgrader := logic.NewUpgrade(db, appVersion)
-	if err := upgrader.PerformUpgrade(); err != nil {
-		log.Printf("系统升级失败: %v", err)
-		// 注意：这里我们记录错误但不返回错误，以避免阻止系统启动
+		if _, err := db.Exec(string(sqlBytes)); err != nil {
+			return fmt.Errorf("执行init.sql失败: %w", err)
+		}
+		log.Println("数据库初始化成功")
+	} else {
+		log.Println("数据库表已存在，跳过初始化")
 	}
 
 	return nil
 }
 
 func (s *server) handleGetTree(w http.ResponseWriter, r *http.Request) {
-	nodes, err := s.loadTree(r.Context())
+	userID := getUserID(r)
+	nodes, err := s.loadTree(r.Context(), userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -320,6 +343,7 @@ type createFolderRequest struct {
 }
 
 func (s *server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	var req createFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
@@ -330,7 +354,7 @@ func (s *server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, errors.New("title is required"))
 		return
 	}
-	newNode, err := s.insertNode(r.Context(), nodeTypeFolder, req.Title, req.ParentID, nil, nil)
+	newNode, err := s.insertNode(r.Context(), userID, nodeTypeFolder, req.Title, req.ParentID, nil, nil)
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) {
 			respondError(w, http.StatusBadRequest, err)
@@ -350,6 +374,7 @@ type createBookmarkRequest struct {
 }
 
 func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	var req createBookmarkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
@@ -398,7 +423,7 @@ func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
 		tmp := favicon
 		faviconPtr = &tmp
 	}
-	newNode, err := s.insertNode(r.Context(), nodeTypeBookmark, title, req.ParentID, &urlCopy, faviconPtr)
+	newNode, err := s.insertNode(r.Context(), userID, nodeTypeBookmark, title, req.ParentID, &urlCopy, faviconPtr)
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) || errors.Is(err, ErrDuplicateBookmark) {
 			respondError(w, http.StatusBadRequest, err)
@@ -418,6 +443,7 @@ type updateNodeRequest struct {
 }
 
 func (s *server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -431,7 +457,7 @@ func (s *server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.updateNode(r.Context(), id, req); err != nil {
+	if err := s.updateNode(r.Context(), userID, id, req); err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			respondError(w, http.StatusNotFound, errors.New("node not found"))
@@ -444,7 +470,7 @@ func (s *server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedNode, err := s.getNode(r.Context(), id)
+	updatedNode, err := s.getNode(r.Context(), userID, id)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -453,13 +479,14 @@ func (s *server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
 		return
 	}
-	res, err := s.db.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ?", id)
+	res, err := s.db.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ? AND user_id = ?", id, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -477,6 +504,7 @@ type batchDeleteRequest struct {
 }
 
 func (s *server) handleBatchDeleteNodes(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	var req batchDeleteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
@@ -490,7 +518,6 @@ func (s *server) handleBatchDeleteNodes(w http.ResponseWriter, r *http.Request) 
 
 	Debug("批量删除请求开始，共 %d 个ID: %v", len(req.IDs), req.IDs)
 
-	// 使用事务批量删除
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		Debug("批量删除失败，开启事务失败: %v", err)
@@ -499,8 +526,7 @@ func (s *server) handleBatchDeleteNodes(w http.ResponseWriter, r *http.Request) 
 	}
 	defer tx.Rollback()
 
-	// 准备删除语句
-	stmt, err := tx.PrepareContext(r.Context(), "DELETE FROM nodes WHERE id = ?")
+	stmt, err := tx.PrepareContext(r.Context(), "DELETE FROM nodes WHERE id = ? AND user_id = ?")
 	if err != nil {
 		Debug("批量删除失败，准备语句失败: %v", err)
 		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to prepare statement: %w", err))
@@ -508,10 +534,9 @@ func (s *server) handleBatchDeleteNodes(w http.ResponseWriter, r *http.Request) 
 	}
 	defer stmt.Close()
 
-	// 批量执行删除
 	var deletedCount int64
 	for _, id := range req.IDs {
-		res, err := stmt.ExecContext(r.Context(), id)
+		res, err := stmt.ExecContext(r.Context(), id, userID)
 		if err != nil {
 			Debug("批量删除失败，删除ID %d 时出错: %v", id, err)
 			respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to delete node %d: %w", id, err))
@@ -526,7 +551,6 @@ func (s *server) handleBatchDeleteNodes(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// 提交事务
 	if err := tx.Commit(); err != nil {
 		Debug("批量删除失败，提交事务失败: %v", err)
 		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to commit transaction: %w", err))
@@ -548,6 +572,7 @@ type reorderRequest struct {
 }
 
 func (s *server) handleReorderNodes(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	var req reorderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
@@ -557,7 +582,7 @@ func (s *server) handleReorderNodes(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, errors.New("ordered_ids cannot be empty"))
 		return
 	}
-	if err := s.reorderNodes(r.Context(), req.ParentID, req.OrderedIDs); err != nil {
+	if err := s.reorderNodes(r.Context(), userID, req.ParentID, req.OrderedIDs); err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidParent), errors.Is(err, ErrInvalidUpdate):
 			respondError(w, http.StatusBadRequest, err)
@@ -582,6 +607,7 @@ type importStats struct {
 }
 
 func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	var req importRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
@@ -604,14 +630,12 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// 如果是replace模式，删除指定文件夹及其子节点，然后重新创建
 	if req.Mode == "replace" {
 		if req.ParentID != nil {
-			// 先获取要删除的文件夹信息
 			var folderTitle string
 			var folderPosition int
 			var folderParentID *int64
-			err := tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ?", *req.ParentID).Scan(&folderTitle, &folderPosition, &folderParentID)
+			err := tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID).Scan(&folderTitle, &folderPosition, &folderParentID)
 			if err != nil {
 				respondError(w, http.StatusInternalServerError, err)
 				return
@@ -619,23 +643,20 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 
 			Debug("Replace模式：删除文件夹 ID=%d, 标题=%s", *req.ParentID, folderTitle)
 
-			// 删除指定文件夹及其所有子节点
-			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ?", *req.ParentID); err != nil {
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID); err != nil {
 				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
 
-			// 重新创建文件夹
 			res, err := tx.ExecContext(r.Context(), `
-				INSERT INTO nodes (parent_id, type, title, position)
-				VALUES (?, ?, ?, ?)
-			`, folderParentID, nodeTypeFolder, folderTitle, folderPosition)
+				INSERT INTO nodes (parent_id, type, title, position, user_id)
+				VALUES (?, ?, ?, ?, ?)
+			`, folderParentID, nodeTypeFolder, folderTitle, folderPosition, userID)
 			if err != nil {
 				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
 
-			// 获取新创建的文件夹ID
 			newFolderID, err := res.LastInsertId()
 			if err != nil {
 				respondError(w, http.StatusInternalServerError, err)
@@ -644,23 +665,20 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 
 			Debug("Replace模式：重新创建文件夹，新ID=%d", newFolderID)
 
-			// 更新parent_id为新创建的文件夹ID
 			req.ParentID = &newFolderID
 		} else {
-			// 如果没有指定parent_id，删除所有数据
-			Debug("Replace模式：删除所有数据")
-			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
+			Debug("执行replace模式，删除所有数据")
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE user_id = ?", userID); err != nil {
 				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
 		}
 	}
 
-	// 递归导入节点
 	Debug("开始导入节点，parentID=%v, mode=%s", req.ParentID, req.Mode)
 	stats := &importStats{}
 	faviconQueue := []int64{}
-	if err = s.importNodes(tx, r.Context(), req.Bookmarks, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
+	if err = s.importNodes(tx, r.Context(), userID, req.Bookmarks, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -670,7 +688,6 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 异步获取图标
 	for _, nodeID := range faviconQueue {
 		s.queueFaviconFetch(nodeID)
 	}
@@ -690,6 +707,7 @@ type edgeImportRequest struct {
 
 // 解析Edge HTML书签并导入
 func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
 	var req edgeImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		Error("JSON解码失败: %v", err)
@@ -703,7 +721,6 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析HTML内容为节点结构
 	nodes, err := parseEdgeHTML(req.HTML)
 	if err != nil {
 		Error("HTML解析失败: %v", err)
@@ -729,14 +746,12 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// 如果是replace模式
 	if req.Mode == "replace" {
 		if req.ParentID != nil {
-			// 1. 先获取要删除的文件夹信息
 			var folderTitle string
 			var folderPosition int
 			var folderParentID *int64
-			err := tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ?", *req.ParentID).Scan(&folderTitle, &folderPosition, &folderParentID)
+			err := tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID).Scan(&folderTitle, &folderPosition, &folderParentID)
 			if err != nil {
 				Error("获取文件夹信息失败: %v", err)
 				respondError(w, http.StatusInternalServerError, err)
@@ -745,25 +760,22 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 
 			Debug("Replace模式：删除文件夹 ID=%d, 标题=%s", *req.ParentID, folderTitle)
 
-			// 2. 删除指定文件夹及其所有子节点
-			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ?", *req.ParentID); err != nil {
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID); err != nil {
 				Error("删除数据失败: %v", err)
 				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
 
-			// 3. 重新创建文件夹
 			res, err := tx.ExecContext(r.Context(), `
-				INSERT INTO nodes (parent_id, type, title, position)
-				VALUES (?, ?, ?, ?)
-			`, folderParentID, nodeTypeFolder, folderTitle, folderPosition)
+				INSERT INTO nodes (parent_id, type, title, position, user_id)
+				VALUES (?, ?, ?, ?, ?)
+			`, folderParentID, nodeTypeFolder, folderTitle, folderPosition, userID)
 			if err != nil {
 				Error("创建文件夹失败: %v", err)
 				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
 
-			// 4. 获取新创建的文件夹ID
 			newFolderID, err := res.LastInsertId()
 			if err != nil {
 				Error("获取新文件夹ID失败: %v", err)
@@ -773,12 +785,10 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 
 			Debug("Replace模式：重新创建文件夹，新ID=%d", newFolderID)
 
-			// 5. 更新parent_id为新创建的文件夹ID
 			req.ParentID = &newFolderID
 		} else {
-			// 如果没有指定parent_id，删除所有数据
 			Debug("执行replace模式，删除所有数据")
-			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes"); err != nil {
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE user_id = ?", userID); err != nil {
 				Error("删除数据失败: %v", err)
 				respondError(w, http.StatusInternalServerError, err)
 				return
@@ -786,11 +796,10 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 递归导入节点
 	stats := &importStats{}
 	Debug("开始导入节点，共%d个根节点，父文件夹ID=%v", len(nodes), req.ParentID)
 	faviconQueue := []int64{}
-	if err = s.importNodes(tx, r.Context(), nodes, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
+	if err = s.importNodes(tx, r.Context(), userID, nodes, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
 		Error("导入节点失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -803,7 +812,6 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 异步获取图标
 	for _, nodeID := range faviconQueue {
 		s.queueFaviconFetch(nodeID)
 	}
@@ -1019,22 +1027,19 @@ func extractText(n *html.Node) string {
 	return strings.TrimSpace(text.String())
 }
 
-func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, parentID *int64, mode string, stats *importStats, fetchMetadata bool, faviconQueue *[]int64) error {
-	// 在merge模式下，验证parent_id是否存在，如果不存在则创建
-	// 在replace模式下，如果parent_id不存在，也创建一个临时文件夹
+func (s *server) importNodes(tx *sql.Tx, ctx context.Context, userID int64, nodes []*node, parentID *int64, mode string, stats *importStats, fetchMetadata bool, faviconQueue *[]int64) error {
 	if parentID != nil {
 		var count int
 		var err error
-		if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE id = ?", *parentID).Scan(&count); err != nil {
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE id = ? AND user_id = ?", *parentID, userID).Scan(&count); err != nil {
 			return err
 		}
 		if count == 0 {
-			// parent_id不存在，创建一个临时文件夹
 			Debug("警告：parent_id %d 不存在，创建临时文件夹", *parentID)
 			res, err := tx.ExecContext(ctx, `
-				INSERT INTO nodes (parent_id, type, title, position)
-				VALUES (NULL, ?, ?, 0)
-			`, nodeTypeFolder, "临时文件夹")
+				INSERT INTO nodes (parent_id, type, title, position, user_id)
+				VALUES (NULL, ?, ?, 0, ?)
+			`, nodeTypeFolder, "临时文件夹", userID)
 			if err != nil {
 				return err
 			}
@@ -1047,22 +1052,20 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 	}
 
 	for pos, node := range nodes {
-		// 插入当前节点
 		var newID int64
 		var err error
 
 		switch node.Type {
 		case nodeTypeFolder:
-			// 检查文件夹是否已存在（仅在merge模式下检查）
 			var exists bool
 			if mode == "merge" {
 				var count int
 				if parentID == nil {
-					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ?", nodeTypeFolder, node.Title).Scan(&count); err != nil {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND user_id = ?", nodeTypeFolder, node.Title, userID).Scan(&count); err != nil {
 						return err
 					}
 				} else {
-					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ?", nodeTypeFolder, *parentID, node.Title).Scan(&count); err != nil {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND user_id = ?", nodeTypeFolder, *parentID, node.Title, userID).Scan(&count); err != nil {
 						return err
 					}
 				}
@@ -1070,23 +1073,21 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 			}
 
 			if exists {
-				// 文件夹已存在，获取其ID并继续导入子节点
 				if parentID == nil {
-					if err = tx.QueryRowContext(ctx, "SELECT id FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ?", nodeTypeFolder, node.Title).Scan(&newID); err != nil {
+					if err = tx.QueryRowContext(ctx, "SELECT id FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND user_id = ?", nodeTypeFolder, node.Title, userID).Scan(&newID); err != nil {
 						return err
 					}
 				} else {
-					if err = tx.QueryRowContext(ctx, "SELECT id FROM nodes WHERE type = ? AND parent_id = ? AND title = ?", nodeTypeFolder, *parentID, node.Title).Scan(&newID); err != nil {
+					if err = tx.QueryRowContext(ctx, "SELECT id FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND user_id = ?", nodeTypeFolder, *parentID, node.Title, userID).Scan(&newID); err != nil {
 						return err
 					}
 				}
 				stats.Skipped++
 			} else {
-				// 插入文件夹
 				res, err := tx.ExecContext(ctx, `
-					INSERT INTO nodes (parent_id, type, title, position)
-					VALUES (?, ?, ?, ?)
-				`, parentID, nodeTypeFolder, node.Title, pos)
+					INSERT INTO nodes (parent_id, type, title, position, user_id)
+					VALUES (?, ?, ?, ?, ?)
+				`, parentID, nodeTypeFolder, node.Title, pos, userID)
 				if err != nil {
 					return err
 				}
@@ -1097,9 +1098,8 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 				stats.Folders++
 			}
 
-			// 递归导入子节点
 			if len(node.Children) > 0 {
-				if err = s.importNodes(tx, ctx, node.Children, &newID, mode, stats, fetchMetadata, faviconQueue); err != nil {
+				if err = s.importNodes(tx, ctx, userID, node.Children, &newID, mode, stats, fetchMetadata, faviconQueue); err != nil {
 					return err
 				}
 			}
@@ -1107,19 +1107,18 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 		case nodeTypeBookmark:
 			if node.URL == nil {
 				stats.Skipped++
-				continue // 跳过无效的书签
+				continue
 			}
 
-			// 检查书签是否已存在（仅在merge模式下检查）
 			var exists bool
 			if mode == "merge" {
 				var count int
 				if parentID == nil {
-					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND url = ?", nodeTypeBookmark, node.Title, *node.URL).Scan(&count); err != nil {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND url = ? AND user_id = ?", nodeTypeBookmark, node.Title, *node.URL, userID).Scan(&count); err != nil {
 						return err
 					}
 				} else {
-					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND url = ?", nodeTypeBookmark, *parentID, node.Title, *node.URL).Scan(&count); err != nil {
+					if err = tx.QueryRowContext(ctx, "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND url = ? AND user_id = ?", nodeTypeBookmark, *parentID, node.Title, *node.URL, userID).Scan(&count); err != nil {
 						return err
 					}
 				}
@@ -1129,18 +1128,16 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 			if exists {
 				stats.Skipped++
 			} else {
-				// 如果没有图标，根据参数决定是否自动获取
 				var favicon *string
 				if node.FaviconURL != nil {
 					tmp := *node.FaviconURL
 					favicon = &tmp
 				}
 
-				// 插入书签
 				res, err := tx.ExecContext(ctx, `
-					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position)
-					VALUES (?, ?, ?, ?, ?, ?)
-				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, pos)
+					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position, user_id)
+					VALUES (?, ?, ?, ?, ?, ?, ?)
+				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, pos, userID)
 				if err != nil {
 					return err
 				}
@@ -1150,7 +1147,6 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, nodes []*node, par
 				}
 				stats.Bookmarks++
 
-				// 如果需要获取图标且没有图标，加入异步队列
 				if fetchMetadata && favicon == nil {
 					*faviconQueue = append(*faviconQueue, newID)
 				}
@@ -1168,12 +1164,13 @@ var (
 	ErrDuplicateBookmark   = errors.New("同一文件夹中已存在相同名称和网址的收藏")
 )
 
-func (s *server) loadTree(ctx context.Context) ([]*node, error) {
+func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, parent_id, type, title, url, favicon_url, position, created_at, updated_at
 		FROM nodes
+		WHERE user_id = ?
 		ORDER BY parent_id IS NOT NULL, parent_id, position, id
-	`)
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,7 +1278,7 @@ func sortNodes(nodes []*node) {
 	}
 }
 
-func (s *server) insertNode(ctx context.Context, nType, title string, parentID *int64, url, favicon *string) (*node, error) {
+func (s *server) insertNode(ctx context.Context, userID int64, nType, title string, parentID *int64, url, favicon *string) (*node, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -1294,7 +1291,7 @@ func (s *server) insertNode(ctx context.Context, nType, title string, parentID *
 
 	if parentID != nil {
 		var parentType string
-		if err := tx.QueryRowContext(ctx, "SELECT type FROM nodes WHERE id = ?", *parentID).Scan(&parentType); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT type FROM nodes WHERE id = ? AND user_id = ?", *parentID, userID).Scan(&parentType); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				err = ErrInvalidParent
 			}
@@ -1308,33 +1305,33 @@ func (s *server) insertNode(ctx context.Context, nType, title string, parentID *
 
 	switch nType {
 	case nodeTypeFolder:
-		if err := ensureUniqueFolderTx(tx, parentID, title, nil); err != nil {
+		if err := ensureUniqueFolderTx(tx, userID, parentID, title, nil); err != nil {
 			return nil, err
 		}
 	case nodeTypeBookmark:
 		if url == nil || strings.TrimSpace(*url) == "" {
 			return nil, ErrInvalidUpdate
 		}
-		if err := ensureUniqueBookmarkTx(tx, parentID, title, *url, nil); err != nil {
+		if err := ensureUniqueBookmarkTx(tx, userID, parentID, title, *url, nil); err != nil {
 			return nil, err
 		}
 	}
 
 	var nextPos int
 	if parentID == nil {
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position), -1) + 1 FROM nodes WHERE parent_id IS NULL").Scan(&nextPos); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position), -1) + 1 FROM nodes WHERE parent_id IS NULL AND user_id = ?", userID).Scan(&nextPos); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position), -1) + 1 FROM nodes WHERE parent_id = ?", *parentID).Scan(&nextPos); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position), -1) + 1 FROM nodes WHERE parent_id = ? AND user_id = ?", *parentID, userID).Scan(&nextPos); err != nil {
 			return nil, err
 		}
 	}
 
 	res, execErr := tx.ExecContext(ctx, `
-		INSERT INTO nodes (parent_id, type, title, url, favicon_url, position)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, parentID, nType, title, url, favicon, nextPos)
+		INSERT INTO nodes (parent_id, type, title, url, favicon_url, position, user_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, parentID, nType, title, url, favicon, nextPos, userID)
 	if execErr != nil {
 		err = execErr
 		return nil, err
@@ -1371,7 +1368,7 @@ func (s *server) insertNode(ctx context.Context, nType, title string, parentID *
 	return insertedNode, nil
 }
 
-func (s *server) updateNode(ctx context.Context, id int64, req updateNodeRequest) error {
+func (s *server) updateNode(ctx context.Context, userID int64, id int64, req updateNodeRequest) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1389,7 +1386,7 @@ func (s *server) updateNode(ctx context.Context, id int64, req updateNodeRequest
 		URL      sql.NullString
 		Favicon  sql.NullString
 	}
-	err = tx.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url FROM nodes WHERE id = ?", id).Scan(
+	err = tx.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
 		&current.Type, &current.ParentID, &current.Title, &current.URL, &current.Favicon,
 	)
 	if err != nil {
@@ -1402,7 +1399,7 @@ func (s *server) updateNode(ctx context.Context, id int64, req updateNodeRequest
 			return err
 		}
 		var parentType string
-		if err = tx.QueryRowContext(ctx, "SELECT type FROM nodes WHERE id = ?", *req.ParentID).Scan(&parentType); err != nil {
+		if err = tx.QueryRowContext(ctx, "SELECT type FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID).Scan(&parentType); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				err = ErrInvalidParent
 			}
@@ -1412,7 +1409,7 @@ func (s *server) updateNode(ctx context.Context, id int64, req updateNodeRequest
 			err = ErrInvalidParent
 			return err
 		}
-		isCycle, cycErr := s.parentCreatesCycle(tx, id, *req.ParentID)
+		isCycle, cycErr := s.parentCreatesCycle(tx, userID, id, *req.ParentID)
 		if cycErr != nil {
 			return cycErr
 		}
@@ -1515,7 +1512,7 @@ func (s *server) updateNode(ctx context.Context, id int64, req updateNodeRequest
 	switch current.Type {
 	case nodeTypeFolder:
 		if titleSet || parentSet {
-			if err := ensureUniqueFolderTx(tx, targetParentID, targetTitle, &id); err != nil {
+			if err := ensureUniqueFolderTx(tx, userID, targetParentID, targetTitle, &id); err != nil {
 				return err
 			}
 		}
@@ -1525,7 +1522,7 @@ func (s *server) updateNode(ctx context.Context, id int64, req updateNodeRequest
 			return err
 		}
 		if titleSet || urlSet || parentSet {
-			if err := ensureUniqueBookmarkTx(tx, targetParentID, targetTitle, targetURL, &id); err != nil {
+			if err := ensureUniqueBookmarkTx(tx, userID, targetParentID, targetTitle, targetURL, &id); err != nil {
 				return err
 			}
 		}
@@ -1573,7 +1570,7 @@ func (s *server) updateNode(ctx context.Context, id int64, req updateNodeRequest
 	return tx.Commit()
 }
 
-func (s *server) reorderNodes(ctx context.Context, parentID *int64, orderedIDs []int64) error {
+func (s *server) reorderNodes(ctx context.Context, userID int64, parentID *int64, orderedIDs []int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1588,14 +1585,15 @@ func (s *server) reorderNodes(ctx context.Context, parentID *int64, orderedIDs [
 	placeholders = strings.TrimSuffix(placeholders, ",")
 	args := make([]any, 0, len(orderedIDs)+1)
 	args = append(args, orderedIDsToAny(orderedIDs)...)
-
 	var count int
 	var query string
 	if parentID == nil {
-		query = fmt.Sprintf("SELECT COUNT(*) FROM nodes WHERE parent_id IS NULL AND id IN (%s)", placeholders)
+		query = fmt.Sprintf("SELECT COUNT(*) FROM nodes WHERE parent_id IS NULL AND id IN (%s) AND user_id = ?", placeholders)
+		args = append(args, userID)
 	} else {
-		query = fmt.Sprintf("SELECT COUNT(*) FROM nodes WHERE parent_id = ? AND id IN (%s)", placeholders)
+		query = fmt.Sprintf("SELECT COUNT(*) FROM nodes WHERE parent_id = ? AND id IN (%s) AND user_id = ?", placeholders)
 		args = append([]any{*parentID}, args...)
+		args = append(args, userID)
 	}
 
 	if err := tx.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
@@ -1606,7 +1604,7 @@ func (s *server) reorderNodes(ctx context.Context, parentID *int64, orderedIDs [
 	}
 
 	for pos, id := range orderedIDs {
-		if _, err := tx.ExecContext(ctx, "UPDATE nodes SET position = ? WHERE id = ?", pos, id); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE nodes SET position = ? WHERE id = ? AND user_id = ?", pos, id, userID); err != nil {
 			return err
 		}
 	}
@@ -1614,15 +1612,15 @@ func (s *server) reorderNodes(ctx context.Context, parentID *int64, orderedIDs [
 	return tx.Commit()
 }
 
-func ensureUniqueFolderTx(tx *sql.Tx, parentID *int64, title string, excludeID *int64) error {
+func ensureUniqueFolderTx(tx *sql.Tx, userID int64, parentID *int64, title string, excludeID *int64) error {
 	var query string
 	var args []any
 	if parentID == nil {
-		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ?"
-		args = []any{nodeTypeFolder, title}
+		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND user_id = ?"
+		args = []any{nodeTypeFolder, title, userID}
 	} else {
-		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ?"
-		args = []any{nodeTypeFolder, *parentID, title}
+		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND user_id = ?"
+		args = []any{nodeTypeFolder, *parentID, title, userID}
 	}
 	if excludeID != nil {
 		query += " AND id != ?"
@@ -1638,15 +1636,15 @@ func ensureUniqueFolderTx(tx *sql.Tx, parentID *int64, title string, excludeID *
 	return nil
 }
 
-func ensureUniqueBookmarkTx(tx *sql.Tx, parentID *int64, title, url string, excludeID *int64) error {
+func ensureUniqueBookmarkTx(tx *sql.Tx, userID int64, parentID *int64, title, url string, excludeID *int64) error {
 	var query string
 	var args []any
 	if parentID == nil {
-		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND url = ?"
-		args = []any{nodeTypeBookmark, title, url}
+		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id IS NULL AND title = ? AND url = ? AND user_id = ?"
+		args = []any{nodeTypeBookmark, title, url, userID}
 	} else {
-		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND url = ?"
-		args = []any{nodeTypeBookmark, *parentID, title, url}
+		query = "SELECT COUNT(1) FROM nodes WHERE type = ? AND parent_id = ? AND title = ? AND url = ? AND user_id = ?"
+		args = []any{nodeTypeBookmark, *parentID, title, url, userID}
 	}
 	if excludeID != nil {
 		query += " AND id != ?"
@@ -1670,14 +1668,14 @@ func orderedIDsToAny(ids []int64) []any {
 	return out
 }
 
-func (s *server) parentCreatesCycle(tx *sql.Tx, nodeID, newParentID int64) (bool, error) {
+func (s *server) parentCreatesCycle(tx *sql.Tx, userID int64, nodeID, newParentID int64) (bool, error) {
 	current := newParentID
 	for {
 		if current == nodeID {
 			return true, nil
 		}
 		var parent sql.NullInt64
-		if err := tx.QueryRow("SELECT parent_id FROM nodes WHERE id = ?", current).Scan(&parent); err != nil {
+		if err := tx.QueryRow("SELECT parent_id FROM nodes WHERE id = ? AND user_id = ?", current, userID).Scan(&parent); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return false, ErrInvalidParent
 			}
@@ -1690,15 +1688,15 @@ func (s *server) parentCreatesCycle(tx *sql.Tx, nodeID, newParentID int64) (bool
 	}
 }
 
-func (s *server) getNode(ctx context.Context, id int64) (*node, error) {
+func (s *server) getNode(ctx context.Context, userID int64, id int64) (*node, error) {
 	var n node
 	var parent sql.NullInt64
 	var urlVal sql.NullString
 	var icon sql.NullString
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, parent_id, type, title, url, favicon_url, position, created_at, updated_at
-		FROM nodes WHERE id = ?
-	`, id).Scan(&n.ID, &parent, &n.Type, &n.Title, &urlVal, &icon, &n.Position, &n.CreatedAt, &n.UpdatedAt)
+		FROM nodes WHERE id = ? AND user_id = ?
+	`, id, userID).Scan(&n.ID, &parent, &n.Type, &n.Title, &urlVal, &icon, &n.Position, &n.CreatedAt, &n.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -2042,8 +2040,9 @@ func respondError(w http.ResponseWriter, status int, err error) {
 
 // handleGetConfig 获取配置
 func (s *server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	// 获取所有配置项
-	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM config")
+	userID := getUserID(r)
+	// 获取当前用户的所有配置项
+	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM config WHERE user_id = ?", userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -2090,11 +2089,13 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := getUserID(r)
+
 	// 执行更新或插入操作
 	_, err := s.db.ExecContext(r.Context(), `
-		INSERT INTO config (key, value) VALUES (?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-	`, req.Key, req.Value)
+		INSERT INTO config (user_id, key, value) VALUES (?, ?, ?)
+		ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, userID, req.Key, req.Value)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -2379,4 +2380,318 @@ func (s *server) queueFaviconFetch(nodeID int64) {
 	default:
 		Debug("图标获取队列已满，跳过书签 %d", nodeID)
 	}
+}
+
+// authMiddleware 认证中间件
+func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
+
+		if token == "" {
+			respondError(w, http.StatusUnauthorized, errors.New("未提供认证token"))
+			return
+		}
+
+		var userID int64
+		err := s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				respondError(w, http.StatusUnauthorized, errors.New("无效的token"))
+				return
+			}
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userContextKey, userID)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+// getUserID 从上下文中获取用户ID
+func getUserID(r *http.Request) int64 {
+	if userID, ok := r.Context().Value(userContextKey).(int64); ok {
+		return userID
+	}
+	return 0
+}
+
+// handleRegister 用户注册
+func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	var req registerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+	req.Nickname = strings.TrimSpace(req.Nickname)
+	req.Email = strings.TrimSpace(req.Email)
+
+	if req.Username == "" || req.Password == "" {
+		respondError(w, http.StatusBadRequest, errors.New("用户名和密码不能为空"))
+		return
+	}
+
+	if len(req.Password) < 6 {
+		respondError(w, http.StatusBadRequest, errors.New("密码长度不能少于6位"))
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("密码加密失败: %w", err))
+		return
+	}
+
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback()
+
+	var userCount int
+	err = tx.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	isAdmin := userCount == 0
+
+	var userID int64
+	nickname := req.Nickname
+	if nickname == "" {
+		nickname = req.Username
+	}
+
+	result, err := tx.Exec(`
+		INSERT INTO users (username, password, nickname, email, is_admin)
+		VALUES (?, ?, ?, ?, ?)
+	`, req.Username, string(hashedPassword), nickname, req.Email, isAdmin)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			respondError(w, http.StatusBadRequest, errors.New("用户名已存在"))
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	userID, err = result.LastInsertId()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	token := uuid.New().String()
+	_, err = tx.Exec("UPDATE users SET token = ? WHERE id = ?", token, userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if isAdmin {
+		_, err = tx.Exec("UPDATE nodes SET user_id = ? WHERE user_id = 0", userID)
+		if err != nil {
+			Debug("更新nodes表user_id失败: %v", err)
+		}
+		_, err = tx.Exec("UPDATE config SET user_id = ? WHERE user_id = 0", userID)
+		if err != nil {
+			Debug("更新config表user_id失败: %v", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	user := &user{
+		ID:       userID,
+		Username: req.Username,
+		Nickname: nickname,
+		Email:    req.Email,
+		IsAdmin:  isAdmin,
+		IsActive: true,
+	}
+
+	respondJSON(w, http.StatusCreated, authResponse{
+		Token: token,
+		User:  user,
+	})
+}
+
+// handleLogin 用户登录
+func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req authRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+
+	if req.Username == "" || req.Password == "" {
+		respondError(w, http.StatusBadRequest, errors.New("用户名和密码不能为空"))
+		return
+	}
+
+	var dbUser struct {
+		ID        int64
+		Username  string
+		Password  string
+		Nickname  string
+		Email     string
+		Avatar    string
+		IsActive  int
+		IsAdmin   int
+		Token     string
+		CreatedAt string
+	}
+
+	err := s.db.QueryRow(`
+		SELECT id, username, password, nickname, email, COALESCE(avatar, '') as avatar, is_active, is_admin, token, created_at
+		FROM users WHERE username = ?
+	`, req.Username).Scan(
+		&dbUser.ID, &dbUser.Username, &dbUser.Password, &dbUser.Nickname,
+		&dbUser.Email, &dbUser.Avatar, &dbUser.IsActive, &dbUser.IsAdmin,
+		&dbUser.Token, &dbUser.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			respondError(w, http.StatusUnauthorized, errors.New("用户名或密码错误"))
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if dbUser.IsActive != 1 {
+		respondError(w, http.StatusForbidden, errors.New("用户已被禁用"))
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(req.Password))
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, errors.New("用户名或密码错误"))
+		return
+	}
+
+	if dbUser.Token == "" {
+		dbUser.Token = uuid.New().String()
+		_, err = s.db.Exec("UPDATE users SET token = ? WHERE id = ?", dbUser.Token, dbUser.ID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
+	user := &user{
+		ID:        dbUser.ID,
+		Username:  dbUser.Username,
+		Nickname:  dbUser.Nickname,
+		Email:     dbUser.Email,
+		Avatar:    dbUser.Avatar,
+		IsActive:  dbUser.IsActive == 1,
+		IsAdmin:   dbUser.IsAdmin == 1,
+		CreatedAt: dbUser.CreatedAt,
+	}
+
+	respondJSON(w, http.StatusOK, authResponse{
+		Token: dbUser.Token,
+		User:  user,
+	})
+}
+
+// handleLogout 用户登出
+func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+
+	if token != "" {
+		_, err := s.db.Exec("UPDATE users SET token = NULL WHERE token = ?", token)
+		if err != nil {
+			Debug("清除token失败: %v", err)
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "登出成功"})
+}
+
+// handleGetCurrentUser 获取当前登录用户信息
+func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	var dbUser struct {
+		ID        int64
+		Username  string
+		Nickname  string
+		Email     string
+		Avatar    string
+		IsActive  int
+		IsAdmin   int
+		CreatedAt string
+	}
+
+	err := s.db.QueryRow(`
+		SELECT id, username, nickname, email, COALESCE(avatar, '') as avatar, is_active, is_admin, created_at
+		FROM users WHERE id = ?
+	`, userID).Scan(
+		&dbUser.ID, &dbUser.Username, &dbUser.Nickname,
+		&dbUser.Email, &dbUser.Avatar, &dbUser.IsActive, &dbUser.IsAdmin, &dbUser.CreatedAt,
+	)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	user := &user{
+		ID:        dbUser.ID,
+		Username:  dbUser.Username,
+		Nickname:  dbUser.Nickname,
+		Email:     dbUser.Email,
+		Avatar:    dbUser.Avatar,
+		IsActive:  dbUser.IsActive == 1,
+		IsAdmin:   dbUser.IsAdmin == 1,
+		CreatedAt: dbUser.CreatedAt,
+	}
+
+	respondJSON(w, http.StatusOK, user)
+}
+
+// handleCheckAuth 检查登录状态
+func (s *server) handleCheckAuth(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+
+	if token == "" {
+		respondJSON(w, http.StatusOK, map[string]bool{"authenticated": false})
+		return
+	}
+
+	var userID int64
+	err := s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			respondJSON(w, http.StatusOK, map[string]bool{"authenticated": false})
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"authenticated": true,
+		"user_id":       userID,
+	})
 }

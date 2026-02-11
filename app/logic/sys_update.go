@@ -400,7 +400,8 @@ func (u *Upgrade) splitSQLStatements(sqlContent string) []string {
 	var currentStmt strings.Builder
 	inBlockComment := false
 	inStringLiteral := false
-	stringDelimiter := byte(0) // 0 表示不在字符串中, ' 或 " 表示字符串分隔符
+	stringDelimiter := byte(0)
+	inBeginEndBlock := false
 
 	for _, line := range lines {
 		// 检查是否在块注释中
@@ -452,24 +453,36 @@ func (u *Upgrade) splitSQLStatements(sqlContent string) []string {
 					inStringLiteral = false
 					stringDelimiter = 0
 				}
-			} else if !inStringLiteral && char == ';' {
-				// 找到语句结束符
-				currentStmt.WriteString(line[:i+1]) // 包含分号
-
-				statement := strings.TrimSpace(currentStmt.String())
-				if statement != "" {
-					// 移除行注释
-					statement = u.removeCommentsFromStatement(statement)
-					if strings.TrimSpace(statement) != "" {
-						statements = append(statements, statement)
-					}
+			} else if !inStringLiteral {
+				// 检查 BEGIN 关键字（用于触发器）
+				trimmedLine := strings.TrimSpace(line[:i+1])
+				if strings.ToUpper(trimmedLine) == "BEGIN" {
+					inBeginEndBlock = true
 				}
+				// 检查 END 关键字
+				if strings.ToUpper(trimmedLine) == "END" {
+					inBeginEndBlock = false
+				}
+				// 只有在非 BEGIN...END 块中，分号才表示语句结束
+				if !inBeginEndBlock && char == ';' {
+					// 找到语句结束符
+					currentStmt.WriteString(line[:i+1]) // 包含分号
 
-				// 重置并处理剩余部分
-				currentStmt.Reset()
-				line = strings.TrimSpace(line[i+1:])
-				i = 0
-				continue
+					statement := strings.TrimSpace(currentStmt.String())
+					if statement != "" {
+						// 移除行注释
+						statement = u.removeCommentsFromStatement(statement)
+						if strings.TrimSpace(statement) != "" {
+							statements = append(statements, statement)
+						}
+					}
+
+					// 重置并处理剩余部分
+					currentStmt.Reset()
+					line = strings.TrimSpace(line[i+1:])
+					i = 0
+					continue
+				}
 			}
 
 			i++
