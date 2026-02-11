@@ -650,6 +650,12 @@
       <header class="mobile-header" @click="handleHeaderClick">
         <h1>收藏夹</h1>
         <div class="header-actions">
+          <div class="user-info-mobile">
+            <span class="user-name">{{ currentUser ? currentUser.nickname || currentUser.username : '未登录' }}</span>
+          </div>
+          <button class="action-btn" title="退出" @click="logout">
+            <span>🚪</span>
+          </button>
           <button class="action-btn" title="主题切换" @click="toggleTheme">
             <span>{{ isDarkTheme ? '☀️' : '🌙' }}</span>
           </button>

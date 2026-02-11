@@ -93,6 +93,13 @@
           <span>⚙️</span>
           <span>配置</span>
         </button>
+        <div class="user-info" style="margin-left: 1rem;">
+          <span class="user-name">{{ currentUser ? currentUser.nickname || currentUser.username : '未登录' }}</span>
+          <button class="tertiary small" @click="logout" style="margin-left: 0.5rem;">
+            <span>🚪</span>
+            <span>退出</span>
+          </button>
+        </div>
         <span class="version-info" style="margin-left: 1rem; color: #888; font-size: 0.8rem;">v{{ version }}</span>
       </div>
     </div>
