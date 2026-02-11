@@ -235,78 +235,11 @@ func initializeDB(db *sql.DB) error {
 		return err
 	}
 
-	// 数据库版本管理：创建version表（如果不存在）
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS version (
-			id INTEGER PRIMARY KEY,
-			version INTEGER NOT NULL,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`); err != nil {
-		return err
-	}
-
-	// 检查当前数据库版本
-	var version int
-	err := db.QueryRow("SELECT version FROM version WHERE id = 1").Scan(&version)
-	if err != nil && err != sql.ErrNoRows {
-		return err
-	}
-
-	// 如果版本表为空，插入初始版本1
-	if err == sql.ErrNoRows {
-		if _, err := db.Exec("INSERT INTO version (id, version) VALUES (1, 1)"); err != nil {
-			return err
-		}
-		version = 1
-	}
-
-	// 执行数据库升级
-	if err := upgradeDatabase(db, version); err != nil {
-		return err
-	}
-
 	// 执行系统升级
 	upgrader := logic.NewUpgrade(db, appVersion)
 	if err := upgrader.PerformUpgrade(); err != nil {
 		log.Printf("系统升级失败: %v", err)
 		// 注意：这里我们记录错误但不返回错误，以避免阻止系统启动
-	}
-
-	return nil
-}
-
-// upgradeDatabase 执行数据库升级
-func upgradeDatabase(db *sql.DB, currentVersion int) error {
-	// 升级到版本2：添加配置表
-	if currentVersion < 2 {
-		if _, err := db.Exec(`
-			CREATE TABLE IF NOT EXISTS config (
-				key TEXT PRIMARY KEY,
-				value TEXT NOT NULL,
-				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-			);
-		`); err != nil {
-			return err
-		}
-
-		// 创建config表的updated_at触发器
-		if _, err := db.Exec(`
-			CREATE TRIGGER IF NOT EXISTS trg_config_updated_at
-			AFTER UPDATE ON config
-			BEGIN
-				UPDATE config SET updated_at = CURRENT_TIMESTAMP WHERE key = NEW.key;
-			END;
-		`); err != nil {
-			return err
-		}
-
-		// 更新版本号
-		if _, err := db.Exec("UPDATE version SET version = 2 WHERE id = 1"); err != nil {
-			return err
-		}
-		currentVersion = 2
 	}
 
 	return nil
