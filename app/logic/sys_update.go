@@ -31,7 +31,6 @@ type Upgrade struct {
 	currentVersion string
 	logger         *log.Logger
 	upgradeLogger  *log.Logger // 升级专用日志记录器
-	sqlDir         string
 }
 
 // NewUpgrade 创建升级管理器实例
@@ -40,7 +39,6 @@ func NewUpgrade(db *sql.DB, currentVersion string) *Upgrade {
 		db:             db,
 		currentVersion: currentVersion,
 		logger:         log.New(os.Stdout, "[UPGRADE] ", log.LstdFlags),
-		sqlDir:         "sql",
 	}
 
 	// 创建升级日志记录器
@@ -50,11 +48,6 @@ func NewUpgrade(db *sql.DB, currentVersion string) *Upgrade {
 		upgrade.upgradeLogger = upgrade.logger // 回退到标准输出
 	} else {
 		upgrade.upgradeLogger = upgradeLogger
-	}
-
-	// 确保SQL目录存在
-	if _, err := os.Stat(upgrade.sqlDir); os.IsNotExist(err) {
-		os.MkdirAll(upgrade.sqlDir, 0755)
 	}
 
 	return upgrade
@@ -221,40 +214,20 @@ func CompareVersions(v1, v2 string) (int, error) {
 
 // GetAvailableVersions 获取可用的升级版本列表
 func (u *Upgrade) GetAvailableVersions(fromVersion string) ([]string, error) {
-	// 读取SQL目录下的所有SQL文件
-	files, err := os.ReadDir(u.sqlDir)
-	if err != nil {
-		return nil, fmt.Errorf("读取SQL目录失败: %w", err)
-	}
+	// 硬编码所有可用版本
+	allVersions := []string{"v1.7.0"}
 
 	versions := []string{}
-	for _, file := range files {
-		if file.IsDir() {
+	for _, version := range allVersions {
+		// 检查版本是否大于fromVersion
+		cmp, err := CompareVersions(version, fromVersion)
+		if err != nil {
+			u.LogUpgrade("比较版本失败 %s vs %s: %v", version, fromVersion, err)
 			continue
 		}
 
-		filename := file.Name()
-		if strings.HasSuffix(filename, ".sql") {
-			// 提取版本号，例如从 "v1.7.0.sql" 提取 "v1.7.0"
-			version := strings.TrimSuffix(filename, ".sql")
-
-			// 验证版本号格式
-			_, _, _, err := ParseVersion(version)
-			if err != nil {
-				u.LogUpgrade("跳过无效版本文件: %s", filename)
-				continue
-			}
-
-			// 检查版本是否大于fromVersion
-			cmp, err := CompareVersions(version, fromVersion)
-			if err != nil {
-				u.LogUpgrade("比较版本失败 %s vs %s: %v", version, fromVersion, err)
-				continue
-			}
-
-			if cmp > 0 { // 当前版本大于fromVersion
-				versions = append(versions, version)
-			}
+		if cmp > 0 {
+			versions = append(versions, version)
 		}
 	}
 
@@ -280,20 +253,13 @@ func (u *Upgrade) ExecuteUpgrade(version string) error {
 		return fmt.Errorf("记录升级开始失败: %w", err)
 	}
 
-	// 尝试执行SQL升级脚本
-	sqlFilePath := filepath.Join(u.sqlDir, version+".sql")
-
-	// 检查SQL文件是否存在
-	if _, err := os.Stat(sqlFilePath); err == nil {
-		u.LogUpgrade("执行SQL升级脚本: %s", sqlFilePath)
-		err = u.executeSQLFile(sqlFilePath)
-		if err != nil {
-			u.LogUpgrade("SQL升级脚本执行失败: %v", err)
-			u.recordUpgradeFailure(version, fmt.Sprintf("SQL脚本执行失败: %v", err))
-			return fmt.Errorf("执行SQL升级脚本失败: %w", err)
-		}
-	} else {
-		u.LogUpgrade("SQL文件不存在，跳过: %s", sqlFilePath)
+	// 执行指定版本的SQL语句
+	u.LogUpgrade("执行版本 %s 的SQL语句", version)
+	err = u.executeSQLForVersion(version)
+	if err != nil {
+		u.LogUpgrade("SQL语句执行失败: %v", err)
+		u.recordUpgradeFailure(version, fmt.Sprintf("SQL语句执行失败: %v", err))
+		return fmt.Errorf("执行SQL语句失败: %w", err)
 	}
 
 	// 执行特定版本的数据处理业务逻辑
@@ -314,222 +280,43 @@ func (u *Upgrade) ExecuteUpgrade(version string) error {
 	return nil
 }
 
-// executeSQLFile 执行SQL文件
-func (u *Upgrade) executeSQLFile(filePath string) error {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("读取SQL文件失败: %w", err)
+// executeSQLForVersion 执行指定版本的SQL语句
+func (u *Upgrade) executeSQLForVersion(version string) error {
+	switch version {
+	case "v1.7.0":
+		return u.executeSQLForV1_7_0()
+	default:
+		return fmt.Errorf("未找到版本 %s 的SQL语句", version)
+	}
+}
+
+// executeSQLForV1_7_0 执行v1.7.0版本的SQL语句
+func (u *Upgrade) executeSQLForV1_7_0() error {
+	sqlStatements := []string{
+		"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, token TEXT, nickname TEXT, avatar TEXT, email TEXT, is_active INTEGER NOT NULL DEFAULT 1, is_admin INTEGER NOT NULL DEFAULT 0, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);",
+		"CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);",
+		"CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);",
+		"CREATE INDEX IF NOT EXISTS idx_users_token ON users(token);",
+		"CREATE TRIGGER IF NOT EXISTS trg_users_updated_at AFTER UPDATE ON users BEGIN UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;",
+		"ALTER TABLE nodes ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0;",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_user_id ON nodes(user_id);",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_user_parent ON nodes(user_id, parent_id);",
+		"CREATE TABLE IF NOT EXISTS sys_config (user_id INTEGER NOT NULL DEFAULT 0, key TEXT NOT NULL, value TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, key));",
+		"CREATE TRIGGER IF NOT EXISTS trg_sys_config_updated_at AFTER UPDATE ON sys_config BEGIN UPDATE sys_config SET updated_at = CURRENT_TIMESTAMP WHERE user_id = NEW.user_id AND key = NEW.key; END;",
+		"CREATE INDEX IF NOT EXISTS idx_sys_config_user_key ON sys_config(user_id, key);",
+		"DROP TABLE IF EXISTS config;",
+		"DROP TABLE IF EXISTS version;",
 	}
 
-	sqlContent := string(content)
-
-	// 分割SQL语句并执行
-	statements := u.splitSQLStatements(sqlContent)
-
-	for i, stmt := range statements {
-		stmt = strings.TrimSpace(stmt)
-		if stmt == "" {
-			continue
-		}
-
-		u.LogUpgrade("执行SQL语句 #%d/%d: %s", i+1, len(statements), truncateString(stmt, 100))
-
+	for i, stmt := range sqlStatements {
+		u.LogUpgrade("执行SQL语句 #%d/%d: %s", i+1, len(sqlStatements), truncateString(stmt, 100))
 		_, err := u.db.Exec(stmt)
 		if err != nil {
-			// 检查是否是因为重复创建引起的错误，如果是则忽略
-			errMsg := err.Error()
-			if u.shouldIgnoreError(stmt, errMsg) {
-				u.LogUpgrade("SQL语句因已存在而被忽略（正常情况）: %s", truncateString(stmt, 100))
-				continue
-			}
 			return fmt.Errorf("执行SQL语句失败: %w, 语句: %s", err, stmt)
 		}
 	}
 
 	return nil
-}
-
-// shouldIgnoreError 判断错误是否应该被忽略（即对象已存在）
-func (u *Upgrade) shouldIgnoreError(stmt, errMsg string) bool {
-	stmtUpper := strings.ToUpper(strings.TrimSpace(stmt))
-
-	// 检查是否是创建表的语句
-	if strings.Contains(stmtUpper, "CREATE TABLE") && strings.Contains(stmtUpper, "IF NOT EXISTS") {
-		// 如果使用了 IF NOT EXISTS，则不应该忽略任何错误
-		return false
-	}
-
-	// 检查是否是创建索引的语句
-	if strings.Contains(stmtUpper, "CREATE INDEX") && strings.Contains(stmtUpper, "IF NOT EXISTS") {
-		// 如果使用了 IF NOT EXISTS，则不应该忽略任何错误
-		return false
-	}
-
-	// 检查错误消息是否包含"已存在"类型的错误
-	if strings.Contains(errMsg, "duplicate column name") ||
-		strings.Contains(errMsg, "column already exists") ||
-		strings.Contains(errMsg, "already exists") ||
-		strings.Contains(errMsg, "table.*already exists") ||
-		strings.Contains(errMsg, "index.*already exists") {
-		return true
-	}
-
-	// 对于 ALTER TABLE ADD COLUMN 语句，如果有重复列错误则忽略
-	if strings.Contains(stmtUpper, "ALTER TABLE") && strings.Contains(stmtUpper, "ADD") {
-		if strings.Contains(errMsg, "duplicate column name") {
-			return true
-		}
-	}
-
-	return false
-}
-
-// splitSQLStatements 分割SQL语句
-func (u *Upgrade) splitSQLStatements(sqlContent string) []string {
-	statements := []string{}
-
-	// 确保内容以换行符结尾，便于处理
-	content := strings.ReplaceAll(sqlContent, "\r\n", "\n")
-	if !strings.HasSuffix(content, "\n") {
-		content += "\n"
-	}
-
-	// 将内容按行分割
-	lines := strings.Split(content, "\n")
-
-	var currentStmt strings.Builder
-	inBlockComment := false
-	inStringLiteral := false
-	stringDelimiter := byte(0)
-	inBeginEndBlock := false
-
-	for _, line := range lines {
-		// 检查是否在块注释中
-		if !inStringLiteral && strings.Contains(line, "/*") {
-			// 检查是否在同一行开始和结束
-			startIdx := strings.Index(line, "/*")
-			endIdx := strings.Index(line[startIdx+2:], "*/")
-
-			if endIdx != -1 {
-				// 注释在同一行开始和结束
-				endIdx += startIdx + 2
-				// 移除注释部分
-				line = line[:startIdx] + line[endIdx+2:]
-			} else {
-				// 注释开始，但不结束
-				inBlockComment = true
-				continue
-			}
-		}
-
-		if inBlockComment {
-			endIdx := strings.Index(line, "*/")
-			if endIdx != -1 {
-				// 注释结束
-				inBlockComment = false
-				line = line[endIdx+2:]
-			} else {
-				// 整行都是注释
-				continue
-			}
-		}
-
-		if inBlockComment {
-			continue
-		}
-
-		// 处理行内的内容
-		i := 0
-		for i < len(line) {
-			char := line[i]
-
-			// 检查是否是字符串开始/结束
-			if !inStringLiteral && (char == '\'' || char == '"') {
-				inStringLiteral = true
-				stringDelimiter = char
-			} else if inStringLiteral && char == stringDelimiter {
-				// 检查是否是转义的引号
-				if i > 0 && line[i-1] != '\\' {
-					inStringLiteral = false
-					stringDelimiter = 0
-				}
-			} else if !inStringLiteral {
-				// 检查 BEGIN 关键字（用于触发器）
-				trimmedLine := strings.TrimSpace(line[:i+1])
-				if strings.ToUpper(trimmedLine) == "BEGIN" {
-					inBeginEndBlock = true
-				}
-				// 检查 END 关键字
-				if strings.ToUpper(trimmedLine) == "END" {
-					inBeginEndBlock = false
-				}
-				// 只有在非 BEGIN...END 块中，分号才表示语句结束
-				if !inBeginEndBlock && char == ';' {
-					// 找到语句结束符
-					currentStmt.WriteString(line[:i+1]) // 包含分号
-
-					statement := strings.TrimSpace(currentStmt.String())
-					if statement != "" {
-						// 移除行注释
-						statement = u.removeCommentsFromStatement(statement)
-						if strings.TrimSpace(statement) != "" {
-							statements = append(statements, statement)
-						}
-					}
-
-					// 重置并处理剩余部分
-					currentStmt.Reset()
-					line = strings.TrimSpace(line[i+1:])
-					i = 0
-					continue
-				}
-			}
-
-			i++
-		}
-
-		// 如果行处理完后还有内容，添加到当前语句
-		if len(line) > 0 {
-			if currentStmt.Len() > 0 {
-				currentStmt.WriteString("\n")
-			}
-			currentStmt.WriteString(line)
-		}
-	}
-
-	// 处理最后一个语句（如果没有以分号结尾）
-	if currentStmt.Len() > 0 {
-		statement := strings.TrimSpace(currentStmt.String())
-		if statement != "" {
-			statement = u.removeCommentsFromStatement(statement)
-			if strings.TrimSpace(statement) != "" {
-				statements = append(statements, statement)
-			}
-		}
-	}
-
-	return statements
-}
-
-// removeCommentsFromStatement 移除语句中的注释
-func (u *Upgrade) removeCommentsFromStatement(stmt string) string {
-	lines := strings.Split(stmt, "\n")
-	var resultLines []string
-
-	for _, line := range lines {
-		// 查找行注释 --
-		commentIdx := strings.Index(line, "--")
-		if commentIdx != -1 {
-			line = line[:commentIdx]
-		}
-
-		line = strings.TrimSpace(line)
-		if line != "" {
-			resultLines = append(resultLines, line)
-		}
-	}
-
-	return strings.Join(resultLines, "\n")
 }
 
 // executeDataProcessingLogic 执行特定版本的数据处理业务逻辑
@@ -550,10 +337,10 @@ func (u *Upgrade) processDataForV1_7_0() error {
 	u.LogUpgrade("执行版本 v1.7.0 的数据处理业务逻辑")
 
 	// 示例：更新配置项
-	_, err := u.db.Exec("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", "feature_flag_v170", "enabled")
-	if err != nil {
-		return fmt.Errorf("更新配置项失败: %w", err)
-	}
+	// _, err := u.db.Exec("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", "feature_flag_v170", "enabled")
+	// if err != nil {
+	// 	return fmt.Errorf("更新配置项失败: %w", err)
+	// }
 
 	return nil
 }
