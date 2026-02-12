@@ -251,14 +251,42 @@ func initializeDB(db *sql.DB) error {
 
 	if tableExists == 0 {
 		log.Println("数据库表不存在，开始初始化")
-		sqlBytes, err := os.ReadFile("sql/init.sql")
-		if err != nil {
-			return fmt.Errorf("读取init.sql失败: %w", err)
+
+		if _, err := db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {
+			log.Println("启用外键约束失败: %w", err)
 		}
 
-		if _, err := db.Exec(string(sqlBytes)); err != nil {
-			return fmt.Errorf("执行init.sql失败: %w", err)
+		if _, err := db.Exec(`
+		-- 创建nodes表
+		CREATE TABLE IF NOT EXISTS nodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL DEFAULT 0,
+    parent_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('folder', 'bookmark')),
+    title TEXT NOT NULL,
+    url TEXT,
+    favicon_url TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`); err != nil {
+			log.Println("创建nodes表失败: %w", err)
 		}
+
+		if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);`); err != nil {
+			log.Println("创建nodes表索引失败: %w", err)
+		}
+
+		if _, err := db.Exec(string(`-- 创建nodes表的updated_at触发器
+CREATE TRIGGER IF NOT EXISTS trg_nodes_updated_at
+AFTER UPDATE ON nodes
+BEGIN
+    UPDATE nodes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;`)); err != nil {
+			log.Println("创建nodes表updated_at触发器失败: %w", err)
+		}
+
 		log.Println("数据库初始化成功")
 	} else {
 		log.Println("数据库表已存在，跳过初始化")
@@ -2042,7 +2070,7 @@ func respondError(w http.ResponseWriter, status int, err error) {
 func (s *server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	// 获取当前用户的所有配置项
-	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM config WHERE user_id = ?", userID)
+	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM sys_config WHERE user_id = ?", userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -2093,7 +2121,7 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	// 执行更新或插入操作
 	_, err := s.db.ExecContext(r.Context(), `
-		INSERT INTO config (user_id, key, value) VALUES (?, ?, ?)
+		INSERT INTO sys_config (user_id, key, value) VALUES (?, ?, ?)
 		ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
 	`, userID, req.Key, req.Value)
 	if err != nil {
@@ -2500,7 +2528,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			Debug("更新nodes表user_id失败: %v", err)
 		}
-		_, err = tx.Exec("UPDATE config SET user_id = ? WHERE user_id = 0", userID)
+		_, err = tx.Exec("UPDATE sys_config SET user_id = ? WHERE user_id = 0", userID)
 		if err != nil {
 			Debug("更新config表user_id失败: %v", err)
 		}
