@@ -64,7 +64,7 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     esac
     
     # 创建目标目录
-    TARGET_DIR="release/bookmarks-v${VERSION}-${PLATFORM}"
+    TARGET_DIR="release/bookmarks-${VERSION}-${PLATFORM}"
     mkdir -p "$TARGET_DIR/static"
     
     # 编译可执行文件
@@ -104,7 +104,7 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     # 创建压缩包
     echo "创建压缩包..."
     cd "release"
-    tar -czf "bookmarks-v${VERSION}-${PLATFORM}.tar.gz" "bookmarks-v${VERSION}-${PLATFORM}"
+    tar -czf "bookmarks-${VERSION}-${PLATFORM}.tar.gz" "bookmarks-${VERSION}-${PLATFORM}"
     cd ..
     
     echo "平台 $PLATFORM 编译完成"

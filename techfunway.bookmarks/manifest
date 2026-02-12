@@ -1,13 +1,13 @@
 appname               = techfunway.bookmarks
-version               = 1.6.0
+version               = 1.7.0
 display_name          = 网址收藏夹
-desc                  = 网址收藏夹，收藏自己的网址功能，支持点击跳转<br>1、支持多级文件夹，文件夹下添加网址<br>2、支持自动识别网址名称和网址图标,支持排序和增删改查<br>3、支持搜索功能(支持按网址名称搜索)<br>4、支持导入导出html格式的浏览器书签<br>5、支持手机端<br>6、支持自定义端口<br>7、支持设置背景色、背景图片、面板透明度<br>8、PC端可以设置每行显示数量<br>9、能设置是否显示网址url地址<br>10、支持批量更新信息（名称和图标）<br>
+desc                  = 网址收藏夹，收藏自己的网址功能，支持点击跳转<br>1、支持多级文件夹，文件夹下添加网址<br>2、支持自动识别网址名称和网址图标,支持排序和增删改查<br>3、支持搜索功能(支持按网址名称搜索)<br>4、支持导入导出html格式的浏览器书签<br>5、支持手机端<br>6、支持自定义端口<br>7、支持设置背景色、背景图片、面板透明度<br>8、PC端可以设置每行显示数量<br>9、能设置是否显示网址url地址<br>10、支持批量更新信息（名称和图标）<br>11、支持网址图标以文件形式保存到本地，提升部分设备数据加载卡顿问题<br>12、支持导出数据时，图片以base64形式导出，增加导出进度显示和导出结果显示<br>13、用户注册登录、用户数据隔离
 platform              = arm
 source                = thirdparty
 maintainer            = 科技智趣坊
 maintainer_url        = http://techfunway.wycto.cn/fnapp/bookmarks
+changelog             = 1、增加用户注册登录模块<br>2、首次注册用户为管理员<br>3、访问需要登录<br>4、用户访问数据隔离，每个用户只能访问自己的数据<br><strong>⚠️注意：如果升级失败，请先保留数据卸载后重装<strong>
 distributor           = 科技智趣坊
 distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway.bookmarks.Application
-changelog             = 1、新增：网址图标以文件形式保存到本地，提升部分设备数据加载卡顿问题<br>2、新增：导出数据时，图片以base64形式导出，增加导出进度显示和导出结果显示<br>4、优化：前端查询逻辑，没有根节点的数据查不到问题；<br>3、修复：批量删除只能删除一条数据问题；<br><strong>⚠️注意：如果升级失败，请先保留数据卸载后重装<strong>

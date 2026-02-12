@@ -16,21 +16,45 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
+# 去掉版本号中的 v 前缀（如果有）
+VERSION=${VERSION#v}
+
 echo "使用版本号: $VERSION"
 
 # 定义平台列表
 PLATFORMS=("amd64" "arm64")
 
-# 如果指定了平台参数，只打包指定平台
-if [ $# -gt 0 ]; then
-    if [[ "${PLATFORMS[@]}" =~ "$1" ]]; then
-        PLATFORMS=($1)
-        echo "只打包平台: $1"
-    else
-        echo "错误: 不支持的平台: $1"
-        echo "支持的平台: ${PLATFORMS[@]}"
-        exit 1
-    fi
+# 非交互模式标志
+NON_INTERACTIVE=false
+
+# 解析命令行参数
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --non-interactive|--auto)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        amd64|arm64)
+            if [[ "${PLATFORMS[@]}" =~ "$1" ]]; then
+                PLATFORMS=($1)
+                echo "只打包平台: $1"
+            else
+                echo "错误: 不支持的平台: $1"
+                echo "支持的平台: ${PLATFORMS[@]}"
+                exit 1
+            fi
+            shift
+            ;;
+        *)
+            echo "错误: 未知参数: $1"
+            echo "用法: $0 [--non-interactive|--auto] [amd64|arm64]"
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$NON_INTERACTIVE" = true ]; then
+    echo "使用非交互模式，将自动使用默认内容进行打包"
 fi
 
 # 主打包函数
@@ -115,255 +139,7 @@ package_platform() {
     # 修改 platform 字段
     sed -i '' "s/^platform              = .*/platform              = $MANIFEST_PLATFORM/" "$MANIFEST_FILE"
 
-    # 更新 desc 字段
-    # 根据应用的实际功能，更新 desc 字段的内容
-    NEW_DESC="网址收藏夹，收藏自己的网址功能，支持点击跳转<br>1、支持多级文件夹，文件夹下添加网址<br>2、支持自动识别网址名称和网址图标,支持排序和增删改查<br>3、支持搜索功能(支持按网址名称搜索)<br>4、支持导入导出html格式的浏览器书签<br>5、支持手机端<br>6、支持自定义端口<br>7、支持设置背景色、背景图片、面板透明度<br>8、PC端可以设置每行显示数量<br>9、能设置是否显示网址url地址<br>10、支持批量更新信息（名称和图标）<br>11、支持网址图标以文件形式保存到本地，提升部分设备数据加载卡顿问题<br>12、支持导出数据时，图片以base64形式导出，增加导出进度显示和导出结果显示"
-    sed -i '' "s/^desc                  = .*/desc                  = $NEW_DESC/" "$MANIFEST_FILE"
-
-    # 从 git 记录中提取 changelog 信息
-    echo "从 git 记录中提取 changelog 信息..."
-    
-    # 初始化分类数组
-    new_features=()
-    bug_fixes=()
-    optimizations=()
-    updates=()
-    
-    # 获取提交记录
-    COMMITS=$(git log --oneline -5 | grep -v "版本：" | grep -v "暂存：" | head -4)
-    
-    if [ -n "$COMMITS" ]; then
-        # 处理每个提交记录
-        IFS=$'\n'
-        commit_array=($COMMITS)
-        unset IFS
-        
-        for commit in "${commit_array[@]}"; do
-            # 移除提交哈希和分支信息
-            message=$(echo "$commit" | sed 's/^[0-9a-fA-F]\{7\} //' | sed 's/ (HEAD.*)//')
-            
-            # 分类处理
-            classified=false
-            
-            # 检查关键词
-            if [[ "$message" == *"新增"* ]]; then
-                new_features+=("$message")
-                classified=true
-            elif [[ "$message" == *"修复"* ]]; then
-                bug_fixes+=("$message")
-                classified=true
-            elif [[ "$message" == *"优化"* ]]; then
-                optimizations+=("$message")
-                classified=true
-            elif [[ "$message" == *"更新"* ]]; then
-                updates+=("$message")
-                classified=true
-            fi
-            
-            # 如果没有分类，默认归类为更新
-            if [ "$classified" = false ]; then
-                updates+=("$message")
-            fi
-        done
-    else
-        # 如果 git 记录中没有合适的信息，使用默认的 changelog
-        new_features+=("网址图标以文件形式保存到本地，提升部分设备数据加载卡顿问题")
-        new_features+=("导出数据时，图片以base64形式导出，增加导出进度显示和导出结果显示")
-        optimizations+=("前端查询逻辑，没有根节点的数据查不到问题")
-        bug_fixes+=("批量删除只能删除一条数据问题")
-    fi
-    
-    # 生成结构化的 changelog
-    GIT_CHANGELOG=""
-    section_count=0
-    
-    # 生成新增内容
-    if [ ${#new_features[@]} -gt 0 ]; then
-        if [ $section_count -gt 0 ]; then
-            GIT_CHANGELOG+="<br>"
-        fi
-        GIT_CHANGELOG+="<strong>新增：</strong><br>"
-        for i in "${!new_features[@]}"; do
-            item=${new_features[$i]}
-            item=$(echo "$item" | sed "s/^新增：//")
-            GIT_CHANGELOG+="$((i+1))、$item<br>"
-        done
-        section_count=$((section_count+1))
-    fi
-    
-    # 生成修复内容
-    if [ ${#bug_fixes[@]} -gt 0 ]; then
-        if [ $section_count -gt 0 ]; then
-            GIT_CHANGELOG+="<br>"
-        fi
-        GIT_CHANGELOG+="<strong>修复：</strong><br>"
-        for i in "${!bug_fixes[@]}"; do
-            item=${bug_fixes[$i]}
-            item=$(echo "$item" | sed "s/^修复：//")
-            GIT_CHANGELOG+="$((i+1))、$item<br>"
-        done
-        section_count=$((section_count+1))
-    fi
-    
-    # 生成优化内容
-    if [ ${#optimizations[@]} -gt 0 ]; then
-        if [ $section_count -gt 0 ]; then
-            GIT_CHANGELOG+="<br>"
-        fi
-        GIT_CHANGELOG+="<strong>优化：</strong><br>"
-        for i in "${!optimizations[@]}"; do
-            item=${optimizations[$i]}
-            item=$(echo "$item" | sed "s/^优化：//")
-            GIT_CHANGELOG+="$((i+1))、$item<br>"
-        done
-        section_count=$((section_count+1))
-    fi
-    
-    # 生成更新内容
-    if [ ${#updates[@]} -gt 0 ]; then
-        if [ $section_count -gt 0 ]; then
-            GIT_CHANGELOG+="<br>"
-        fi
-        GIT_CHANGELOG+="<strong>更新：</strong><br>"
-        for i in "${!updates[@]}"; do
-            item=${updates[$i]}
-            item=$(echo "$item" | sed "s/^更新：//")
-            GIT_CHANGELOG+="$((i+1))、$item<br>"
-        done
-        section_count=$((section_count+1))
-    fi
-    
-    # 生成总结
-    summary="本次更新"
-    has_changes=false
-    
-    # 检查新增
-    if [ ${#new_features[@]} -gt 0 ]; then
-        if [ "$has_changes" = true ]; then
-            summary+="，"
-        fi
-        summary+="${#new_features[@]}项新增"
-        has_changes=true
-    fi
-    
-    # 检查修复
-    if [ ${#bug_fixes[@]} -gt 0 ]; then
-        if [ "$has_changes" = true ]; then
-            summary+="，"
-        fi
-        summary+="${#bug_fixes[@]}项修复"
-        has_changes=true
-    fi
-    
-    # 检查优化
-    if [ ${#optimizations[@]} -gt 0 ]; then
-        if [ "$has_changes" = true ]; then
-            summary+="，"
-        fi
-        summary+="${#optimizations[@]}项优化"
-        has_changes=true
-    fi
-    
-    # 检查更新
-    if [ ${#updates[@]} -gt 0 ]; then
-        if [ "$has_changes" = true ]; then
-            summary+="，"
-        fi
-        summary+="${#updates[@]}项更新"
-        has_changes=true
-    fi
-    
-    if [ "$has_changes" = false ]; then
-        summary="本次更新无具体修改内容"
-    fi
-    
-    # 构建最终的 changelog
-    NEW_CHANGELOG="<strong>版本更新总结：</strong>$summary<br><br>$GIT_CHANGELOG<br><strong>⚠️注意：如果升级失败，请先保留数据卸载后重装<strong>"
-    
-    # 使用更兼容的方式修改 manifest 文件
-    # 1. 先删除现有的 changelog 行
-    sed -i '' '/^changelog             = .*/d' "$MANIFEST_FILE"
-    
-    # 2. 在 maintainer_url 后添加新的 changelog
-    # 兼容 BSD sed (macOS) 和 GNU sed
-    awk -v changelog="$NEW_CHANGELOG" '/^maintainer_url        = .*/ {print; print "changelog             = " changelog; next} {print}' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp"
-    mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-
-    # 显示当前的 manifest 内容供用户确认
-    echo "\n=== 确认 manifest 内容 ==="
-    echo "当前版本: $VERSION"
-    echo "平台: $MANIFEST_PLATFORM"
-    echo "\n1. 当前 desc 内容:"
-    echo "----------------------------------------"
-    echo "$NEW_DESC"
-    echo "----------------------------------------"
-    echo "\n2. 当前 changelog 内容:"
-    echo "----------------------------------------"
-    echo "$NEW_CHANGELOG"
-    echo "----------------------------------------"
-    
-    # 交互式确认
-    while true; do
-        echo "\n请选择操作:"
-        echo "1. 直接使用当前内容继续打包"
-        echo "2. 修改 desc 内容"
-        echo "3. 修改 changelog 内容"
-        echo "4. 取消打包"
-        echo "\n请输入选项编号 (1-4):"
-        
-        read -r choice
-        
-        case $choice in
-            1)
-                echo "\n使用当前内容继续打包..."
-                break
-                ;;
-            2)
-                echo "\n请输入新的 desc 内容 (输入完成后按 Ctrl+D 结束):"
-                echo "提示: 可以使用 <br> 标签进行换行"
-                echo "----------------------------------------"
-                new_desc_input=$(cat)
-                echo "----------------------------------------"
-                
-                if [ -n "$new_desc_input" ]; then
-                    NEW_DESC="$new_desc_input"
-                    # 更新 manifest 文件中的 desc
-                    sed -i '' "/^desc                  = .*/d" "$MANIFEST_FILE"
-                    awk -v desc="$NEW_DESC" '/^display_name          = .*/ {print; print "desc                  = " desc; next} {print}' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp"
-                    mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-                    echo "\ndesc 内容已更新"
-                else
-                    echo "\n未输入内容，保持当前 desc"
-                fi
-                ;;
-            3)
-                echo "\n请输入新的 changelog 内容 (输入完成后按 Ctrl+D 结束):"
-                echo "提示: 可以使用 <br> 和 <strong> 等 HTML 标签"
-                echo "----------------------------------------"
-                new_changelog_input=$(cat)
-                echo "----------------------------------------"
-                
-                if [ -n "$new_changelog_input" ]; then
-                    NEW_CHANGELOG="$new_changelog_input"
-                    # 更新 manifest 文件中的 changelog
-                    sed -i '' "/^changelog             = .*/d" "$MANIFEST_FILE"
-                    awk -v changelog="$NEW_CHANGELOG" '/^maintainer_url        = .*/ {print; print "changelog             = " changelog; next} {print}' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp"
-                    mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-                    echo "\nchangelog 内容已更新"
-                else
-                    echo "\n未输入内容，保持当前 changelog"
-                fi
-                ;;
-            4)
-                echo "\n取消打包操作"
-                cd ..
-                return 1
-                ;;
-            *)
-                echo "\n无效选项，请重新输入"
-                ;;
-        esac
-    done
+    echo "manifest 文件已更新：版本=$VERSION，平台=$MANIFEST_PLATFORM"
 
     # 进入 techfunway.bookmarks 目录执行打包
     echo "\n=== 执行应用打包 ==="
