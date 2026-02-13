@@ -928,11 +928,11 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.closeUpdateMetadataDialog();
     },
     async updateBookmarkMetadata(nodeId, url) {
-      // 更新单个书签的元数据（标题和图标）
       const response = await fetch(`/api/nodes/${nodeId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': this.token
         },
         body: JSON.stringify({
           url: url
@@ -2221,6 +2221,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': this.token
           },
           body: JSON.stringify({
             key: 'show_url_in_list',
