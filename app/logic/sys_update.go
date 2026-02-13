@@ -312,7 +312,7 @@ func (u *Upgrade) executeSQLForV1_7_0() error {
 		u.LogUpgrade("执行SQL语句 #%d/%d: %s", i+1, len(sqlStatements), truncateString(stmt, 100))
 		_, err := u.db.Exec(stmt)
 		if err != nil {
-			return fmt.Errorf("执行SQL语句失败: %w, 语句: %s", err, stmt)
+			u.LogUpgrade("执行SQL语句失败: %v, 语句: %s", err, truncateString(stmt, 100))
 		}
 	}
 
