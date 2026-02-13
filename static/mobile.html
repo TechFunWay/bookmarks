@@ -650,12 +650,22 @@
       <header class="mobile-header" @click="handleHeaderClick">
         <h1>收藏夹</h1>
         <div class="header-actions">
-          <div class="user-info-mobile">
-            <span class="user-name">{{ currentUser ? currentUser.nickname || currentUser.username : '未登录' }}</span>
-          </div>
-          <button class="action-btn" title="退出" @click="logout">
-            <span>🚪</span>
-          </button>
+          <template v-if="currentUser">
+            <div class="user-info-mobile">
+              <span class="user-name">{{ currentUser.nickname || currentUser.username }}</span>
+            </div>
+            <button class="action-btn" title="退出" @click="logout">
+              <span>🚪</span>
+            </button>
+          </template>
+          <template v-else>
+            <button class="action-btn" title="登录" @click="window.location.href='login.html'">
+              <span>🔑</span>
+            </button>
+            <button class="action-btn" title="注册" @click="window.location.href='register.html'">
+              <span>📝</span>
+            </button>
+          </template>
           <button class="action-btn" title="主题切换" @click="toggleTheme">
             <span>{{ isDarkTheme ? '☀️' : '🌙' }}</span>
           </button>
@@ -1110,7 +1120,8 @@
         const mobileApp = Vue.createApp({
           data() {
             return {
-              // 原有数据
+              currentUser: null,
+              token: localStorage.getItem('token') || null,
               tree: [],
               loading: false,
               selectedNodeId: null,
@@ -1340,6 +1351,7 @@
           },
           mounted() {
             this.loadSavedTheme();
+            this.checkAuth();
             this.loadTree();
             window.addEventListener("scroll", this.hideContextMenu, true);
             window.addEventListener("resize", this.hideContextMenu);
@@ -1349,7 +1361,55 @@
             window.removeEventListener("resize", this.hideContextMenu);
           },
           methods: {
-            // 原有方法
+            checkAuth() {
+              const token = localStorage.getItem('token');
+              if (!token) {
+                window.location.href = 'login.html';
+                return false;
+              }
+              this.token = token;
+              this.loadCurrentUser();
+              return true;
+            },
+            async loadCurrentUser() {
+              try {
+                const response = await fetch('/api/auth/me', {
+                  headers: {
+                    'Authorization': this.token
+                  }
+                });
+                if (response.ok) {
+                  const user = await response.json();
+                  this.currentUser = user;
+                } else {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('currentUser');
+                  window.location.href = 'login.html';
+                }
+              } catch (error) {
+                console.error('加载用户信息失败:', error);
+                localStorage.removeItem('token');
+                localStorage.removeItem('currentUser');
+                window.location.href = 'login.html';
+              }
+            },
+            async logout() {
+              try {
+                await fetch('/api/auth/logout', {
+                  headers: {
+                    'Authorization': this.token
+                  }
+                });
+              } catch (error) {
+                console.error('登出失败:', error);
+              } finally {
+                localStorage.removeItem('token');
+                localStorage.removeItem('currentUser');
+                this.token = null;
+                this.currentUser = null;
+                window.location.href = 'login.html';
+              }
+            },
             loadSavedTheme() {
               const savedTheme = localStorage.getItem('bookmark-manager-theme');
               if (savedTheme) {
@@ -1359,7 +1419,11 @@
             async loadTree() {
               this.loading = true;
               try {
-                const response = await fetch("/api/tree");
+                const response = await fetch("/api/tree", {
+                  headers: {
+                    "Authorization": this.token
+                  }
+                });
                 if (!response.ok) {
                   throw new Error("加载失败");
                 }
@@ -1705,7 +1769,10 @@
               };
               const res = await fetch("/api/folders", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                  "Content-Type": "application/json",
+                  "Authorization": this.token
+                },
                 body: JSON.stringify(payload),
               });
               if (!res.ok) {
@@ -1728,7 +1795,10 @@
               };
               const res = await fetch("/api/bookmarks", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                  "Content-Type": "application/json",
+                  "Authorization": this.token
+                },
                 body: JSON.stringify(payload),
               });
               if (!res.ok) {
@@ -1744,7 +1814,10 @@
               };
               const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                  "Content-Type": "application/json",
+                  "Authorization": this.token
+                },
                 body: JSON.stringify(payload),
               });
               if (!res.ok) {
@@ -1768,7 +1841,10 @@
               }
               const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                  "Content-Type": "application/json",
+                  "Authorization": this.token
+                },
                 body: JSON.stringify(payload),
               });
               if (!res.ok) {
@@ -1785,7 +1861,12 @@
               );
               if (!ok) return;
               try {
-                const res = await fetch(`/api/nodes/${node.id}`, { method: "DELETE" });
+                const res = await fetch(`/api/nodes/${node.id}`, { 
+                  method: "DELETE",
+                  headers: {
+                    "Authorization": this.token
+                  }
+                });
                 if (!res.ok) {
                   const err = await res.json().catch(() => ({}));
                   throw new Error(err.error || "删除失败");
@@ -1928,7 +2009,12 @@
                 let successCount = 0;
                 for (const node of selectedNodes) {
                   try {
-                    const res = await fetch(`/api/nodes/${node.id}`, { method: "DELETE" });
+                    const res = await fetch(`/api/nodes/${node.id}`, { 
+                      method: "DELETE",
+                      headers: {
+                        "Authorization": this.token
+                      }
+                    });
                     if (res.ok) {
                       successCount++;
                     }
@@ -2066,6 +2152,7 @@
                   method: "PUT",
                   headers: {
                     "Content-Type": "application/json",
+                    "Authorization": this.token
                   },
                   body: JSON.stringify({
                     parent_id: newParentId,
@@ -2142,7 +2229,10 @@
                 };
                 const res = await fetch("/api/nodes/reorder", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": this.token
+                  },
                   body: JSON.stringify(payload),
                 });
                 if (!res.ok) {
