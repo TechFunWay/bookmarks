@@ -117,26 +117,60 @@ else
     echo "手动创建命令: docker manifest create ${REPO_NAME}:${VERSION} ${REPO_NAME}:${VERSION}-amd64 ${REPO_NAME}:${VERSION}-arm64"
 fi
 
+# 为镜像添加 latest 标签
+echo "\n为镜像添加 latest 标签..."
+
+# 为 amd64 镜像添加 latest 标签
+docker tag ${REPO_NAME}:${VERSION}-amd64 ${REPO_NAME}:latest-amd64
+if [ $? -eq 0 ]; then
+    echo "✓ 已为 amd64 镜像添加 latest 标签: ${REPO_NAME}:latest-amd64"
+else
+    echo "Warning: 为 amd64 镜像添加 latest 标签失败"
+fi
+
+# 为 arm64 镜像添加 latest 标签
+docker tag ${REPO_NAME}:${VERSION}-arm64 ${REPO_NAME}:latest-arm64
+if [ $? -eq 0 ]; then
+    echo "✓ 已为 arm64 镜像添加 latest 标签: ${REPO_NAME}:latest-arm64"
+else
+    echo "Warning: 为 arm64 镜像添加 latest 标签失败"
+fi
+
+# 为多架构 manifest 添加 latest 标签
+if [ $MANIFEST_STATUS -eq 0 ]; then
+    docker tag ${REPO_NAME}:${VERSION} ${REPO_NAME}:latest
+    if [ $? -eq 0 ]; then
+        echo "✓ 已为多架构镜像添加 latest 标签: ${REPO_NAME}:latest"
+    else
+        echo "Warning: 为多架构镜像添加 latest 标签失败"
+    fi
+fi
+
 # 显示构建结果
 echo "\n构建完成！"
 echo "构建的镜像:"
 echo "- ${REPO_NAME}:${VERSION}-amd64 (x86_64架构)"
+echo "- ${REPO_NAME}:latest-amd64 (x86_64架构)"
 echo "- ${REPO_NAME}:${VERSION}-arm64 (ARM64架构)"
+echo "- ${REPO_NAME}:latest-arm64 (ARM64架构)"
 if [ $MANIFEST_STATUS -eq 0 ]; then
     echo "- ${REPO_NAME}:${VERSION} (多架构镜像 - 推荐使用)"
+    echo "- ${REPO_NAME}:latest (多架构镜像 - 推荐使用)"
 fi
 echo "\n使用方法:"
 if [ $MANIFEST_STATUS -eq 0 ]; then
-    echo "推荐使用多架构镜像（自动适配架构）: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}"
+    echo "推荐使用多架构镜像（自动适配架构）: docker run -p 8901:8901 ${REPO_NAME}:latest"
+    echo "或使用版本号: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}"
 fi
-echo "x86_64架构测试: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}-amd64"
-echo "ARM64架构测试: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}-arm64"
+echo "x86_64架构测试: docker run -p 8901:8901 ${REPO_NAME}:latest-amd64"
+echo "ARM64架构测试: docker run -p 8901:8901 ${REPO_NAME}:latest-arm64"
 
 # 总结
 echo "\n总结:"
 echo "✓ 架构特定镜像已成功构建"
+echo "✓ 已为所有镜像添加 latest 标签"
 if [ $MANIFEST_STATUS -eq 0 ]; then
-    echo "✓ 多架构镜像已成功创建，您可以使用单一tag ${REPO_NAME}:${VERSION} 访问"
+    echo "✓ 多架构镜像已成功创建，您可以使用单一tag ${REPO_NAME}:latest 访问"
 else
     echo "⚠ 多架构镜像创建失败，但您仍然可以使用架构特定的镜像tag"
     echo "   当网络条件改善后，您可以运行上述手动创建命令来创建多架构镜像"
