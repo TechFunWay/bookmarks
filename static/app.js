@@ -297,7 +297,10 @@ const app = createApp({
         itemsPerRow: 1,
         // 配置相关
         config: {
-          showUrlInList: true // 默认显示URL
+          showUrlInList: true, // 默认显示URL
+          showFolderPath: true, // 默认显示文件夹路径
+          showUpdatedAt: true, // 默认显示更新时间
+          showFullTitle: true // 默认显示完整标题（可换行）
         },
         configModal: {
           visible: false
@@ -2183,6 +2186,12 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           // 更新配置，使用默认值作为回退
           this.config.showUrlInList = configData.show_url_in_list !== undefined ? 
             configData.show_url_in_list === 'true' : true;
+          this.config.showFolderPath = configData.show_folder_path !== undefined ?
+            configData.show_folder_path === 'true' : true;
+          this.config.showUpdatedAt = configData.show_updated_at !== undefined ?
+            configData.show_updated_at === 'true' : true;
+          this.config.showFullTitle = configData.show_full_title !== undefined ?
+            configData.show_full_title === 'true' : true;
           // 加载每页显示数量
           if (configData.items_per_row !== undefined) {
             const num = parseInt(configData.items_per_row);
@@ -2204,6 +2213,9 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         console.error('加载配置失败:', error);
         // 使用默认配置
         this.config.showUrlInList = true;
+        this.config.showFolderPath = true;
+        this.config.showUpdatedAt = true;
+        this.config.showFullTitle = true;
         // 尝试从localStorage加载每页显示数量
         const savedItemsPerRow = localStorage.getItem('bookmarks_itemsPerRow');
         if (savedItemsPerRow) {
@@ -2217,22 +2229,27 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     // 保存配置
     async saveConfig() {
       try {
-        const response = await fetch('/api/config', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': this.token
-          },
-          body: JSON.stringify({
-            key: 'show_url_in_list',
-            value: this.config.showUrlInList.toString(),
-          }),
-        });
-        if (response.ok) {
-          this.showToast('配置保存成功', 'success');
-        } else {
-          throw new Error('保存配置失败');
+        const configs = [
+          { key: 'show_url_in_list', value: this.config.showUrlInList.toString() },
+          { key: 'show_folder_path', value: this.config.showFolderPath.toString() },
+          { key: 'show_updated_at', value: this.config.showUpdatedAt.toString() },
+          { key: 'show_full_title', value: this.config.showFullTitle.toString() }
+        ];
+
+        for (const config of configs) {
+          const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': this.token
+            },
+            body: JSON.stringify(config),
+          });
+          if (!response.ok) {
+            throw new Error('保存配置失败');
+          }
         }
+        this.showToast('配置保存成功', 'success');
       } catch (error) {
         console.error('保存配置失败:', error);
         this.showToast('配置保存失败', 'error');
