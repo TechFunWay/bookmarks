@@ -262,16 +262,16 @@
                         <span v-else>🌏</span>
                       </span>
                   <div class="bookmark-info">
-                    <a :href="item.url" class="bookmark-title" target="_blank" rel="noopener">
+                    <a :href="item.url" class="bookmark-title" :class="{ 'full-title': config.showFullTitle }" target="_blank" rel="noopener">
                       {{ item.title }}
                     </a>
                     <span class="bookmark-url" v-if="config.showUrlInList">
                       {{ item.url }}
                     </span>
-                    <span class="bookmark-path" v-if="item.path">
+                    <span class="bookmark-path" v-if="config.showFolderPath && item.path">
                           {{ item.path }}
                         </span>
-                    <span class="bookmark-created" v-if="item.updated_at">
+                    <span class="bookmark-created" v-if="config.showUpdatedAt && item.updated_at">
                           更新于: {{ new Date(item.updated_at).toLocaleString() }}
                         </span>
                   </div>
@@ -357,6 +357,42 @@
             <div class="config-item-control">
               <label class="toggle-switch">
                 <input type="checkbox" v-model="config.showUrlInList" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="config-item">
+            <div class="config-item-label">
+              <span>显示文件夹路径</span>
+              <span class="config-item-desc">在网址列表中显示所属文件夹路径</span>
+            </div>
+            <div class="config-item-control">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="config.showFolderPath" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="config-item">
+            <div class="config-item-label">
+              <span>显示更新时间</span>
+              <span class="config-item-desc">在网址列表中显示最后更新时间</span>
+            </div>
+            <div class="config-item-control">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="config.showUpdatedAt" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="config-item">
+            <div class="config-item-label">
+              <span>是否完整显示标题</span>
+              <span class="config-item-desc">超出换行</span>
+            </div>
+            <div class="config-item-control">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="config.showFullTitle" />
                 <span class="toggle-slider"></span>
               </label>
             </div>
