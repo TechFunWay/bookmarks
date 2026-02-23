@@ -302,7 +302,7 @@
   /* 深色主题变量 - 调整文字颜色，提高可读性 */
   --text-dark: #e2e8f0;
   --text-secondary-dark: #94a3b8;
-  --text-muted-dark: #64748b;
+  --text-muted-dark: #a8b4cc;
   
   /* 浅色主题变量 - 调整背景色，让灰色更浅 */
   --bg-light: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 25%, #e2e8f0 50%, #cbd5e1 75%, #94a3b8 100%);
@@ -365,6 +365,21 @@
 [data-theme="dark"] .bookmark-path {
   color: #64748b;
   opacity: 0.8;
+}
+
+/* 深色主题下顶部按钮文字优化 */
+[data-theme="dark"] .header-buttons .tertiary span:last-child {
+  color: #ffffff;
+}
+
+/* 深色主题下所有按钮文字白色 */
+[data-theme="dark"] .tertiary {
+  color: #ffffff !important;
+}
+
+/* 深色主题下版本号白色 */
+[data-theme="dark"] .version-info {
+  color: #ffffff !important;
 }
 
 /* 浅色主题 */
@@ -925,7 +940,19 @@ button {
 .bookmark-title {
   font-weight: 600;
   font-size: 15px;
-  display: inline-block;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.bookmark-title.full-title {
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
 }
 
 .bookmark-url {

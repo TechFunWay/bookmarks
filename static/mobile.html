@@ -410,6 +410,15 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        max-width: 150px;
+      }
+
+      .bookmark-title.full-title {
+        white-space: normal;
+        word-wrap: break-word;
+        overflow: visible;
+        text-overflow: clip;
+        max-width: none;
       }
 
       .bookmark-url {
@@ -635,6 +644,90 @@
       .action-btn:active {
         transform: scale(0.95);
       }
+
+      /* 深色主题下按钮文字白色 */
+      [data-theme="dark"] .action-btn {
+        color: #ffffff !important;
+      }
+
+      /* 配置项样式 */
+      .config-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .config-item:last-child {
+        border-bottom: none;
+      }
+
+      .config-item-label {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .config-item-label > span:first-child {
+        font-weight: 500;
+        color: var(--text);
+      }
+
+      .config-item-desc {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .config-item-control {
+        flex-shrink: 0;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 3rem;
+        height: 1.5rem;
+      }
+
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: var(--border);
+        transition: 0.3s;
+        border-radius: 1.5rem;
+      }
+
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 1.25rem;
+        width: 1.25rem;
+        left: 0.125rem;
+        bottom: 0.125rem;
+        background-color: white;
+        transition: 0.3s;
+        border-radius: 50%;
+      }
+
+      .toggle-switch input:checked + .toggle-slider {
+        background-color: var(--primary);
+      }
+
+      .toggle-switch input:checked + .toggle-slider:before {
+        transform: translateX(1.5rem);
+      }
     </style>
   </head>
   <body>
@@ -668,6 +761,9 @@
           </template>
           <button class="action-btn" title="主题切换" @click="toggleTheme">
             <span>{{ isDarkTheme ? '☀️' : '🌙' }}</span>
+          </button>
+          <button class="action-btn" title="配置" @click="openConfigModal">
+            <span>⚙️</span>
           </button>
           <button class="action-btn" title="新建文件夹" @click="openAddFolder(null)">
             <span>📁</span>
@@ -792,8 +888,8 @@
                         <span v-else>🔖</span>
                       </span>
                       <div class="bookmark-info">
-                        <span class="bookmark-title">{{ item.title }}</span>
-                        <span class="bookmark-created" v-if="item.updated_at">
+                        <span class="bookmark-title" :class="{ 'full-title': config.showFullTitle }">{{ item.title }}</span>
+                        <span class="bookmark-created" v-if="config.showUpdatedAt && item.updated_at">
                           更新于: {{ new Date(item.updated_at).toLocaleString() }}
                         </span>
                       </div>
@@ -876,8 +972,8 @@
                       <span v-else>🔖</span>
                     </span>
                     <div class="bookmark-info">
-                      <span class="bookmark-title">{{ item.title }}</span>
-                      <span class="bookmark-created" v-if="item.updated_at">
+                      <span class="bookmark-title" :class="{ 'full-title': config.showFullTitle }">{{ item.title }}</span>
+                      <span class="bookmark-created" v-if="config.showUpdatedAt && item.updated_at">
                         更新于: {{ new Date(item.updated_at).toLocaleString() }}
                       </span>
                     </div>
@@ -942,6 +1038,69 @@
               <span class="action-icon">🗑️</span>
               <span class="action-text">删除</span>
             </button>
+          </div>
+        </transition>
+
+        <!-- 配置模态框 -->
+        <transition name="fade">
+          <div class="modal-backdrop" v-if="configModal.visible" @click="closeConfigModal">
+            <div class="modal" @click.stop>
+              <h3 class="modal-title">应用配置</h3>
+              <div class="modal-body">
+                <div class="config-item">
+                  <div class="config-item-label">
+                    <span>显示URL地址</span>
+                    <span class="config-item-desc">在网址列表中显示URL地址</span>
+                  </div>
+                  <div class="config-item-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" v-model="config.showUrlInList" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="config-item">
+                  <div class="config-item-label">
+                    <span>显示文件夹路径</span>
+                    <span class="config-item-desc">在网址列表中显示所属文件夹路径</span>
+                  </div>
+                  <div class="config-item-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" v-model="config.showFolderPath" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="config-item">
+                  <div class="config-item-label">
+                    <span>显示更新时间</span>
+                    <span class="config-item-desc">在网址列表中显示最后更新时间</span>
+                  </div>
+                  <div class="config-item-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" v-model="config.showUpdatedAt" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="config-item">
+                  <div class="config-item-label">
+                    <span>是否完整显示标题</span>
+                    <span class="config-item-desc">超出换行</span>
+                  </div>
+                  <div class="config-item-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" v-model="config.showFullTitle" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-actions">
+                <button class="secondary" @click="closeConfigModal">取消</button>
+                <button class="primary" @click="saveConfigAndClose">保存</button>
+              </div>
+            </div>
           </div>
         </transition>
 
