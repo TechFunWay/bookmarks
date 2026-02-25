@@ -52,12 +52,12 @@ type server struct {
 	db          *sql.DB
 	httpClient  *http.Client
 	faviconChan chan int64 // 图标获取任务队列
+	iconPath    string     // 图标存储路径
 }
 
 // 全局配置
 var (
-	logMode  string
-	iconPath string
+	logMode string
 )
 
 // Debug 调试日志函数，仅在debug模式下打印
@@ -121,11 +121,10 @@ const (
 )
 
 func main() {
-	dataUrl := flag.String("dataUrl", "./", "数据存储路径")                              // 定义字符串参数
+	dataUrl := flag.String("dataUrl", "./data", "数据存储路径")                          // 定义字符串参数
 	port := flag.String("port", "8901", "服务器监听端口")                                 // 定义端口参数
-	iconPathFlag := flag.String("iconPath", "static/icons", "图标存储路径")              // 定义图标路径参数
 	logModeFlag := flag.String("logmode", defaultLogMode, "日志模式: debug 或 release") // 日志模式参数
-	flag.Parse()                                                                   // 缺少此行将导致获取默认值
+	flag.Parse()
 
 	// 初始化日志模式：先检查命令行参数，再检查环境变量，最后使用默认值
 	logMode = *logModeFlag
@@ -133,8 +132,13 @@ func main() {
 		logMode = envLogMode
 	}
 
-	// 设置图标路径全局变量
-	iconPath = *iconPathFlag
+	// 计算图标路径：基于dataUrl，处理结尾斜杠
+	dataPath := *dataUrl
+	if !strings.HasSuffix(dataPath, "/") {
+		dataPath += "/"
+	}
+	iconPath := dataPath + "icons/"
+	dbPath := dataPath + "db/"
 
 	// 验证日志模式
 	if logMode != logModeDebug && logMode != logModeRelease {
@@ -143,6 +147,7 @@ func main() {
 	fmt.Println("数据路径:", *dataUrl)
 	fmt.Println("监听端口:", *port)
 	fmt.Println("图标路径:", iconPath)
+	fmt.Println("数据库路径:", dbPath)
 	// 创建数据目录
 	if _, err := os.Stat(*dataUrl); os.IsNotExist(err) {
 		if err := os.Mkdir(*dataUrl, 0755); err != nil {
@@ -150,12 +155,32 @@ func main() {
 		}
 	}
 
-	// 创建图标存储目录
-	if err := os.MkdirAll(iconPath, 0755); err != nil {
-		log.Fatalf("failed to create icons directory: %v", err)
+	// 迁移旧图标：从 static/icons 移动到新路径
+	migrateOldIcons("static/icons", iconPath)
+
+	// 确保图标存储目录存在（如果迁移失败或跳过）
+	if _, err := os.Stat(iconPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(iconPath, 0755); err != nil {
+			log.Fatalf("failed to create icons directory: %v", err)
+		}
 	}
 
-	db, err := sql.Open("sqlite", *dataUrl+"data.db?_foreign_keys=on")
+	// 创建数据库目录
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(dbPath, 0755); err != nil {
+			log.Fatalf("failed to create db directory: %v", err)
+		}
+	}
+
+	oldPath := "./"
+	if dataPath != "./data/" {
+		oldPath = dataPath
+	}
+
+	// 迁移旧数据库：从 ./data.db 迁移到新路径并改名为 database.db
+	migrateOldDatabase(oldPath, dbPath, "data.db", "database.db")
+
+	db, err := sql.Open("sqlite", dbPath+"database.db?_foreign_keys=on")
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
@@ -195,6 +220,7 @@ func main() {
 			},
 		},
 		faviconChan: make(chan int64, 100), // 缓冲队列，最多100个待处理任务
+		iconPath:    iconPath,              // 设置图标路径
 	}
 
 	// 启动图标获取协程
@@ -241,12 +267,8 @@ func main() {
 	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
 	// 添加图标路径的静态文件服务
-	// 检查图标路径是否在 static 目录内
-	if !strings.HasPrefix(iconPath, "./static") && !strings.HasPrefix(iconPath, "static") {
-		// 如果图标路径不在 static 目录内，添加新的路由
-		iconFileServer := http.FileServer(http.Dir(iconPath))
-		r.Handle("/icons/*", http.StripPrefix("/icons", iconFileServer))
-	}
+	iconFileServer := http.FileServer(http.Dir(iconPath))
+	r.Handle("/icons/*", http.StripPrefix("/icons", iconFileServer))
 
 	addr := ":" + *port
 	Debug("Bookmark server running on %s", addr)
@@ -362,7 +384,7 @@ func (s *server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 	// 下载并保存图标到本地文件
 	var savedIcon string
 	if icon != "" {
-		savedIcon, err = s.downloadAndSaveIcon(icon)
+		savedIcon, err = s.downloadAndSaveIcon(icon, s.iconPath)
 		if err != nil {
 			Debug("下载并保存图标失败: %v, 使用原始URL", err)
 			savedIcon = icon // 保存失败时使用原始URL
@@ -763,7 +785,7 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodes, err := parseEdgeHTML(req.HTML)
+	nodes, err := parseEdgeHTML(req.HTML, s.iconPath)
 	if err != nil {
 		Error("HTML解析失败: %v", err)
 		respondError(w, http.StatusInternalServerError, fmt.Errorf("failed to parse HTML: %w", err))
@@ -865,7 +887,7 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 }
 
 // 解析Edge导出的HTML书签
-func parseEdgeHTML(htmlContent string) ([]*node, error) {
+func parseEdgeHTML(htmlContent string, iconPath string) ([]*node, error) {
 	// 解析HTML文档
 	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {
@@ -981,7 +1003,7 @@ func parseEdgeHTML(htmlContent string) ([]*node, error) {
 					if iconData != "" {
 						Debug("处理图标数据: 长度=%d, 前30字符=%s", len(iconData), iconData[:min(30, len(iconData))])
 						// 保存base64图标到本地文件
-						localPath, err := saveBase64Icon(iconData)
+						localPath, err := saveBase64Icon(iconData, iconPath)
 						if err != nil {
 							Error("保存base64图标失败: %v", err)
 							// 保存失败时，仍然使用原始base64数据
@@ -2160,7 +2182,7 @@ func min(a, b int) int {
 }
 
 // saveBase64Icon 保存base64图标到本地文件
-func saveBase64Icon(iconData string) (string, error) {
+func saveBase64Icon(iconData string, iconPath string) (string, error) {
 	// 检查是否是base64数据
 	if !strings.HasPrefix(iconData, "data:image/") {
 		// 不是base64数据，直接返回原值
@@ -2220,7 +2242,7 @@ func saveBase64Icon(iconData string) (string, error) {
 }
 
 // downloadAndSaveIcon 下载图标URL并保存到本地文件
-func (s *server) downloadAndSaveIcon(iconURL string) (string, error) {
+func (s *server) downloadAndSaveIcon(iconURL string, iconPath string) (string, error) {
 	// 检查是否是HTTP/HTTPS URL
 	if !strings.HasPrefix(iconURL, "http://") && !strings.HasPrefix(iconURL, "https://") {
 		// 不是HTTP URL，直接返回原值
@@ -2736,4 +2758,122 @@ func (s *server) handleCheckAuth(w http.ResponseWriter, r *http.Request) {
 		"authenticated": true,
 		"user_id":       userID,
 	})
+}
+
+// migrateOldIcons 迁移旧图标从 static/icons 到新路径
+func migrateOldIcons(oldPath, newPath string) {
+	oldStat, err := os.Stat(oldPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			Debug("旧图标路径不存在，跳过迁移: %s", oldPath)
+			return
+		}
+		Error("检查旧图标路径失败: %v", err)
+		return
+	}
+
+	if !oldStat.IsDir() {
+		Debug("旧图标路径不是目录，跳过迁移: %s", oldPath)
+		return
+	}
+
+	newStat, err := os.Stat(newPath)
+	if err == nil {
+		if !newStat.IsDir() {
+			Debug("新图标路径不是目录，跳过迁移: %s", newPath)
+			return
+		}
+		entries, err := os.ReadDir(newPath)
+		if err != nil {
+			Error("读取新图标目录失败: %v", err)
+			return
+		}
+		if len(entries) > 0 {
+			Debug("新图标路径已存在且不为空，跳过迁移: %s", newPath)
+			return
+		}
+		Debug("新图标路径已存在但为空，将删除后迁移: %s", newPath)
+		os.RemoveAll(newPath)
+	}
+
+	Debug("开始迁移图标: %s -> %s", oldPath, newPath)
+
+	err = os.Rename(oldPath, newPath)
+	if err != nil {
+		Error("直接移动图标目录失败: %v，尝试逐个迁移", err)
+		entries, err := os.ReadDir(oldPath)
+		if err != nil {
+			Error("读取旧图标目录失败: %v", err)
+			return
+		}
+
+		if len(entries) == 0 {
+			Debug("旧图标目录为空，跳过迁移")
+			return
+		}
+
+		migratedCount := 0
+		for _, entry := range entries {
+			srcPath := oldPath + "/" + entry.Name()
+			dstPath := newPath + "/" + entry.Name()
+
+			err := os.Rename(srcPath, dstPath)
+			if err != nil {
+				Error("迁移图标目录失败 %s: %v", entry.Name(), err)
+				continue
+			}
+			migratedCount++
+			Debug("迁移图标目录: %s", entry.Name())
+		}
+
+		if migratedCount > 0 {
+			fmt.Printf("成功迁移 %d 个图标目录\n", migratedCount)
+		} else {
+			Debug("没有需要迁移的图标")
+		}
+		return
+	}
+
+	fmt.Printf("成功迁移图标目录: %s -> %s\n", oldPath, newPath)
+}
+
+// migrateOldDatabase 迁移旧数据库从旧路径到新路径并改名
+func migrateOldDatabase(oldPath, newPath, oldName, newName string) {
+	oldFilePath := oldPath + oldName
+	newFilePath := newPath + newName
+
+	oldStat, err := os.Stat(oldFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			Debug("旧数据库文件不存在，跳过迁移: %s", oldFilePath)
+			return
+		}
+		Error("检查旧数据库文件失败: %v", err)
+		return
+	}
+
+	if oldStat.IsDir() {
+		Debug("旧数据库路径是目录而非文件，跳过迁移: %s", oldFilePath)
+		return
+	}
+
+	_, err = os.Stat(newFilePath)
+	if err == nil {
+		Debug("新数据库文件已存在，跳过迁移: %s", newFilePath)
+		return
+	}
+	if !os.IsNotExist(err) {
+		Error("检查新数据库文件失败: %v", err)
+		return
+	}
+
+	Debug("开始迁移数据库: %s -> %s", oldFilePath, newFilePath)
+
+	err = os.Rename(oldFilePath, newFilePath)
+	if err != nil {
+		Error("迁移数据库文件失败: %v", err)
+		return
+	}
+
+	fmt.Printf("成功迁移数据库文件: %s -> %s\n", oldFilePath, newFilePath)
 }
