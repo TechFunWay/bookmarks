@@ -137,16 +137,30 @@
                 <button type="submit" class="login-btn" id="login-btn">登录</button>
             </form>
             <div class="login-footer">
-                还没有账户？<a href="register.html">立即注册</a>
+                还没有账户？<a id="register-link" href="register.html">立即注册</a>
             </div>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             const loginForm = document.getElementById('login-form');
             const loginBtn = document.getElementById('login-btn');
             const errorMessage = document.getElementById('error-message');
+            const registerLink = document.getElementById('register-link');
+
+            // 检查是否允许注册
+            try {
+                const response = await fetch('/api/config/system');
+                if (response.ok) {
+                    const configData = await response.json();
+                    if (configData.allow_register === 'false') {
+                        registerLink.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                console.error('检查注册配置失败:', error);
+            }
 
             loginForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
