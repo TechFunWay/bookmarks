@@ -40,7 +40,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v1.7.0"
+	appVersion = "v1.8.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -258,6 +258,7 @@ func main() {
 		r.Post("/nodes/reorder", s.authMiddleware(s.handleReorderNodes))
 		r.Post("/import", s.authMiddleware(s.handleImport))
 		r.Post("/import-edge", s.authMiddleware(s.handleEdgeImport))
+		r.Get("/config/system", s.handleGetSystemConfig)
 		r.Get("/config", s.authMiddleware(s.handleGetConfig))
 		r.Post("/config", s.authMiddleware(s.handleUpdateConfig))
 	})
@@ -2102,6 +2103,33 @@ func respondError(w http.ResponseWriter, status int, err error) {
 	})
 }
 
+// handleGetSystemConfig 获取系统级配置（无需认证）
+func (s *server) handleGetSystemConfig(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM sys_config WHERE user_id = 0")
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+
+	config := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		config[key] = value
+	}
+
+	if err := rows.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, config)
+}
+
 // handleGetConfig 获取配置
 func (s *server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
@@ -2155,11 +2183,31 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	userID := getUserID(r)
 
-	// 执行更新或插入操作
-	_, err := s.db.ExecContext(r.Context(), `
-		INSERT INTO sys_config (user_id, key, value) VALUES (?, ?, ?)
-		ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-	`, userID, req.Key, req.Value)
+	var err error
+	if req.Key == "allow_register" {
+		var isAdmin int
+		err = s.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if isAdmin != 1 {
+			respondError(w, http.StatusForbidden, errors.New("需要管理员权限"))
+			return
+		}
+
+		_, err = s.db.ExecContext(r.Context(), `
+			INSERT INTO sys_config (user_id, key, value) VALUES (0, ?, ?)
+			ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+		`, req.Key, req.Value)
+	} else {
+		_, err = s.db.ExecContext(r.Context(), `
+			INSERT INTO sys_config (user_id, key, value) VALUES (?, ?, ?)
+			ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+		`, userID, req.Key, req.Value)
+	}
+
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -2483,6 +2531,27 @@ func getUserID(r *http.Request) int64 {
 	return 0
 }
 
+// adminMiddleware 管理员权限检查中间件
+func (s *server) adminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := getUserID(r)
+
+		var isAdmin int
+		err := s.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if isAdmin != 1 {
+			respondError(w, http.StatusForbidden, errors.New("需要管理员权限"))
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 // handleRegister 用户注册
 func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
@@ -2503,6 +2572,13 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	if len(req.Password) < 6 {
 		respondError(w, http.StatusBadRequest, errors.New("密码长度不能少于6位"))
+		return
+	}
+
+	var allowRegister string
+	err := s.db.QueryRow("SELECT value FROM sys_config WHERE user_id = 0 AND key = ?", "allow_register").Scan(&allowRegister)
+	if err == nil && allowRegister == "false" {
+		respondError(w, http.StatusForbidden, errors.New("系统已关闭注册功能"))
 		return
 	}
 
