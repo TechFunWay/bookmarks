@@ -54,9 +54,10 @@ type server struct {
 	faviconChan chan int64 // 图标获取任务队列
 }
 
-// 全局日志配置
+// 全局配置
 var (
-	logMode string
+	logMode  string
+	iconPath string
 )
 
 // Debug 调试日志函数，仅在debug模式下打印
@@ -122,6 +123,7 @@ const (
 func main() {
 	dataUrl := flag.String("dataUrl", "./", "数据存储路径")                              // 定义字符串参数
 	port := flag.String("port", "8901", "服务器监听端口")                                 // 定义端口参数
+	iconPathFlag := flag.String("iconPath", "static/icons", "图标存储路径")              // 定义图标路径参数
 	logModeFlag := flag.String("logmode", defaultLogMode, "日志模式: debug 或 release") // 日志模式参数
 	flag.Parse()                                                                   // 缺少此行将导致获取默认值
 
@@ -131,12 +133,16 @@ func main() {
 		logMode = envLogMode
 	}
 
+	// 设置图标路径全局变量
+	iconPath = *iconPathFlag
+
 	// 验证日志模式
 	if logMode != logModeDebug && logMode != logModeRelease {
 		log.Fatalf("无效的日志模式: %s, 必须是 debug 或 release", logMode)
 	}
 	fmt.Println("数据路径:", *dataUrl)
 	fmt.Println("监听端口:", *port)
+	fmt.Println("图标路径:", iconPath)
 	// 创建数据目录
 	if _, err := os.Stat(*dataUrl); os.IsNotExist(err) {
 		if err := os.Mkdir(*dataUrl, 0755); err != nil {
@@ -145,7 +151,7 @@ func main() {
 	}
 
 	// 创建图标存储目录
-	if err := os.MkdirAll("static/icons", 0755); err != nil {
+	if err := os.MkdirAll(iconPath, 0755); err != nil {
 		log.Fatalf("failed to create icons directory: %v", err)
 	}
 
@@ -233,6 +239,14 @@ func main() {
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Handle("/*", fileServer)
 	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
+
+	// 添加图标路径的静态文件服务
+	// 检查图标路径是否在 static 目录内
+	if !strings.HasPrefix(iconPath, "./static") && !strings.HasPrefix(iconPath, "static") {
+		// 如果图标路径不在 static 目录内，添加新的路由
+		iconFileServer := http.FileServer(http.Dir(iconPath))
+		r.Handle("/icons/*", http.StripPrefix("/icons", iconFileServer))
+	}
 
 	addr := ":" + *port
 	Debug("Bookmark server running on %s", addr)
@@ -2185,7 +2199,7 @@ func saveBase64Icon(iconData string) (string, error) {
 
 	// 按日期格式创建目录 (YYYYMMDD)
 	dateDir := time.Now().Format("20060102")
-	iconDir := fmt.Sprintf("static/icons/%s", dateDir)
+	iconDir := fmt.Sprintf("%s/%s", iconPath, dateDir)
 
 	// 创建目录
 	if err := os.MkdirAll(iconDir, 0755); err != nil {
@@ -2262,7 +2276,7 @@ func (s *server) downloadAndSaveIcon(iconURL string) (string, error) {
 
 	// 按日期格式创建目录 (YYYYMMDD)
 	dateDir := time.Now().Format("20060102")
-	iconDir := fmt.Sprintf("static/icons/%s", dateDir)
+	iconDir := fmt.Sprintf("%s/%s", iconPath, dateDir)
 
 	// 创建目录
 	if err := os.MkdirAll(iconDir, 0755); err != nil {
