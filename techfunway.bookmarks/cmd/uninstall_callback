@@ -11,7 +11,15 @@ if [ "${DATA_ACTION}" = "delete" ]; then
   # 检查文件/目录是否存在后再删除
   if [ -f "$TRIM_PKGVAR/db/database.db" ]; then
       rm "$TRIM_PKGVAR/db/database.db"
-      echo "文件已删除"
+      echo "database.db文件已删除"
+  fi
+  if [ -d "$TRIM_PKGVAR/db" ]; then
+      rm -rf "$TRIM_PKGVAR/db"
+      echo "db目录已删除"
+  fi
+  if [ -d "$TRIM_PKGVAR/icons" ]; then
+      rm -rf "$TRIM_PKGVAR/icons"
+      echo "icons目录已删除"
   fi
   if [ -d "$TRIM_PKGVAR" ]; then
       rm -rf "$TRIM_PKGVAR"
