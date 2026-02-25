@@ -397,6 +397,19 @@
               </label>
             </div>
           </div>
+          <hr v-if="currentUser && currentUser.is_admin" class="config-section-divider" />
+          <div v-if="currentUser && currentUser.is_admin" class="config-item admin-config">
+            <div class="config-item-label">
+              <span>允许注册</span>
+              <span class="config-item-desc">是否允许新用户注册</span>
+            </div>
+            <div class="config-item-control">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="config.allowRegister" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="secondary" @click="closeConfigModal">取消</button>
