@@ -215,7 +215,7 @@ func CompareVersions(v1, v2 string) (int, error) {
 // GetAvailableVersions 获取可用的升级版本列表
 func (u *Upgrade) GetAvailableVersions(fromVersion string) ([]string, error) {
 	// 硬编码所有可用版本
-	allVersions := []string{"v1.7.0"}
+	allVersions := []string{"v1.7.0", "v1.8.0"}
 
 	versions := []string{}
 	for _, version := range allVersions {
@@ -285,6 +285,8 @@ func (u *Upgrade) executeSQLForVersion(version string) error {
 	switch version {
 	case "v1.7.0":
 		return u.executeSQLForV1_7_0()
+	case "v1.8.0":
+		return u.executeSQLForV1_8_0()
 	default:
 		return fmt.Errorf("未找到版本 %s 的SQL语句", version)
 	}
@@ -319,12 +321,29 @@ func (u *Upgrade) executeSQLForV1_7_0() error {
 	return nil
 }
 
+// executeSQLForV1_8_0 执行v1.8.0版本的SQL语句
+func (u *Upgrade) executeSQLForV1_8_0() error {
+	sqlStatements := []string{}
+
+	for i, stmt := range sqlStatements {
+		u.LogUpgrade("执行SQL语句 #%d/%d: %s", i+1, len(sqlStatements), truncateString(stmt, 100))
+		_, err := u.db.Exec(stmt)
+		if err != nil {
+			u.LogUpgrade("执行SQL语句失败: %v, 语句: %s", err, truncateString(stmt, 100))
+		}
+	}
+
+	return nil
+}
+
 // executeDataProcessingLogic 执行特定版本的数据处理业务逻辑
 func (u *Upgrade) executeDataProcessingLogic(version string) error {
 	// 这里可以添加特定版本的数据处理业务逻辑
 	switch version {
 	case "v1.7.0":
 		return u.processDataForV1_7_0()
+	case "v1.8.0":
+		return u.processDataForV1_8_0()
 	default:
 		// 对于未特殊处理的版本，可以执行通用数据处理逻辑
 		u.LogUpgrade("执行版本 %s 的通用数据处理逻辑", version)
@@ -342,6 +361,22 @@ func (u *Upgrade) processDataForV1_7_0() error {
 	// 	return fmt.Errorf("更新配置项失败: %w", err)
 	// }
 
+	return nil
+}
+
+// processDataForV1_8_0 版本1.8.0的数据处理业务逻辑
+func (u *Upgrade) processDataForV1_8_0() error {
+	u.LogUpgrade("执行版本 v1.8.0 的数据处理业务逻辑")
+
+	_, err := u.db.Exec(`
+		INSERT OR IGNORE INTO sys_config (user_id, key, value)
+		VALUES (0, 'allow_register', 'true')
+	`)
+	if err != nil {
+		return fmt.Errorf("初始化默认配置失败: %w", err)
+	}
+
+	u.LogUpgrade("默认配置初始化完成：allow_register=true")
 	return nil
 }
 

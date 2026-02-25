@@ -161,10 +161,27 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             const registerForm = document.getElementById('register-form');
             const registerBtn = document.getElementById('register-btn');
             const errorMessage = document.getElementById('error-message');
+            const registerBox = document.querySelector('.register-box');
+            const registerHeader = document.querySelector('.register-header');
+
+            // 检查是否允许注册
+            try {
+                const response = await fetch('/api/config/system');
+                if (response.ok) {
+                    const configData = await response.json();
+                    if (configData.allow_register === 'false') {
+                        registerHeader.innerHTML = '<h1>注册已关闭</h1><p>系统已关闭注册功能，请联系管理员</p>';
+                        registerForm.style.display = 'none';
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('检查注册配置失败:', error);
+            }
 
             registerForm.addEventListener('submit', async function(e) {
                 e.preventDefault();

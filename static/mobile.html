@@ -1174,6 +1174,13 @@
               <input type="checkbox" v-model="config.showUpdatedAt">
             </div>
           </div>
+          <div v-if="currentUser && currentUser.is_admin" class="form-group">
+            <label>系统设置</label>
+            <div class="config-item">
+              <span>允许注册</span>
+              <input type="checkbox" v-model="config.allowRegister">
+            </div>
+          </div>
           <div class="modal-actions">
             <button type="button" class="primary" @click="saveConfigAndClose">
               保存
@@ -1282,7 +1289,8 @@
 
           // 配置项
           config: {
-            showUpdatedAt: true
+            showUpdatedAt: true,
+            allowRegister: true
           }
         };
       },
@@ -2454,6 +2462,18 @@
           } catch (error) {
             console.error('加载配置失败:', error);
           }
+
+          // 加载系统配置（无需认证）
+          try {
+            const sysResponse = await fetch('/api/config/system');
+            if (sysResponse.ok) {
+              const sysConfigData = await sysResponse.json();
+              this.config.allowRegister = sysConfigData.allow_register !== undefined ?
+                sysConfigData.allow_register === 'true' : true;
+            }
+          } catch (error) {
+            console.error('加载系统配置失败:', error);
+          }
         },
         async saveConfig() {
           try {
@@ -2468,9 +2488,28 @@
                 value: this.config.showUpdatedAt.toString()
               })
             });
+
+            // 保存 allow_register 配置（仅管理员）
+            if (this.currentUser && this.currentUser.is_admin) {
+              const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                  'Authorization': this.token,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  key: 'allow_register',
+                  value: this.config.allowRegister.toString()
+                }),
+              });
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '保存允许注册配置失败');
+              }
+            }
           } catch (error) {
             console.error('保存配置失败:', error);
-            this.showToast('保存配置失败', 'error');
+            this.showToast(error.message || '保存配置失败', 'error');
           }
         },
         showConfigPanel() {
