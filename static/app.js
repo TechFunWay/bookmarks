@@ -300,7 +300,8 @@ const app = createApp({
           showUrlInList: true, // 默认显示URL
           showFolderPath: true, // 默认显示文件夹路径
           showUpdatedAt: true, // 默认显示更新时间
-          showFullTitle: true // 默认显示完整标题（可换行）
+          showFullTitle: true, // 默认显示完整标题（可换行）
+          allowRegister: true // 默认允许注册
         },
         configModal: {
           visible: false
@@ -2225,6 +2226,19 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           }
         }
       }
+
+      // 加载系统配置（无需认证）
+      try {
+        const sysResponse = await fetch('/api/config/system');
+        if (sysResponse.ok) {
+          const sysConfigData = await sysResponse.json();
+          this.config.allowRegister = sysConfigData.allow_register !== undefined ?
+            sysConfigData.allow_register === 'true' : true;
+        }
+      } catch (error) {
+        console.error('加载系统配置失败:', error);
+        // 使用默认配置
+      }
     },
     // 保存配置
     async saveConfig() {
@@ -2249,10 +2263,30 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             throw new Error('保存配置失败');
           }
         }
+
+        // 保存 allow_register 配置（仅管理员）
+        if (this.currentUser && this.currentUser.is_admin) {
+          const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': this.token
+            },
+            body: JSON.stringify({
+              key: 'allow_register',
+              value: this.config.allowRegister.toString()
+            }),
+          });
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '保存允许注册配置失败');
+          }
+        }
+
         this.showToast('配置保存成功', 'success');
       } catch (error) {
         console.error('保存配置失败:', error);
-        this.showToast('配置保存失败', 'error');
+        this.showToast(error.message || '配置保存失败', 'error');
       }
     },
     // 打开配置模态框
