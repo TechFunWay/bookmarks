@@ -94,11 +94,23 @@
           <span>配置</span>
         </button>
         <div class="user-info" style="margin-left: 1rem;">
-          <span class="user-name">{{ currentUser ? currentUser.nickname || currentUser.username : '未登录' }}</span>
-          <button class="tertiary small" @click="logout" style="margin-left: 0.5rem;">
-            <span>🚪</span>
-            <span>退出</span>
-          </button>
+          <div class="user-dropdown" :class="{ 'active': userDropdownVisible }">
+            <button class="user-dropdown-btn" @click="toggleUserDropdown">
+              <span class="user-name">{{ currentUser ? currentUser.nickname || currentUser.username : '未登录' }}</span>
+              <span class="dropdown-arrow">▼</span>
+            </button>
+            <div class="user-dropdown-menu" v-if="userDropdownVisible" @click.stop>
+              <button class="dropdown-item" @click="openChangePasswordModal">
+                <span class="dropdown-icon">🔑</span>
+                <span>修改密码</span>
+              </button>
+              <hr class="dropdown-divider" />
+              <button class="dropdown-item danger" @click="logout">
+                <span class="dropdown-icon">🚪</span>
+                <span>退出登录</span>
+              </button>
+            </div>
+          </div>
         </div>
         <span class="version-info" style="margin-left: 1rem; color: #888; font-size: 0.8rem;">{{ version }}</span>
       </div>
@@ -962,6 +974,56 @@
             保存
           </button>
         </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- 修改密码模态框 -->
+  <transition name="fade">
+    <div v-if="changePasswordModal.visible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">修改密码</h3>
+        <form @submit.prevent="handleChangePassword">
+          <div class="form-group">
+            <label>旧密码</label>
+            <input
+              v-model="changePasswordModal.oldPassword"
+              type="password"
+              required
+              placeholder="请输入当前密码"
+              autocomplete="current-password"
+            />
+          </div>
+          <div class="form-group">
+            <label>新密码</label>
+            <input
+              v-model="changePasswordModal.newPassword"
+              type="password"
+              required
+              placeholder="请输入新密码（至少6位）"
+              autocomplete="new-password"
+              minlength="6"
+            />
+          </div>
+          <div class="form-group">
+            <label>确认新密码</label>
+            <input
+              v-model="changePasswordModal.confirmPassword"
+              type="password"
+              required
+              placeholder="请再次输入新密码"
+              autocomplete="new-password"
+              minlength="6"
+            />
+          </div>
+          <p v-if="changePasswordModal.error" class="form-error">{{ changePasswordModal.error }}</p>
+          <div class="modal-actions">
+            <button type="button" class="secondary" @click="closeChangePasswordModal">取消</button>
+            <button type="submit" class="primary" :disabled="changePasswordModal.loading">
+              {{ changePasswordModal.loading ? '修改中...' : '确认修改' }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </transition>
