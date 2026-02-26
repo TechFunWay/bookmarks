@@ -108,6 +108,11 @@ type registerRequest struct {
 	Email    string `json:"email,omitempty"`
 }
 
+type changePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
 type authResponse struct {
 	Token string `json:"token"`
 	User  *user  `json:"user"`
@@ -244,6 +249,7 @@ func main() {
 			r.Post("/register", s.handleRegister)
 			r.Post("/login", s.handleLogin)
 			r.Post("/logout", s.handleLogout)
+			r.Post("/change-password", s.authMiddleware(s.handleChangePassword))
 			r.Get("/me", s.authMiddleware(s.handleGetCurrentUser))
 			r.Get("/check", s.handleCheckAuth)
 		})
@@ -2834,6 +2840,62 @@ func (s *server) handleCheckAuth(w http.ResponseWriter, r *http.Request) {
 		"authenticated": true,
 		"user_id":       userID,
 	})
+}
+
+// handleChangePassword 修改密码
+func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	req.OldPassword = strings.TrimSpace(req.OldPassword)
+	req.NewPassword = strings.TrimSpace(req.NewPassword)
+
+	if req.OldPassword == "" || req.NewPassword == "" {
+		respondError(w, http.StatusBadRequest, errors.New("旧密码和新密码不能为空"))
+		return
+	}
+
+	if len(req.NewPassword) < 6 {
+		respondError(w, http.StatusBadRequest, errors.New("新密码长度不能少于6位"))
+		return
+	}
+
+	if req.OldPassword == req.NewPassword {
+		respondError(w, http.StatusBadRequest, errors.New("新密码不能与旧密码相同"))
+		return
+	}
+
+	userID := getUserID(r)
+
+	var dbPassword string
+	err := s.db.QueryRow("SELECT password FROM users WHERE id = ?", userID).Scan(&dbPassword)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(req.OldPassword))
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, errors.New("旧密码错误"))
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("密码加密失败: %w", err))
+		return
+	}
+
+	_, err = s.db.Exec("UPDATE users SET password = ? WHERE id = ?", string(hashedPassword), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "密码修改成功"})
 }
 
 // migrateOldIcons 迁移旧图标从 static/icons 到新路径
