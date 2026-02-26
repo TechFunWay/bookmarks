@@ -293,6 +293,17 @@ const app = createApp({
           '#cbd5e1',
           '#94a3b8'
         ],
+        // 用户下拉菜单状态
+        userDropdownVisible: false,
+        // 修改密码模态框状态
+        changePasswordModal: {
+          visible: false,
+          oldPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+          loading: false,
+          error: ''
+        },
         // 每行显示数量设置
         itemsPerRow: 1,
         // 配置相关
@@ -456,6 +467,82 @@ const app = createApp({
         this.token = null;
         this.currentUser = null;
         window.location.href = 'login.html';
+      }
+    },
+    toggleUserDropdown() {
+      this.userDropdownVisible = !this.userDropdownVisible;
+    },
+    openChangePasswordModal() {
+      this.userDropdownVisible = false;
+      this.changePasswordModal.visible = true;
+      this.changePasswordModal.oldPassword = '';
+      this.changePasswordModal.newPassword = '';
+      this.changePasswordModal.confirmPassword = '';
+      this.changePasswordModal.error = '';
+      this.changePasswordModal.loading = false;
+    },
+    closeChangePasswordModal() {
+      this.changePasswordModal.visible = false;
+      this.changePasswordModal.oldPassword = '';
+      this.changePasswordModal.newPassword = '';
+      this.changePasswordModal.confirmPassword = '';
+      this.changePasswordModal.error = '';
+      this.changePasswordModal.loading = false;
+    },
+    async handleChangePassword() {
+      this.changePasswordModal.error = '';
+
+      if (!this.changePasswordModal.oldPassword || !this.changePasswordModal.newPassword || !this.changePasswordModal.confirmPassword) {
+        this.changePasswordModal.error = '请填写所有字段';
+        return;
+      }
+
+      if (this.changePasswordModal.newPassword.length < 6) {
+        this.changePasswordModal.error = '新密码长度不能少于6位';
+        return;
+      }
+
+      if (this.changePasswordModal.newPassword !== this.changePasswordModal.confirmPassword) {
+        this.changePasswordModal.error = '两次输入的新密码不一致';
+        return;
+      }
+
+      if (this.changePasswordModal.oldPassword === this.changePasswordModal.newPassword) {
+        this.changePasswordModal.error = '新密码不能与旧密码相同';
+        return;
+      }
+
+      this.changePasswordModal.loading = true;
+
+      try {
+        const response = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': this.token
+          },
+          body: JSON.stringify({
+            old_password: this.changePasswordModal.oldPassword,
+            new_password: this.changePasswordModal.newPassword
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          this.showToast('密码修改成功，请重新登录', 'success');
+          this.closeChangePasswordModal();
+          setTimeout(() => {
+            this.logout();
+          }, 1500);
+        } else {
+          this.changePasswordModal.error = data.error || '密码修改失败';
+        }
+      } catch (error) {
+        console.error('修改密码失败:', error);
+        this.changePasswordModal.error = '网络错误，请稍后重试';
+      } finally {
+        this.changePasswordModal.loading = false;
       }
     },
     showFolderSelector() {
@@ -1714,8 +1801,8 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.contextMenu.nodeId = null;
     },
     handleRootClick() {
-      // 点击根元素时总是隐藏右键菜单
       this.hideContextMenu();
+      this.userDropdownVisible = false;
     },
     handleHeaderClick(event) {
       // 处理头部区域的点击事件，避免意外隐藏右键菜单
