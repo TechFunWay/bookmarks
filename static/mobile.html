@@ -1283,6 +1283,19 @@
           breadcrumb: [],
           addMenuVisible: false,
 
+          // 移动端用户菜单
+          mobileUserMenuVisible: false,
+
+          // 修改密码模态框
+          changePasswordModal: {
+            visible: false,
+            oldPassword: '',
+            newPassword: '',
+            confirmPassword: '',
+            loading: false,
+            error: ''
+          },
+
           // 网址列表编辑模式
           bookmarkEditMode: false,
           selectedBookmarks: new Set(),
@@ -2368,6 +2381,7 @@
         },
         handleRootClick() {
           this.hideContextMenu();
+          this.mobileUserMenuVisible = false;
         },
         handleHeaderClick(event) {
           const isButtonClick = event.target.closest('button');
