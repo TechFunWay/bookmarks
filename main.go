@@ -149,6 +149,7 @@ func main() {
 	}
 	iconPath := dataPath + "icons/"
 	dbPath := dataPath + "db/"
+	logPath := dataPath + "logs/"
 
 	// 验证日志模式
 	if logMode != logModeDebug && logMode != logModeRelease {
@@ -158,6 +159,7 @@ func main() {
 	fmt.Println("监听端口:", *port)
 	fmt.Println("图标路径:", iconPath)
 	fmt.Println("数据库路径:", dbPath)
+	fmt.Println("日志路径:", logPath)
 	// 创建数据目录
 	if _, err := os.Stat(*dataUrl); os.IsNotExist(err) {
 		if err := os.Mkdir(*dataUrl, 0755); err != nil {
@@ -179,6 +181,13 @@ func main() {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(dbPath, 0755); err != nil {
 			log.Fatalf("failed to create db directory: %v", err)
+		}
+	}
+
+	// 创建日志目录
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(logPath, 0755); err != nil {
+			log.Fatalf("failed to create logs directory: %v", err)
 		}
 	}
 
@@ -237,7 +246,7 @@ func main() {
 	go s.faviconWorker()
 
 	// 创建日志文件
-	logFile, err := logger.CreateLogFile()
+	logFile, err := logger.CreateLogFile(logPath)
 	if err != nil {
 		log.Fatalf("failed to create log file: %v", err)
 	}
