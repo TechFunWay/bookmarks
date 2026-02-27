@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>用户管理 - 网址收藏夹</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/vue.global.prod.js"></script>
+  <style>
+    .users-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .users-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    .users-header h1 {
+      font-size: 2rem;
+      color: #333;
+    }
+
+    .users-header .back-btn {
+      padding: 0.5rem 1rem;
+      background: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .search-bar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .search-bar input {
+      flex: 1;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+
+    .search-bar button {
+      padding: 0.75rem 1.5rem;
+      background: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .users-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .users-table th,
+    .users-table td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    .users-table th {
+      background: #f5f5f5;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .users-table tr:hover {
+      background: #f9f9f9;
+    }
+
+    .users-table .checkbox-cell {
+      width: 40px;
+      text-align: center;
+    }
+
+    .users-table .checkbox-cell input {
+      cursor: pointer;
+    }
+
+    .users-table .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #ddd;
+    }
+
+    .users-table .user-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .users-table .user-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .users-table .user-name {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .users-table .user-email {
+      font-size: 0.875rem;
+      color: #666;
+    }
+
+    .users-table .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .users-table .badge-admin {
+      background: #ff6b6b;
+      color: white;
+    }
+
+    .users-table .badge-active {
+      background: #51cf66;
+      color: white;
+    }
+
+    .users-table .badge-inactive {
+      background: #adb5bd;
+      color: white;
+    }
+
+    .users-table .actions-cell {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .users-table .action-btn {
+      padding: 0.375rem 0.75rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .users-table .action-btn-edit {
+      background: #4a90e2;
+      color: white;
+    }
+
+    .users-table .action-btn-reset {
+      background: #ffc107;
+      color: #333;
+    }
+
+    .users-table .action-btn-delete {
+      background: #dc3545;
+      color: white;
+    }
+
+    .users-table .action-btn:hover {
+      opacity: 0.8;
+    }
+
+    .batch-actions {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .batch-actions button {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    .batch-actions .btn-activate {
+      background: #51cf66;
+      color: white;
+    }
+
+    .batch-actions .btn-deactivate {
+      background: #ffc107;
+      color: #333;
+    }
+
+    .batch-actions .btn-delete {
+      background: #dc3545;
+      color: white;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .pagination button {
+      padding: 0.5rem 1rem;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pagination .page-info {
+      color: #666;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 8px;
+      padding: 2rem;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal h2 {
+      margin-bottom: 1.5rem;
+      color: #333;
+    }
+
+    .modal .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .modal .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .modal .form-group input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+
+    .modal .form-group input[type="checkbox"] {
+      width: auto;
+    }
+
+    .modal .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .modal .modal-actions button {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .modal .modal-actions .btn-cancel {
+      background: #6c757d;
+      color: white;
+    }
+
+    .modal .modal-actions .btn-save {
+      background: #4a90e2;
+      color: white;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #666;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: #666;
+    }
+
+    .empty-state h3 {
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      padding: 1rem 1.5rem;
+      border-radius: 4px;
+      color: white;
+      z-index: 1001;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.success {
+      background: #51cf66;
+    }
+
+    .toast.error {
+      background: #dc3545;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="users-container">
+      <div class="users-header">
+        <h1>用户管理</h1>
+        <a href="/pc.html" class="back-btn">返回首页</a>
+      </div>
+
+      <div class="search-bar">
+        <input
+          type="text"
+          v-model="searchQuery"
+          placeholder="搜索用户名、昵称或邮箱..."
+          @keyup.enter="loadUsers"
+        />
+        <button @click="loadUsers">搜索</button>
+      </div>
+
+      <div class="batch-actions" v-if="selectedUsers.length > 0">
+        <span>已选择 {{ selectedUsers.length }} 个用户</span>
+        <button class="btn-activate" @click="batchActivate">激活</button>
+        <button class="btn-deactivate" @click="batchDeactivate">停用</button>
+        <button class="btn-delete" @click="batchDelete">删除</button>
+      </div>
+
+      <div v-if="loading" class="loading">加载中...</div>
+
+      <div v-else-if="users.length === 0" class="empty-state">
+        <h3>暂无用户</h3>
+        <p>点击搜索按钮查找用户</p>
+      </div>
+
+      <table v-else class="users-table">
+        <thead>
+          <tr>
+            <th class="checkbox-cell">
+              <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" />
+            </th>
+            <th>用户</th>
+            <th>角色</th>
+            <th>状态</th>
+            <th>创建时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="user in users" :key="user.id">
+            <td class="checkbox-cell">
+              <input type="checkbox" v-model="selectedUsers" :value="user.id" />
+            </td>
+            <td>
+              <div class="user-info">
+                <img
+                  :src="user.avatar || '/static/img/avatar.jpg'"
+                  :alt="user.username"
+                  class="user-avatar"
+                  onerror="this.src='/static/img/avatar.jpg'"
+                />
+                <div class="user-details">
+                  <span class="user-name">{{ user.nickname || user.username }}</span>
+                  <span class="user-email">{{ user.email || '未设置邮箱' }}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span v-if="user.is_admin" class="badge badge-admin">管理员</span>
+              <span v-else class="badge">普通用户</span>
+            </td>
+            <td>
+              <span v-if="user.is_active" class="badge badge-active">活跃</span>
+              <span v-else class="badge badge-inactive">停用</span>
+            </td>
+            <td>{{ formatDate(user.created_at) }}</td>
+            <td class="actions-cell">
+              <button 
+                class="action-btn action-btn-edit" 
+                @click="openEditModal(user)"
+                :disabled="user.id === currentUserId"
+                :style="{ opacity: user.id === currentUserId ? 0.5 : 1, cursor: user.id === currentUserId ? 'not-allowed' : 'pointer' }"
+              >
+                编辑
+              </button>
+              <button class="action-btn action-btn-reset" @click="openResetPasswordModal(user)">重置密码</button>
+              <button 
+                class="action-btn action-btn-delete" 
+                @click="confirmDelete(user)"
+                :disabled="user.id === currentUserId"
+                :style="{ opacity: user.id === currentUserId ? 0.5 : 1, cursor: user.id === currentUserId ? 'not-allowed' : 'pointer' }"
+              >
+                删除
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="pagination" v-if="totalPages > 1">
+        <button @click="prevPage" :disabled="currentPage === 1">上一页</button>
+        <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页 (总计 {{ total }} 个用户)</span>
+        <button @click="nextPage" :disabled="currentPage === totalPages">下一页</button>
+      </div>
+    </div>
+
+    <!-- 编辑用户模态框 -->
+    <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+      <div class="modal">
+        <h2>编辑用户</h2>
+        <div class="form-group">
+          <label>用户名</label>
+          <input type="text" :value="editingUser.username" disabled />
+        </div>
+        <div class="form-group">
+          <label>昵称</label>
+          <input type="text" v-model="editForm.nickname" />
+        </div>
+        <div class="form-group">
+          <label>邮箱</label>
+          <input type="email" v-model="editForm.email" />
+        </div>
+        <div class="form-group">
+          <label>头像 URL</label>
+          <input type="text" v-model="editForm.avatar" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" @click="closeEditModal">取消</button>
+          <button class="btn-save" @click="saveUser">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 重置密码模态框 -->
+    <div v-if="showResetPasswordModal" class="modal-overlay" @click.self="closeResetPasswordModal">
+      <div class="modal">
+        <h2>重置密码</h2>
+        <p style="margin-bottom: 1rem; color: #666;">用户: {{ editingUser.nickname || editingUser.username }}</p>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" v-model="resetPasswordForm.new_password" placeholder="请输入新密码（至少6位）" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" @click="closeResetPasswordModal">取消</button>
+          <button class="btn-save" @click="resetPassword">重置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 确认删除模态框 -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
+      <div class="modal">
+        <h2>确认删除</h2>
+        <p style="margin-bottom: 1rem; color: #666;">确定要删除用户 "{{ deletingUser.nickname || deletingUser.username }}" 吗？</p>
+        <p style="margin-bottom: 1.5rem; color: #dc3545; font-size: 0.875rem;">此操作将同时删除该用户的所有书签数据，且无法恢复！</p>
+        <div class="modal-actions">
+          <button class="btn-cancel" @click="closeDeleteModal">取消</button>
+          <button class="btn-delete" @click="deleteUser">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div v-if="toast.show" :class="['toast', toast.type]">
+      {{ toast.message }}
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          token: localStorage.getItem('token'),
+          currentUserId: null,
+          users: [],
+          total: 0,
+          currentPage: 1,
+          pageSize: 20,
+          totalPages: 0,
+          searchQuery: '',
+          loading: false,
+          selectedUsers: [],
+          selectAll: false,
+          showEditModal: false,
+          showResetPasswordModal: false,
+          showDeleteModal: false,
+          editingUser: null,
+          deletingUser: null,
+          editForm: {
+            nickname: '',
+            email: '',
+            avatar: '',
+            is_admin: false,
+            is_active: false
+          },
+          resetPasswordForm: {
+            new_password: ''
+          },
+          toast: {
+            show: false,
+            message: '',
+            type: 'success'
+          }
+        };
+      },
+      mounted() {
+        if (!this.token) {
+          window.location.href = '/login.html';
+          return;
+        }
+        this.getCurrentUserId();
+        this.loadUsers();
+      },
+      methods: {
+        async getCurrentUserId() {
+          try {
+            const response = await fetch('/api/auth/me', {
+              headers: {
+                'Authorization': this.token
+              }
+            });
+            if (response.ok) {
+              const data = await response.json();
+              this.currentUserId = data.id;
+            }
+          } catch (error) {
+            console.error('获取当前用户ID失败:', error);
+          }
+        },
+        async loadUsers() {
+          this.loading = true;
+          try {
+            const params = new URLSearchParams({
+              page: this.currentPage,
+              limit: this.pageSize
+            });
+            if (this.searchQuery) {
+              params.append('search', this.searchQuery);
+            }
+
+            const response = await fetch(`/api/users?${params}`, {
+              headers: {
+                'Authorization': this.token
+              }
+            });
+
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.error || '加载用户列表失败');
+            }
+
+            const data = await response.json();
+            this.users = data.users || [];
+            this.total = data.total || 0;
+            this.totalPages = Math.ceil(this.total / this.pageSize);
+          } catch (error) {
+            console.error('加载用户列表失败:', error);
+            this.showToast(error.message || '加载用户列表失败', 'error');
+            this.users = [];
+            this.total = 0;
+            this.totalPages = 0;
+          } finally {
+            this.loading = false;
+          }
+        },
+        prevPage() {
+          if (this.currentPage > 1) {
+            this.currentPage--;
+            this.loadUsers();
+          }
+        },
+        nextPage() {
+          if (this.currentPage < this.totalPages) {
+            this.currentPage++;
+            this.loadUsers();
+          }
+        },
+        toggleSelectAll() {
+          if (this.selectAll) {
+            this.selectedUsers = this.users.map(u => u.id);
+          } else {
+            this.selectedUsers = [];
+          }
+        },
+        openEditModal(user) {
+          this.editingUser = user;
+          this.editForm = {
+            nickname: user.nickname,
+            email: user.email,
+            avatar: user.avatar
+          };
+          this.showEditModal = true;
+        },
+        closeEditModal() {
+          this.showEditModal = false;
+          this.editingUser = null;
+        },
+        async saveUser() {
+          try {
+            const response = await fetch(`/api/users/${this.editingUser.id}`, {
+              method: 'PUT',
+              headers: {
+                'Authorization': this.token,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(this.editForm)
+            });
+
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.error || '保存失败');
+            }
+
+            this.showToast('保存成功', 'success');
+            this.closeEditModal();
+            this.loadUsers();
+          } catch (error) {
+            this.showToast(error.message, 'error');
+          }
+        },
+        openResetPasswordModal(user) {
+          this.editingUser = user;
+          this.resetPasswordForm = { new_password: '' };
+          this.showResetPasswordModal = true;
+        },
+        closeResetPasswordModal() {
+          this.showResetPasswordModal = false;
+          this.editingUser = null;
+          this.resetPasswordForm = { new_password: '' };
+        },
+        async resetPassword() {
+          if (this.resetPasswordForm.new_password.length < 6) {
+            this.showToast('密码长度至少6位', 'error');
+            return;
+          }
+
+          try {
+            const response = await fetch(`/api/users/${this.editingUser.id}/reset-password`, {
+              method: 'POST',
+              headers: {
+                'Authorization': this.token,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(this.resetPasswordForm)
+            });
+
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.error || '重置密码失败');
+            }
+
+            this.showToast('密码重置成功', 'success');
+            this.closeResetPasswordModal();
+          } catch (error) {
+            this.showToast(error.message, 'error');
+          }
+        },
+        confirmDelete(user) {
+          this.deletingUser = user;
+          this.showDeleteModal = true;
+        },
+        closeDeleteModal() {
+          this.showDeleteModal = false;
+          this.deletingUser = null;
+        },
+        async deleteUser() {
+          try {
+            const response = await fetch(`/api/users/${this.deletingUser.id}`, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': this.token
+              }
+            });
+
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.error || '删除失败');
+            }
+
+            this.showToast('删除成功', 'success');
+            this.closeDeleteModal();
+            this.loadUsers();
+          } catch (error) {
+            this.showToast(error.message, 'error');
+          }
+        },
+        async batchActivate() {
+          await this.batchOperation('activate', '激活成功');
+        },
+        async batchDeactivate() {
+          await this.batchOperation('deactivate', '停用成功');
+        },
+        async batchDelete() {
+          if (!confirm(`确定要删除选中的 ${this.selectedUsers.length} 个用户吗？`)) {
+            return;
+          }
+          await this.batchOperation('delete', '删除成功');
+        },
+        async batchOperation(action, successMessage) {
+          try {
+            const response = await fetch('/api/users/batch', {
+              method: 'POST',
+              headers: {
+                'Authorization': this.token,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                action: action,
+                user_ids: this.selectedUsers
+              })
+            });
+
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.error || '操作失败');
+            }
+
+            this.showToast(successMessage, 'success');
+            this.selectedUsers = [];
+            this.selectAll = false;
+            this.loadUsers();
+          } catch (error) {
+            this.showToast(error.message, 'error');
+          }
+        },
+        formatDate(dateString) {
+          if (!dateString) return '-';
+          const date = new Date(dateString);
+          return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        },
+        showToast(message, type = 'success') {
+          this.toast = {
+            show: true,
+            message: message,
+            type: type
+          };
+          setTimeout(() => {
+            this.toast.show = false;
+          }, 3000);
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
