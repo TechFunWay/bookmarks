@@ -105,19 +105,15 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 }
 
 // CreateLogFile 创建并返回日志文件句柄
-func CreateLogFile() (*os.File, error) {
-	// 创建日志目录
-	logDir := "./logs"
+func CreateLogFile(logDir string) (*os.File, error) {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %v", err)
 	}
 
-	// 清理旧日志文件
 	if err := RotateLogFiles(logDir); err != nil {
 		log.Printf("清理旧日志文件时出现错误: %v", err)
 	}
 
-	// 创建日志文件，按日期命名
 	logFileName := filepath.Join(logDir, fmt.Sprintf("access_%s.log", time.Now().Format("20060102")))
 	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
