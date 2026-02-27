@@ -212,7 +212,7 @@ func main() {
 	}
 
 	// 执行系统升级
-	upgrader := logic.NewUpgrade(db, appVersion)
+	upgrader := logic.NewUpgrade(db, appVersion, logPath)
 	if err := upgrader.PerformUpgrade(); err != nil {
 		log.Printf("系统升级失败: %v", err)
 	}
