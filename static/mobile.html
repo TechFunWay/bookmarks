@@ -144,6 +144,55 @@
       background: var(--card-bg-hover);
     }
 
+    .user-info-mobile {
+      padding: 0.5rem 1rem;
+      background: var(--card-bg);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .user-info-mobile:hover {
+      background: var(--card-bg-hover);
+    }
+
+    .user-menu-mobile {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 0.5rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      min-width: 180px;
+      z-index: 1000;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .menu-item:hover {
+      background: var(--card-bg-hover);
+    }
+
+    .menu-item span:first-child {
+      font-size: 1.125rem;
+      min-width: 1.125rem;
+      text-align: center;
+    }
+
     .folder-content {
       padding: 0 1rem 1rem;
       border-top: 1px solid var(--border);
@@ -1230,6 +1279,7 @@
         return {
           currentUser: null,
           token: localStorage.getItem('token') || null,
+          showUserMenu: false,
           tree: [],
           loading: false,
           selectedNodeId: null,
@@ -1539,6 +1589,19 @@
             this.currentUser = null;
             window.location.href = 'login.html';
           }
+        },
+        openChangePasswordModal() {
+          this.showUserMenu = false;
+          this.changePasswordModal.visible = true;
+          this.changePasswordModal.oldPassword = '';
+          this.changePasswordModal.newPassword = '';
+          this.changePasswordModal.confirmPassword = '';
+          this.changePasswordModal.error = '';
+          this.changePasswordModal.loading = false;
+        },
+        openUserManagement() {
+          this.showUserMenu = false;
+          window.location.href = '/users.html';
         },
         loadSavedTheme() {
           const savedTheme = localStorage.getItem('bookmark-manager-theme');
