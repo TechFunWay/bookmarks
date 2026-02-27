@@ -34,18 +34,17 @@ type Upgrade struct {
 }
 
 // NewUpgrade 创建升级管理器实例
-func NewUpgrade(db *sql.DB, currentVersion string) *Upgrade {
+func NewUpgrade(db *sql.DB, currentVersion string, logDir string) *Upgrade {
 	upgrade := &Upgrade{
 		db:             db,
 		currentVersion: currentVersion,
 		logger:         log.New(os.Stdout, "[UPGRADE] ", log.LstdFlags),
 	}
 
-	// 创建升级日志记录器
-	upgradeLogger, err := createUpgradeLogger()
+	upgradeLogger, err := createUpgradeLogger(logDir)
 	if err != nil {
 		log.Printf("[WARNING] 创建升级日志记录器失败: %v", err)
-		upgrade.upgradeLogger = upgrade.logger // 回退到标准输出
+		upgrade.upgradeLogger = upgrade.logger
 	} else {
 		upgrade.upgradeLogger = upgradeLogger
 	}
@@ -54,21 +53,17 @@ func NewUpgrade(db *sql.DB, currentVersion string) *Upgrade {
 }
 
 // createUpgradeLogger 创建升级专用日志记录器
-func createUpgradeLogger() (*log.Logger, error) {
-	// 创建日志目录
-	logDir := "./logs"
+func createUpgradeLogger(logDir string) (*log.Logger, error) {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %v", err)
 	}
 
-	// 创建升级日志文件，按日期命名
 	logFileName := filepath.Join(logDir, fmt.Sprintf("upgrade_%s.log", time.Now().Format("20060102")))
 	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open upgrade log file: %v", err)
 	}
 
-	// 创建日志记录器
 	logger := log.New(logFile, "[UPGRADE] ", log.LstdFlags)
 
 	return logger, nil
