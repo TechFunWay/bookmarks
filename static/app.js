@@ -481,6 +481,10 @@ const app = createApp({
       this.changePasswordModal.error = '';
       this.changePasswordModal.loading = false;
     },
+    openUserManagement() {
+      this.userDropdownVisible = false;
+      window.location.href = '/users.html';
+    },
     closeChangePasswordModal() {
       this.changePasswordModal.visible = false;
       this.changePasswordModal.oldPassword = '';
