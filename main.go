@@ -91,14 +91,14 @@ type node struct {
 }
 
 type user struct {
-	ID        int64  `json:"id"`
-	Username  string `json:"username"`
-	Nickname  string `json:"nickname"`
-	Email     string `json:"email"`
-	Avatar    string `json:"avatar"`
-	IsActive  bool   `json:"is_active"`
-	IsAdmin   bool   `json:"is_admin"`
-	CreatedAt string `json:"created_at"`
+	ID        int64   `json:"id"`
+	Username  string  `json:"username"`
+	Nickname  string  `json:"nickname"`
+	Email     string  `json:"email"`
+	Avatar    *string `json:"avatar"`
+	IsActive  bool    `json:"is_active"`
+	IsAdmin   bool    `json:"is_admin"`
+	CreatedAt string  `json:"created_at"`
 }
 
 type authRequest struct {
@@ -266,6 +266,14 @@ func main() {
 			r.Post("/change-password", s.authMiddleware(s.handleChangePassword))
 			r.Get("/me", s.authMiddleware(s.handleGetCurrentUser))
 			r.Get("/check", s.handleCheckAuth)
+		})
+		r.Route("/users", func(r chi.Router) {
+			r.Get("/", s.authMiddleware(s.adminMiddleware(s.handleGetUsers)))
+			r.Get("/{id}", s.authMiddleware(s.adminMiddleware(s.handleGetUser)))
+			r.Put("/{id}", s.authMiddleware(s.adminMiddleware(s.handleUpdateUser)))
+			r.Delete("/{id}", s.authMiddleware(s.adminMiddleware(s.handleDeleteUser)))
+			r.Post("/{id}/reset-password", s.authMiddleware(s.adminMiddleware(s.handleResetPassword)))
+			r.Post("/batch", s.authMiddleware(s.adminMiddleware(s.handleBatchUsers)))
 		})
 		r.Get("/tree", s.authMiddleware(s.handleGetTree))
 		r.Get("/metadata", s.handleMetadata)
@@ -2246,6 +2254,310 @@ func (s *server) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"version": appVersion})
 }
 
+type userListResponse struct {
+	Users []user `json:"users"`
+	Total int64  `json:"total"`
+	Page  int    `json:"page"`
+	Limit int    `json:"limit"`
+}
+
+type updateUserRequest struct {
+	Nickname string `json:"nickname"`
+	Email    string `json:"email"`
+	Avatar   string `json:"avatar"`
+}
+
+type resetPasswordRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+type batchUsersRequest struct {
+	Action  string  `json:"action"`
+	UserIDs []int64 `json:"user_ids"`
+}
+
+func (s *server) handleGetUsers(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+
+	offset := (page - 1) * limit
+
+	var whereClause string
+	var args []interface{}
+
+	if search != "" {
+		whereClause = "WHERE username LIKE ? OR nickname LIKE ? OR email LIKE ?"
+		searchPattern := "%" + search + "%"
+		args = []interface{}{searchPattern, searchPattern, searchPattern}
+	}
+
+	countQuery := "SELECT COUNT(*) FROM users " + whereClause
+	var total int64
+	err := s.db.QueryRow(countQuery, args...).Scan(&total)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	query := "SELECT id, username, nickname, email, avatar, is_active, is_admin, created_at FROM users " + whereClause + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+
+	var users []user
+	for rows.Next() {
+		var u user
+		var isActive, isAdmin int
+		var avatar sql.NullString
+		err := rows.Scan(&u.ID, &u.Username, &u.Nickname, &u.Email, &avatar, &isActive, &isAdmin, &u.CreatedAt)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if avatar.Valid {
+			u.Avatar = &avatar.String
+		}
+		u.IsActive = isActive == 1
+		u.IsAdmin = isAdmin == 1
+		users = append(users, u)
+	}
+
+	respondJSON(w, http.StatusOK, userListResponse{
+		Users: users,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	})
+}
+
+func (s *server) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid user id"))
+		return
+	}
+
+	var u user
+	var isActive, isAdmin int
+	var avatar sql.NullString
+	err = s.db.QueryRow("SELECT id, username, nickname, email, avatar, is_active, is_admin, created_at FROM users WHERE id = ?", userID).
+		Scan(&u.ID, &u.Username, &u.Nickname, &u.Email, &avatar, &isActive, &isAdmin, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			respondError(w, http.StatusNotFound, errors.New("user not found"))
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if avatar.Valid {
+		u.Avatar = &avatar.String
+	}
+	u.IsActive = isActive == 1
+	u.IsAdmin = isAdmin == 1
+
+	respondJSON(w, http.StatusOK, u)
+}
+
+func (s *server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "id")
+	targetUserID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid user id"))
+		return
+	}
+
+	currentUserID := getUserID(r)
+
+	if targetUserID == currentUserID {
+		respondError(w, http.StatusBadRequest, errors.New("不能修改自己的信息"))
+		return
+	}
+
+	var req updateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	updates := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.Nickname != "" {
+		updates = append(updates, fmt.Sprintf("nickname = $%d", argIndex))
+		args = append(args, req.Nickname)
+		argIndex++
+	}
+
+	if req.Email != "" {
+		updates = append(updates, fmt.Sprintf("email = $%d", argIndex))
+		args = append(args, req.Email)
+		argIndex++
+	}
+
+	if req.Avatar != "" {
+		updates = append(updates, fmt.Sprintf("avatar = $%d", argIndex))
+		args = append(args, req.Avatar)
+		argIndex++
+	}
+
+	if len(updates) == 0 {
+		respondError(w, http.StatusBadRequest, errors.New("no fields to update"))
+		return
+	}
+
+	args = append(args, targetUserID)
+
+	query := fmt.Sprintf("UPDATE users SET %s, updated_at = CURRENT_TIMESTAMP WHERE id = $%d", strings.Join(updates, ", "), argIndex)
+
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		respondError(w, http.StatusNotFound, errors.New("user not found"))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
+}
+
+func (s *server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "id")
+	targetUserID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid user id"))
+		return
+	}
+
+	currentUserID := getUserID(r)
+
+	if targetUserID == currentUserID {
+		respondError(w, http.StatusBadRequest, errors.New("不能删除自己"))
+		return
+	}
+
+	result, err := s.db.Exec("DELETE FROM users WHERE id = ?", targetUserID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		respondError(w, http.StatusNotFound, errors.New("user not found"))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
+}
+
+func (s *server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "id")
+	targetUserID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid user id"))
+		return
+	}
+
+	var req resetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if len(req.NewPassword) < 6 {
+		respondError(w, http.StatusBadRequest, errors.New("密码长度至少6位"))
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	_, err = s.db.Exec("UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", string(hashedPassword), targetUserID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
+}
+
+func (s *server) handleBatchUsers(w http.ResponseWriter, r *http.Request) {
+	var req batchUsersRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if len(req.UserIDs) == 0 {
+		respondError(w, http.StatusBadRequest, errors.New("user_ids is required"))
+		return
+	}
+
+	currentUserID := getUserID(r)
+
+	for _, userID := range req.UserIDs {
+		if userID == currentUserID {
+			respondError(w, http.StatusBadRequest, errors.New("不能对自己执行批量操作"))
+			return
+		}
+	}
+
+	var query string
+	var err error
+
+	userIDStrs := make([]string, len(req.UserIDs))
+	for i, id := range req.UserIDs {
+		userIDStrs[i] = strconv.FormatInt(id, 10)
+	}
+
+	switch req.Action {
+	case "delete":
+		query = "DELETE FROM users WHERE id IN (" + strings.Join(userIDStrs, ",") + ")"
+		_, err = s.db.Exec(query)
+	case "activate":
+		query = "UPDATE users SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id IN (" + strings.Join(userIDStrs, ",") + ")"
+		_, err = s.db.Exec(query)
+	case "deactivate":
+		query = "UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (" + strings.Join(userIDStrs, ",") + ")"
+		_, err = s.db.Exec(query)
+	default:
+		respondError(w, http.StatusBadRequest, errors.New("invalid action"))
+		return
+	}
+
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
+}
+
 // 辅助函数：获取最小值
 func min(a, b int) int {
 	if a < b {
@@ -2713,7 +3025,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password  string
 		Nickname  string
 		Email     string
-		Avatar    string
+		Avatar    sql.NullString
 		IsActive  int
 		IsAdmin   int
 		Token     string
@@ -2721,7 +3033,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := s.db.QueryRow(`
-		SELECT id, username, password, nickname, email, COALESCE(avatar, '') as avatar, is_active, is_admin, token, created_at
+		SELECT id, username, password, nickname, email, avatar, is_active, is_admin, token, created_at
 		FROM users WHERE username = ?
 	`, req.Username).Scan(
 		&dbUser.ID, &dbUser.Username, &dbUser.Password, &dbUser.Nickname,
@@ -2762,10 +3074,12 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Username:  dbUser.Username,
 		Nickname:  dbUser.Nickname,
 		Email:     dbUser.Email,
-		Avatar:    dbUser.Avatar,
 		IsActive:  dbUser.IsActive == 1,
 		IsAdmin:   dbUser.IsAdmin == 1,
 		CreatedAt: dbUser.CreatedAt,
+	}
+	if dbUser.Avatar.Valid {
+		user.Avatar = &dbUser.Avatar.String
 	}
 
 	respondJSON(w, http.StatusOK, authResponse{
@@ -2800,14 +3114,14 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		Username  string
 		Nickname  string
 		Email     string
-		Avatar    string
+		Avatar    sql.NullString
 		IsActive  int
 		IsAdmin   int
 		CreatedAt string
 	}
 
 	err := s.db.QueryRow(`
-		SELECT id, username, nickname, email, COALESCE(avatar, '') as avatar, is_active, is_admin, created_at
+		SELECT id, username, nickname, email, avatar, is_active, is_admin, created_at
 		FROM users WHERE id = ?
 	`, userID).Scan(
 		&dbUser.ID, &dbUser.Username, &dbUser.Nickname,
@@ -2823,10 +3137,12 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		Username:  dbUser.Username,
 		Nickname:  dbUser.Nickname,
 		Email:     dbUser.Email,
-		Avatar:    dbUser.Avatar,
 		IsActive:  dbUser.IsActive == 1,
 		IsAdmin:   dbUser.IsAdmin == 1,
 		CreatedAt: dbUser.CreatedAt,
+	}
+	if dbUser.Avatar.Valid {
+		user.Avatar = &dbUser.Avatar.String
 	}
 
 	respondJSON(w, http.StatusOK, user)
