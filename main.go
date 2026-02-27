@@ -2457,7 +2457,24 @@ func (s *server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.db.Exec("DELETE FROM users WHERE id = ?", targetUserID)
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE user_id = ?", targetUserID); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if _, err = tx.ExecContext(r.Context(), "DELETE FROM sys_config WHERE user_id = ?", targetUserID); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	result, err := tx.ExecContext(r.Context(), "DELETE FROM users WHERE id = ?", targetUserID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -2466,6 +2483,11 @@ func (s *server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
 		respondError(w, http.StatusNotFound, errors.New("user not found"))
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -2527,9 +2549,6 @@ func (s *server) handleBatchUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var query string
-	var err error
-
 	userIDStrs := make([]string, len(req.UserIDs))
 	for i, id := range req.UserIDs {
 		userIDStrs[i] = strconv.FormatInt(id, 10)
@@ -2537,21 +2556,71 @@ func (s *server) handleBatchUsers(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Action {
 	case "delete":
-		query = "DELETE FROM users WHERE id IN (" + strings.Join(userIDStrs, ",") + ")"
-		_, err = s.db.Exec(query)
+		rows, err := s.db.QueryContext(r.Context(), "SELECT id FROM users WHERE id IN ("+strings.Join(userIDStrs, ",")+") AND is_admin = 1")
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		defer rows.Close()
+
+		var adminIDs []int64
+		for rows.Next() {
+			var adminID int64
+			if err := rows.Scan(&adminID); err != nil {
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+			adminIDs = append(adminIDs, adminID)
+		}
+
+		if len(adminIDs) > 0 {
+			respondError(w, http.StatusBadRequest, errors.New("不能删除管理员用户"))
+			return
+		}
+
+		tx, err := s.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		defer tx.Rollback()
+
+		if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE user_id IN ("+strings.Join(userIDStrs, ",")+")"); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if _, err = tx.ExecContext(r.Context(), "DELETE FROM sys_config WHERE user_id IN ("+strings.Join(userIDStrs, ",")+")"); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if _, err = tx.ExecContext(r.Context(), "DELETE FROM users WHERE id IN ("+strings.Join(userIDStrs, ",")+")"); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if err = tx.Commit(); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
 	case "activate":
-		query = "UPDATE users SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id IN (" + strings.Join(userIDStrs, ",") + ")"
-		_, err = s.db.Exec(query)
+		_, err := s.db.Exec("UPDATE users SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id IN (" + strings.Join(userIDStrs, ",") + ")")
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
 	case "deactivate":
-		query = "UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (" + strings.Join(userIDStrs, ",") + ")"
-		_, err = s.db.Exec(query)
+		_, err := s.db.Exec("UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (" + strings.Join(userIDStrs, ",") + ")")
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
 	default:
 		respondError(w, http.StatusBadRequest, errors.New("invalid action"))
-		return
-	}
-
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
 
