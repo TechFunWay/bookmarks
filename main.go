@@ -7,12 +7,14 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"math/rand"
 	"net/http"
@@ -34,6 +36,9 @@ import (
 	"golang.org/x/net/html"
 	_ "modernc.org/sqlite"
 )
+
+//go:embed static
+var staticFS embed.FS
 
 const (
 	nodeTypeFolder   = "folder"
@@ -269,7 +274,12 @@ func main() {
 		r.Post("/config", s.authMiddleware(s.handleUpdateConfig))
 	})
 
-	fileServer := http.FileServer(http.Dir("./static"))
+	// 使用嵌入的静态文件系统
+	staticFiles, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		log.Fatalf("failed to create static filesystem: %v", err)
+	}
+	fileServer := http.FileServer(http.FS(staticFiles))
 	r.Handle("/*", fileServer)
 	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
