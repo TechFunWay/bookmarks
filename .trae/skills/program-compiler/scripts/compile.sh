@@ -65,7 +65,7 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     
     # 创建目标目录
     TARGET_DIR="release/bookmarks-${VERSION}-${PLATFORM}"
-    mkdir -p "$TARGET_DIR/static"
+    mkdir -p "$TARGET_DIR"
     
     # 编译可执行文件
     echo "执行编译..."
@@ -79,18 +79,6 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     if [ $? -ne 0 ]; then
         echo "Error: 编译失败"
         continue
-    fi
-    
-    # 复制静态资源（不复制 icons 目录）
-    echo "复制静态资源..."
-    if [ -d "static" ]; then
-        # 复制除 icons 外的所有文件和目录
-        find static -type f -not -path "*/icons/*" | while read FILE; do
-            REL_PATH=$(echo "$FILE" | sed 's/^static\///')
-            DEST_FILE="$TARGET_DIR/static/$REL_PATH"
-            mkdir -p "$(dirname "$DEST_FILE")"
-            cp "$FILE" "$DEST_FILE"
-        done
     fi
     
     # 复制 LICENSE 和 README

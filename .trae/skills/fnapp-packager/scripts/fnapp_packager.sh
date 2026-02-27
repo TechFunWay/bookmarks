@@ -96,12 +96,6 @@ package_platform() {
         return 1
     fi
 
-    # 检查 static 目录是否存在
-    if [ ! -d "$PLATFORM_DIR/static" ]; then
-        echo "错误: static 目录不存在: $PLATFORM_DIR/static"
-        return 1
-    fi
-
     # 目标目录
     TARGET_DIR="techfunway.bookmarks/app/server"
 
@@ -113,13 +107,6 @@ package_platform() {
     echo "复制可执行文件..."
     cp "$PLATFORM_DIR/bookmarks" "$TARGET_DIR/"
     chmod +x "$TARGET_DIR/bookmarks"
-
-    # 复制 static 目录
-    echo "复制 static 目录..."
-    if [ -d "$TARGET_DIR/static" ]; then
-        rm -rf "$TARGET_DIR/static"
-    fi
-    cp -r "$PLATFORM_DIR/static" "$TARGET_DIR/"
 
     # 修改 manifest 文件
     echo "修改 manifest 文件..."

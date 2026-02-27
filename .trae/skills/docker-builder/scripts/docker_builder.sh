@@ -44,17 +44,19 @@ FROM scratch
 # 创建工作目录
 WORKDIR /app
 
-# 复制可执行文件和静态文件到镜像中
+# 创建数据目录
+RUN mkdir -p /app/data
+
+# 复制可执行文件到镜像中
 COPY ${AMD64_DIR}/bookmarks /app/
-COPY ${AMD64_DIR}/static /app/static
 COPY LICENSE /app/
 COPY README.md /app/
 
 # 暴露端口（应用实际使用8901端口）
 EXPOSE 8901
 
-# 持久化图标目录
-VOLUME /app/static/icons
+# 持久化数据目录（用于存储 icons 和 database.db）
+VOLUME /app/data
 
 # 启动应用
 CMD ["/app/bookmarks"]
@@ -76,17 +78,19 @@ FROM scratch
 # 创建工作目录
 WORKDIR /app
 
-# 复制可执行文件和静态文件到镜像中
+# 创建数据目录
+RUN mkdir -p /app/data
+
+# 复制可执行文件到镜像中
 COPY ${ARM64_DIR}/bookmarks /app/
-COPY ${ARM64_DIR}/static /app/static
 COPY LICENSE /app/
 COPY README.md /app/
 
 # 暴露端口（应用实际使用8901端口）
 EXPOSE 8901
 
-# 持久化图标目录
-VOLUME /app/static/icons
+# 持久化数据目录（用于存储 icons 和 database.db）
+VOLUME /app/data
 
 # 启动应用
 CMD ["/app/bookmarks"]
