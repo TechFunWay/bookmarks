@@ -100,6 +100,10 @@
               <span class="dropdown-arrow">▼</span>
             </button>
             <div class="user-dropdown-menu" v-if="userDropdownVisible" @click.stop>
+              <button class="dropdown-item" v-if="currentUser && currentUser.is_admin" @click="openUserManagement">
+                <span class="dropdown-icon">👥</span>
+                <span>用户管理</span>
+              </button>
               <button class="dropdown-item" @click="openChangePasswordModal">
                 <span class="dropdown-icon">🔑</span>
                 <span>修改密码</span>
