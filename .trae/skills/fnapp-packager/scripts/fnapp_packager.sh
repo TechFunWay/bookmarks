@@ -103,6 +103,10 @@ package_platform() {
     echo "创建目标目录..."
     mkdir -p "$TARGET_DIR"
 
+    # 清理目标目录中的系统文件
+    echo "清理目标目录中的系统文件..."
+    find "$TARGET_DIR" -type f \( -name ".DS_Store" -o -name "._*" -o -name "Thumbs.db" \) -delete 2>/dev/null || true
+
     # 复制可执行文件
     echo "复制可执行文件..."
     cp "$PLATFORM_DIR/bookmarks" "$TARGET_DIR/"
@@ -127,6 +131,10 @@ package_platform() {
     sed -i '' "s/^platform              = .*/platform              = $MANIFEST_PLATFORM/" "$MANIFEST_FILE"
 
     echo "manifest 文件已更新：版本=$VERSION，平台=$MANIFEST_PLATFORM"
+
+    # 清理 techfunway.bookmarks 目录中的系统文件
+    echo "清理 techfunway.bookmarks 目录中的系统文件..."
+    find "techfunway.bookmarks" -type f \( -name ".DS_Store" -o -name "._*" -o -name "Thumbs.db" \) -delete 2>/dev/null || true
 
     # 进入 techfunway.bookmarks 目录执行打包
     echo "\n=== 执行应用打包 ==="

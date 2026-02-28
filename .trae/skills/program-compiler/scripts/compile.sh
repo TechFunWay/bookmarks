@@ -81,14 +81,6 @@ for PLATFORM in "${PLATFORMS[@]}"; do
         continue
     fi
     
-    # 复制 LICENSE 和 README
-    if [ -f "LICENSE" ]; then
-        cp LICENSE "$TARGET_DIR/"
-    fi
-    if [ -f "README.md" ]; then
-        cp README.md "$TARGET_DIR/"
-    fi
-    
     # 创建压缩包
     echo "创建压缩包..."
     cd "release"
