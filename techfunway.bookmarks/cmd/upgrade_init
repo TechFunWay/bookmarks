@@ -1,5 +1,20 @@
 #!/bin/bash
 
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+
 ### This script is called before the user upgrades the application.
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${LOG_FILE}
+}
+
+log_msg "TRIM_APPDEST $TRIM_APPDEST, TRIM_PKGVAR $TRIM_PKGVAR"
+
+# 把$TRIM_APPDEST/static/icons 移动到 $TRIM_PKGVAR/icons，移动前先判断$TRIM_APPDEST/static/icons存在且TRIM_PKGVAR/icons不存在
+if [ -d "$TRIM_APPDEST/server/static/icons" ] && [ ! -d "$TRIM_PKGVAR/icons" ]; then
+    mv $TRIM_APPDEST/server/static/icons $TRIM_PKGVAR/icons
+    echo "icons目录已移动到 $TRIM_PKGVAR/icons"
+fi
 
 exit 0
