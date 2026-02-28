@@ -168,7 +168,7 @@ func main() {
 	}
 
 	// 迁移旧图标：从 static/icons 移动到新路径
-	migrateOldIcons("static/icons", iconPath)
+	migrateOldIcons("./static/icons", iconPath)
 
 	// 确保图标存储目录存在（如果迁移失败或跳过）
 	if _, err := os.Stat(iconPath); os.IsNotExist(err) {
@@ -3308,14 +3308,17 @@ func migrateOldIcons(oldPath, newPath string) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			Debug("旧图标路径不存在，跳过迁移: %s", oldPath)
+			fmt.Printf("旧图标路径不存在，跳过迁移: %s\n", oldPath)
 			return
 		}
 		Error("检查旧图标路径失败: %v", err)
+		fmt.Printf("检查旧图标路径失败: %v\n", err)
 		return
 	}
 
 	if !oldStat.IsDir() {
 		Debug("旧图标路径不是目录，跳过迁移: %s", oldPath)
+		fmt.Printf("旧图标路径不是目录，跳过迁移: %s\n", oldPath)
 		return
 	}
 
@@ -3323,34 +3326,42 @@ func migrateOldIcons(oldPath, newPath string) {
 	if err == nil {
 		if !newStat.IsDir() {
 			Debug("新图标路径不是目录，跳过迁移: %s", newPath)
+			fmt.Printf("新图标路径不是目录，跳过迁移: %s\n", newPath)
 			return
 		}
 		entries, err := os.ReadDir(newPath)
 		if err != nil {
 			Error("读取新图标目录失败: %v", err)
+			fmt.Printf("读取新图标目录失败: %v\n", err)
 			return
 		}
 		if len(entries) > 0 {
 			Debug("新图标路径已存在且不为空，跳过迁移: %s", newPath)
+			fmt.Printf("新图标路径已存在且不为空，跳过迁移: %s\n", newPath)
 			return
 		}
 		Debug("新图标路径已存在但为空，将删除后迁移: %s", newPath)
+		fmt.Printf("新图标路径已存在但为空，将删除后迁移: %s\n", newPath)
 		os.RemoveAll(newPath)
 	}
 
 	Debug("开始迁移图标: %s -> %s", oldPath, newPath)
+	fmt.Printf("开始迁移图标: %s -> %s\n", oldPath, newPath)
 
 	err = os.Rename(oldPath, newPath)
 	if err != nil {
 		Error("直接移动图标目录失败: %v，尝试逐个迁移", err)
+		fmt.Printf("直接移动图标目录失败: %v，尝试逐个迁移\n", err)
 		entries, err := os.ReadDir(oldPath)
 		if err != nil {
 			Error("读取旧图标目录失败: %v", err)
+			fmt.Printf("读取旧图标目录失败: %v\n", err)
 			return
 		}
 
 		if len(entries) == 0 {
 			Debug("旧图标目录为空，跳过迁移")
+			fmt.Printf("旧图标目录为空，跳过迁移\n")
 			return
 		}
 
@@ -3365,13 +3376,13 @@ func migrateOldIcons(oldPath, newPath string) {
 				continue
 			}
 			migratedCount++
-			Debug("迁移图标目录: %s", entry.Name())
+			fmt.Printf("迁移图标目录: %s\n", entry.Name())
 		}
 
 		if migratedCount > 0 {
 			fmt.Printf("成功迁移 %d 个图标目录\n", migratedCount)
 		} else {
-			Debug("没有需要迁移的图标")
+			fmt.Printf("没有需要迁移的图标\n")
 		}
 		return
 	}
