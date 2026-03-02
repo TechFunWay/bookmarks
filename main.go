@@ -78,16 +78,17 @@ func Error(format string, v ...interface{}) {
 }
 
 type node struct {
-	ID         int64   `json:"id"`
-	ParentID   *int64  `json:"parent_id"`
-	Type       string  `json:"type"`
-	Title      string  `json:"title"`
-	URL        *string `json:"url,omitempty"`
-	FaviconURL *string `json:"favicon_url,omitempty"`
-	Position   int     `json:"position"`
-	Children   []*node `json:"children,omitempty"`
-	CreatedAt  string  `json:"created_at,omitempty"`
-	UpdatedAt  string  `json:"updated_at,omitempty"`
+	ID            int64   `json:"id"`
+	ParentID      *int64  `json:"parent_id"`
+	Type          string  `json:"type"`
+	Title         string  `json:"title"`
+	URL           *string `json:"url,omitempty"`
+	FaviconURL    *string `json:"favicon_url,omitempty"`
+	Position      int     `json:"position"`
+	Children      []*node `json:"children,omitempty"`
+	BookmarkCount int     `json:"bookmark_count,omitempty"`
+	CreatedAt     string  `json:"created_at,omitempty"`
+	UpdatedAt     string  `json:"updated_at,omitempty"`
 }
 
 type user struct {
@@ -344,7 +345,9 @@ func initializeDB(db *sql.DB) error {
 		}
 
 		if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);`); err != nil {
+CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);
+CREATE INDEX IF NOT EXISTS idx_nodes_user_id ON nodes(user_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_user_id_parent ON nodes(user_id, parent_id);`); err != nil {
 			log.Println("创建nodes表索引失败: %w", err)
 		}
 
@@ -1355,6 +1358,10 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	}
 
 	sortNodes(roots)
+
+	// 计算每个文件夹的书签数量
+	calculateBookmarkCounts(roots)
+
 	// 确保 roots 不是 nil，避免返回 null
 	if roots == nil {
 		roots = []*node{}
@@ -1362,6 +1369,28 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	return roots, nil
 }
 
+func calculateBookmarkCounts(nodes []*node) {
+	for _, n := range nodes {
+		if n.Type == nodeTypeFolder {
+			// 递归计算子节点的书签数量
+			if len(n.Children) > 0 {
+				calculateBookmarkCounts(n.Children)
+				// 累加所有子节点的书签数量
+				for _, child := range n.Children {
+					if child.Type == nodeTypeBookmark {
+						n.BookmarkCount++
+					} else if child.Type == nodeTypeFolder {
+						n.BookmarkCount += child.BookmarkCount
+					}
+				}
+			}
+		}
+	}
+}
+
+// sortNodes 对节点进行排序
+// 注意：SQL查询已经按parent_id, position, id排序，理论上此函数是冗余的
+// 但为了确保数据一致性，保留此函数作为额外的保障
 func sortNodes(nodes []*node) {
 	sort.Slice(nodes, func(i, j int) bool {
 		if nodes[i].Position == nodes[j].Position {

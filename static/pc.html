@@ -24,7 +24,8 @@
     <div v-if="exporting" class="loading-overlay">
       <div class="export-progress-container">
         <div class="export-header">
-          <div class="loading-spinner"></div>
+          <div v-if="!exportCompleted" class="loading-spinner"></div>
+          <div v-if="exportCompleted" class="export-completed-icon">✅</div>
           <div class="loading-text">{{ exportMessage || '正在导出...' }}</div>
           <button class="close-export-btn" @click="closeExportProgress">✕</button>
         </div>
