@@ -27,7 +27,11 @@ const BookmarkNode = {
       };
     },
     bookmarkCount() {
-      // 计算当前文件夹及其子文件夹中的书签数量
+      // 优先使用后端计算的书签数量
+      if (this.node.bookmark_count !== undefined && this.node.bookmark_count !== null) {
+        return this.node.bookmark_count;
+      }
+      // 回退到前端计算
       return this.countBookmarks(this.node);
     },
     hasChildren() {
@@ -193,6 +197,9 @@ const app = createApp({
           nodeId: null,
         },
         longPressTimer: null,
+        searchDebounceTimer: null,
+        imageWorker: null,
+        exportBookmarkList: [],
         modal: {
           visible: false,
           type: "",
@@ -319,6 +326,7 @@ const app = createApp({
         },
         // 导出相关状态
         exporting: false,
+        exportCompleted: false,
         exportMessage: "",
         exportProgress: 0,
         totalExportItems: 0,
@@ -418,6 +426,15 @@ const app = createApp({
   beforeUnmount() {
     window.removeEventListener("scroll", this.hideContextMenu, true);
     window.removeEventListener("resize", this.hideContextMenu);
+    // 清除搜索防抖定时器
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+    // 终止Web Worker
+    if (this.imageWorker) {
+      this.imageWorker.terminate();
+      this.imageWorker = null;
+    }
   },
   methods: {
     checkAuth() {
@@ -646,12 +663,15 @@ const app = createApp({
         
         // 显示导出结果
         this.exportMessage = '导出完成！';
+        this.exportCompleted = true;
         // 导出完成后，不自动关闭，等待用户手动关闭
         this.exportMenuVisible = false; // 关闭导出菜单
       } catch (error) {
         console.error('导出失败:', error);
         this.exportMessage = `导出失败: ${error.message}`;
-        // 导出失败后，不自动关闭，等待用户手动关闭
+        // 导出失败后，重置导出状态
+        this.exporting = false;
+        this.exportCompleted = false;
       }
     },
     // 手动关闭导出提示
@@ -665,54 +685,87 @@ const app = createApp({
       this.showExportDetails = false;
     },
     async convertBookmarksImages(nodes) {
-      for (const node of nodes) {
-        if (node.type === 'bookmark') {
-          // 处理书签
-          let result = {
-            title: node.title,
-            success: true,
-            message: ''
-          };
-          
-          // 如果有favicon_url，尝试转换为base64
-          if (node.favicon_url) {
-            try {
-              // 转换图片为base64
-              node.favicon_url = await this.imageToBase64(node.favicon_url);
-              result.message = '图片转换成功';
-            } catch (error) {
-              console.error(`转换书签图片失败: ${node.title}`, error);
-              result.success = false;
-              result.message = `图片转换失败: ${error.message}`;
-              // 转换失败时保留原始URL
+      // 收集所有需要转换的图片
+      this.exportBookmarkList = [];
+      const collectBookmarks = (nodeList) => {
+        for (const node of nodeList) {
+          if (node.type === 'bookmark' && node.favicon_url) {
+            this.exportBookmarkList.push(node);
+          } else if (node.type === 'folder' && node.children && node.children.length > 0) {
+            collectBookmarks(node.children);
+          }
+        }
+      };
+      collectBookmarks(nodes);
+      
+      const total = this.exportBookmarkList.length;
+      this.totalExportItems = total;
+      
+      if (total === 0) {
+        return;
+      }
+      
+      // 使用Web Worker并发转换图片
+      const promises = this.exportBookmarkList.map((bookmark, index) => {
+        return new Promise((resolve) => {
+          this.imageWorker.postMessage({
+            type: 'convertImage',
+            data: {
+              url: bookmark.favicon_url,
+              index,
+              total
             }
-          } else {
-            result.message = '无图片需要转换';
+          });
+          
+          // 存储resolve函数以便在worker消息中调用
+          bookmark._resolve = resolve;
+        });
+      });
+      
+      // 等待所有转换完成
+      await Promise.all(promises);
+    },
+    handleWorkerMessage(e) {
+      const { type, index, total, success, result, message } = e.data;
+      
+      if (type === 'progress') {
+        // 直接使用保存的书签列表，无需重新遍历树
+        const bookmark = this.exportBookmarkList[index];
+        if (bookmark) {
+          if (success) {
+            bookmark.favicon_url = result;
           }
           
           // 更新导出进度
           this.exportProgress++;
           
           // 更新成功和失败统计
-          if (result.success) {
+          if (success) {
             this.exportSuccessCount++;
           } else {
             this.exportFailCount++;
           }
           
           // 保存结果
-          this.exportResults.push(result);
+          this.exportResults.push({
+            title: bookmark.title,
+            success,
+            message
+          });
           
-          // 自动滚动结果列表到底部，显示最新结果
+          // 调用resolve
+          if (bookmark._resolve) {
+            bookmark._resolve();
+            delete bookmark._resolve;
+          }
+          
+          // 自动滚动结果列表到底部
           this.$nextTick(() => {
             const resultsList = this.$refs.resultsList;
             if (resultsList) {
               resultsList.scrollTop = resultsList.scrollHeight;
             }
           });
-        } else if (node.type === 'folder' && node.children && node.children.length > 0) {
-          // 递归处理子文件夹
-          await this.convertBookmarksImages(node.children);
         }
       }
     },
@@ -751,12 +804,15 @@ const app = createApp({
         
         // 显示导出结果
         this.exportMessage = '导出完成！';
+        this.exportCompleted = true;
         // 导出完成后，不自动关闭，等待用户手动关闭
         this.exportMenuVisible = false; // 关闭导出菜单
       } catch (error) {
         console.error('导出Edge书签失败:', error);
         this.exportMessage = `导出失败: ${error.message}`;
-        // 导出失败后，不自动关闭，等待用户手动关闭
+        // 导出失败后，重置导出状态
+        this.exporting = false;
+        this.exportCompleted = false;
       }
     },
     generateEdgeBookmarksHTML(nodes) {
@@ -2193,8 +2249,30 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     handleSearchInput(){
       this.searchQuery = this.searchQuery.trim();
       this.clearSearchBtnVisible = this.searchQuery.length > 0;
+      
+      // 防抖处理：清除之前的定时器
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+      }
+      
+      // 如果搜索内容为空，直接清除搜索结果
+      if (this.searchQuery.length === 0) {
+        this.clearSearch();
+        return;
+      }
+      
+      // 设置新的定时器，300ms后执行搜索
+      this.searchDebounceTimer = setTimeout(() => {
+        this.searchBookmarks();
+      }, 300);
     },
     clearSearch() {
+      // 清除防抖定时器
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+        this.searchDebounceTimer = null;
+      }
+      
       this.searchQuery = "";
       this.clearSearchBtnVisible = false;
       this.searchResultVisible = false;
@@ -2416,6 +2494,14 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     this.loadVersion();
     window.addEventListener("scroll", this.hideContextMenu, true);
     window.addEventListener("resize", this.hideContextMenu);
+    
+    // 初始化Web Worker
+    try {
+      this.imageWorker = new Worker('/static/image-worker.js');
+      this.imageWorker.onmessage = this.handleWorkerMessage;
+    } catch (error) {
+      console.error('初始化Web Worker失败:', error);
+    }
   },
 });
 
