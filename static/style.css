@@ -2560,7 +2560,28 @@ input:checked + .toggle-slider:before {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
+.export-completed-icon {
+  width: 50px;
+  height: 50px;
+  font-size: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: scaleIn 0.3s ease-out;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.loading-text {
   to {
     transform: rotate(360deg);
   }
