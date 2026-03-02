@@ -44,13 +44,8 @@ FROM scratch
 # 创建工作目录
 WORKDIR /app
 
-# 创建数据目录
-RUN mkdir -p /app/data
-
-# 复制可执行文件到镜像中
+# 复制二进制可执行文件到镜像中
 COPY ${AMD64_DIR}/bookmarks /app/
-COPY LICENSE /app/
-COPY README.md /app/
 
 # 暴露端口（应用实际使用8901端口）
 EXPOSE 8901
@@ -78,13 +73,8 @@ FROM scratch
 # 创建工作目录
 WORKDIR /app
 
-# 创建数据目录
-RUN mkdir -p /app/data
-
-# 复制可执行文件到镜像中
+# 复制二进制可执行文件到镜像中
 COPY ${ARM64_DIR}/bookmarks /app/
-COPY LICENSE /app/
-COPY README.md /app/
 
 # 暴露端口（应用实际使用8901端口）
 EXPOSE 8901
@@ -101,86 +91,75 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 尝试创建多架构镜像manifest list
+# 创建多架构镜像manifest list
 echo "\n创建多架构镜像manifest list..."
 docker manifest create ${REPO_NAME}:${VERSION} \
     ${REPO_NAME}:${VERSION}-amd64 \
-    ${REPO_NAME}:${VERSION}-arm64 2>/dev/null
+    ${REPO_NAME}:${VERSION}-arm64
 
 # 保存manifest create命令的退出状态
 MANIFEST_STATUS=$?
 
 if [ $MANIFEST_STATUS -eq 0 ]; then
-    echo "✓ 多架构镜像manifest list创建成功"
+    echo "✓ 多架构镜像 ${REPO_NAME}:${VERSION} 创建成功"
+    
     # 验证镜像
     echo "\n验证镜像..."
     docker manifest inspect ${REPO_NAME}:${VERSION} 2>/dev/null || echo "Warning: 无法检查多架构镜像manifest list"
+    
+    # 为多架构 manifest 添加 latest 标签
+    echo "\n为多架构镜像添加 latest 标签..."
+    docker manifest create ${REPO_NAME}:latest \
+        ${REPO_NAME}:${VERSION}-amd64 \
+        ${REPO_NAME}:${VERSION}-arm64
+    
+    LATEST_MANIFEST_STATUS=$?
+    if [ $LATEST_MANIFEST_STATUS -eq 0 ]; then
+        echo "✓ 多架构镜像 ${REPO_NAME}:latest 创建成功"
+    else
+        echo "Warning: 创建多架构镜像 ${REPO_NAME}:latest 失败"
+    fi
 else
     echo "Warning: 创建多架构镜像manifest list失败（可能是网络问题）"
     echo "但架构特定镜像已成功构建，您可以手动创建manifest list"
     echo "手动创建命令: docker manifest create ${REPO_NAME}:${VERSION} ${REPO_NAME}:${VERSION}-amd64 ${REPO_NAME}:${VERSION}-arm64"
-fi
-
-# 为镜像添加 latest 标签
-echo "\n为镜像添加 latest 标签..."
-
-# 为 amd64 镜像添加 latest 标签
-docker tag ${REPO_NAME}:${VERSION}-amd64 ${REPO_NAME}:latest-amd64
-if [ $? -eq 0 ]; then
-    echo "✓ 已为 amd64 镜像添加 latest 标签: ${REPO_NAME}:latest-amd64"
-else
-    echo "Warning: 为 amd64 镜像添加 latest 标签失败"
-fi
-
-# 为 arm64 镜像添加 latest 标签
-docker tag ${REPO_NAME}:${VERSION}-arm64 ${REPO_NAME}:latest-arm64
-if [ $? -eq 0 ]; then
-    echo "✓ 已为 arm64 镜像添加 latest 标签: ${REPO_NAME}:latest-arm64"
-else
-    echo "Warning: 为 arm64 镜像添加 latest 标签失败"
-fi
-
-# 为多架构 manifest 添加 latest 标签
-if [ $MANIFEST_STATUS -eq 0 ]; then
-    docker tag ${REPO_NAME}:${VERSION} ${REPO_NAME}:latest
-    if [ $? -eq 0 ]; then
-        echo "✓ 已为多架构镜像添加 latest 标签: ${REPO_NAME}:latest"
-    else
-        echo "Warning: 为多架构镜像添加 latest 标签失败"
-    fi
+    echo "手动创建命令: docker manifest create ${REPO_NAME}:latest ${REPO_NAME}:${VERSION}-amd64 ${REPO_NAME}:${VERSION}-arm64"
 fi
 
 # 显示构建结果
 echo "\n构建完成！"
 echo "构建的镜像:"
-echo "- ${REPO_NAME}:${VERSION}-amd64 (x86_64架构)"
-echo "- ${REPO_NAME}:latest-amd64 (x86_64架构)"
-echo "- ${REPO_NAME}:${VERSION}-arm64 (ARM64架构)"
-echo "- ${REPO_NAME}:latest-arm64 (ARM64架构)"
+echo "- ${REPO_NAME}:${VERSION}-amd64 (amd64架构)"
+echo "- ${REPO_NAME}:${VERSION}-arm64 (arm64架构)"
 if [ $MANIFEST_STATUS -eq 0 ]; then
-    echo "- ${REPO_NAME}:${VERSION} (多架构镜像 - 推荐使用)"
-    echo "- ${REPO_NAME}:latest (多架构镜像 - 推荐使用)"
+    echo "- ${REPO_NAME}:${VERSION} (多架构镜像)"
+fi
+if [ $MANIFEST_STATUS -eq 0 ] && [ $LATEST_MANIFEST_STATUS -eq 0 ]; then
+    echo "- ${REPO_NAME}:latest (多架构镜像)"
 fi
 echo "\n使用方法:"
 if [ $MANIFEST_STATUS -eq 0 ]; then
-    echo "推荐使用多架构镜像（自动适配架构）: docker run -p 8901:8901 ${REPO_NAME}:latest"
-    echo "或使用版本号: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}"
+    echo "推荐使用多架构镜像（自动适配架构）: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}"
 fi
-echo "x86_64架构测试: docker run -p 8901:8901 ${REPO_NAME}:latest-amd64"
-echo "ARM64架构测试: docker run -p 8901:8901 ${REPO_NAME}:latest-arm64"
+if [ $MANIFEST_STATUS -eq 0 ] && [ $LATEST_MANIFEST_STATUS -eq 0 ]; then
+    echo "或使用 latest 标签: docker run -p 8901:8901 ${REPO_NAME}:latest"
+fi
+echo "amd64架构: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}-amd64"
+echo "arm64架构: docker run -p 8901:8901 ${REPO_NAME}:${VERSION}-arm64"
 
 # 总结
 echo "\n总结:"
-echo "✓ 架构特定镜像已成功构建"
-echo "✓ 已为所有镜像添加 latest 标签"
+echo "✓ 架构特定镜像已成功构建（amd64 和 arm64）"
 if [ $MANIFEST_STATUS -eq 0 ]; then
-    echo "✓ 多架构镜像已成功创建，您可以使用单一tag ${REPO_NAME}:latest 访问"
+    echo "✓ 多架构镜像 ${REPO_NAME}:${VERSION} 已成功创建"
 else
     echo "⚠ 多架构镜像创建失败，但您仍然可以使用架构特定的镜像tag"
     echo "   当网络条件改善后，您可以运行上述手动创建命令来创建多架构镜像"
 fi
-echo "\n注意: 构建过程已优化，不依赖网络连接。"
-echo "即使多架构镜像创建失败，架构特定镜像仍然可以正常使用。"
+if [ $MANIFEST_STATUS -eq 0 ] && [ $LATEST_MANIFEST_STATUS -eq 0 ]; then
+    echo "✓ 多架构镜像 ${REPO_NAME}:latest 已成功创建"
+fi
+echo "\n注意: 镜像只包含二进制可执行文件，不包含 static 目录。"
 
 
 

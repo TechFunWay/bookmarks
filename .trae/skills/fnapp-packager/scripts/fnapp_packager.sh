@@ -22,7 +22,7 @@ VERSION=${VERSION#v}
 echo "使用版本号: $VERSION"
 
 # 定义平台列表
-PLATFORMS=("amd64" "arm64")
+PLATFORMS=("arm64" "amd64")
 
 # 非交互模式标志
 NON_INTERACTIVE=false

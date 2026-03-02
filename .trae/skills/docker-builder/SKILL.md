@@ -8,6 +8,8 @@
 
 使用编译好的可执行文件来构建，利用项目现有的编译结果，避免重复编译，提高构建速度，减小镜像体积。
 
+**重要：镜像只包含二进制可执行文件，不包含 static 目录、LICENSE 和 README.md 文件。**
+
 ## 支持的架构
 
 - linux/amd64 (x86_64)
@@ -44,22 +46,32 @@
 
 构建完成后，会生成以下镜像：
 
-- 本地镜像：`bookmarks:v<版本号>`
-- 仓库镜像：`techfunway/bookmarks:v<版本号>`
-- 仓库镜像：`techfunway/bookmarks:latest`
+- 版本镜像：`techfunways/bookmarks:v<版本号>-amd64` (amd64架构)
+- 版本镜像：`techfunways/bookmarks:v<版本号>-arm64` (arm64架构)
+- 多架构镜像：`techfunways/bookmarks:v<版本号>` (多架构，包含amd64和arm64)
+- 多架构镜像：`techfunways/bookmarks:latest` (多架构，包含amd64和arm64)
 
 ## 使用示例
 
 ### 本地测试
 
 ```bash
-docker run -p 8901:8901 bookmarks:v<版本号>
+# 使用多架构镜像（推荐）
+docker run -p 8901:8901 techfunways/bookmarks:latest
+
+# 使用版本号
+docker run -p 8901:8901 techfunways/bookmarks:v1.8.0
+
+# 使用特定架构
+docker run -p 8901:8901 techfunways/bookmarks:v1.8.0-amd64
+docker run -p 8901:8901 techfunways/bookmarks:v1.8.0-arm64
 ```
 
-### 线上使用
+### 数据持久化
 
 ```bash
-docker run -p 8901:8901 techfunway/bookmarks:latest
+# 挂载数据目录
+docker run -d -p 8901:8901 -v /path/to/data:/app/data techfunways/bookmarks:latest
 ```
 
 ### 自动架构识别
