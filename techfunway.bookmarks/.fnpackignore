@@ -1,0 +1,31 @@
+# macOS 系统文件
+.DS_Store
+._*
+
+# Windows 系统文件
+Thumbs.db
+desktop.ini
+
+# Linux 系统文件
+*~
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# 编辑器文件
+.vscode/
+.idea/
+*.sublime-*
+
+# 备份文件
+*.bak
+*.backup
+
+# 日志文件
+*.log
+
+# 打包产物（避免重复打包）
+*.fpk
