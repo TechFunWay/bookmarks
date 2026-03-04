@@ -109,6 +109,10 @@
                 <span class="dropdown-icon">🔑</span>
                 <span>修改密码</span>
               </button>
+              <button class="dropdown-item" @click="openPluginAPIKeyModal">
+                <span class="dropdown-icon">🔌</span>
+                <span>API Key</span>
+              </button>
               <hr class="dropdown-divider" />
               <button class="dropdown-item danger" @click="logout">
                 <span class="dropdown-icon">🚪</span>
@@ -1029,6 +1033,37 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  </transition>
+
+  <!-- API Key模态框 -->
+  <transition name="fade">
+    <div v-if="pluginAPIKeyModal.visible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">API Key</h3>
+        <div class="form-group">
+          <label>API Key</label>
+          <div class="api-key-display">
+            <input
+              v-model="pluginAPIKeyModal.apiKey"
+              type="text"
+              readonly
+              placeholder="暂无API Key"
+            />
+            <button type="button" class="tertiary" @click="copyPluginAPIKey" :disabled="!pluginAPIKeyModal.apiKey">
+              复制
+            </button>
+          </div>
+          <p class="form-hint">此API Key用于浏览器插件数据同步，请妥善保管</p>
+        </div>
+        <p v-if="pluginAPIKeyModal.error" class="form-error">{{ pluginAPIKeyModal.error }}</p>
+        <div class="modal-actions">
+          <button type="button" class="secondary" @click="closePluginAPIKeyModal">关闭</button>
+          <button type="button" class="primary" @click="regeneratePluginAPIKey" :disabled="pluginAPIKeyModal.loading">
+            {{ pluginAPIKeyModal.loading ? '生成中...' : '重新生成' }}
+          </button>
+        </div>
       </div>
     </div>
   </transition>

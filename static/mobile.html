@@ -1223,6 +1223,14 @@
               <input type="checkbox" v-model="config.showUpdatedAt">
             </div>
           </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <div class="config-item">
+              <button type="button" class="secondary" @click="openPluginAPIKeyModal">
+                管理API Key
+              </button>
+            </div>
+          </div>
           <div v-if="currentUser && currentUser.is_admin" class="form-group">
             <label>系统设置</label>
             <div class="config-item">
@@ -1236,6 +1244,37 @@
             </button>
             <button type="button" class="secondary" @click="cancelConfigPanel">
               取消
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- API Key模态框 -->
+    <transition name="fade">
+      <div v-if="pluginAPIKeyModal.visible" class="modal-backdrop">
+        <div class="modal">
+          <h3 class="modal-title">API Key</h3>
+          <div class="form-group">
+            <label>API Key</label>
+            <div class="api-key-display">
+              <input
+                v-model="pluginAPIKeyModal.apiKey"
+                type="text"
+                readonly
+                placeholder="暂无API Key"
+              />
+              <button type="button" class="tertiary" @click="copyPluginAPIKey" :disabled="!pluginAPIKeyModal.apiKey">
+                复制
+              </button>
+            </div>
+            <p class="form-hint">此API Key用于浏览器插件数据同步，请妥善保管</p>
+          </div>
+          <p v-if="pluginAPIKeyModal.error" class="form-error">{{ pluginAPIKeyModal.error }}</p>
+          <div class="modal-actions">
+            <button type="button" class="secondary" @click="closePluginAPIKeyModal">关闭</button>
+            <button type="button" class="primary" @click="regeneratePluginAPIKey" :disabled="pluginAPIKeyModal.loading">
+              {{ pluginAPIKeyModal.loading ? '生成中...' : '重新生成' }}
             </button>
           </div>
         </div>
@@ -1342,6 +1381,14 @@
             oldPassword: '',
             newPassword: '',
             confirmPassword: '',
+            loading: false,
+            error: ''
+          },
+
+          // API Key模态框
+          pluginAPIKeyModal: {
+            visible: false,
+            apiKey: '',
             loading: false,
             error: ''
           },
@@ -1598,6 +1645,59 @@
           this.changePasswordModal.confirmPassword = '';
           this.changePasswordModal.error = '';
           this.changePasswordModal.loading = false;
+        },
+        openPluginAPIKeyModal() {
+          this.showUserMenu = false;
+          this.pluginAPIKeyModal.visible = true;
+          this.pluginAPIKeyModal.apiKey = this.currentUser.api_key || '';
+          this.pluginAPIKeyModal.error = '';
+          this.pluginAPIKeyModal.loading = false;
+        },
+        closePluginAPIKeyModal() {
+          this.pluginAPIKeyModal.visible = false;
+          this.pluginAPIKeyModal.apiKey = '';
+          this.pluginAPIKeyModal.error = '';
+          this.pluginAPIKeyModal.loading = false;
+        },
+        async regeneratePluginAPIKey() {
+          this.pluginAPIKeyModal.error = '';
+          this.pluginAPIKeyModal.loading = true;
+
+          try {
+            const response = await fetch('/api/auth/regenerate-api-key', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': this.token
+              }
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+              this.pluginAPIKeyModal.apiKey = data.api_key;
+              if (this.currentUser) {
+                this.currentUser.api_key = data.api_key;
+              }
+              this.showToast('API Key重新生成成功', 'success');
+            } else {
+              this.pluginAPIKeyModal.error = data.error || '重新生成失败';
+            }
+          } catch (error) {
+            console.error('重新生成API Key失败:', error);
+            this.pluginAPIKeyModal.error = '网络错误，请稍后重试';
+          } finally {
+            this.pluginAPIKeyModal.loading = false;
+          }
+        },
+        async copyPluginAPIKey() {
+          try {
+            await navigator.clipboard.writeText(this.pluginAPIKeyModal.apiKey);
+            this.showToast('已复制到剪贴板', 'success');
+          } catch (error) {
+            console.error('复制失败:', error);
+            this.showToast('复制失败，请手动复制', 'error');
+          }
         },
         openUserManagement() {
           this.showUserMenu = false;
