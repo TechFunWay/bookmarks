@@ -210,7 +210,7 @@ func CompareVersions(v1, v2 string) (int, error) {
 // GetAvailableVersions 获取可用的升级版本列表
 func (u *Upgrade) GetAvailableVersions(fromVersion string) ([]string, error) {
 	// 硬编码所有可用版本
-	allVersions := []string{"v1.7.0", "v1.8.0"}
+	allVersions := []string{"v1.7.0", "v1.8.0", "v1.9.0"}
 
 	versions := []string{}
 	for _, version := range allVersions {
@@ -282,6 +282,8 @@ func (u *Upgrade) executeSQLForVersion(version string) error {
 		return u.executeSQLForV1_7_0()
 	case "v1.8.0":
 		return u.executeSQLForV1_8_0()
+	case "v1.9.0":
+		return u.executeSQLForV1_9_0()
 	default:
 		return fmt.Errorf("未找到版本 %s 的SQL语句", version)
 	}
@@ -331,6 +333,24 @@ func (u *Upgrade) executeSQLForV1_8_0() error {
 	return nil
 }
 
+// executeSQLForV1_9_0 执行v1.9.0版本的SQL语句
+func (u *Upgrade) executeSQLForV1_9_0() error {
+	sqlStatements := []string{
+		"ALTER TABLE users ADD COLUMN api_key TEXT;",
+		"CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key);",
+	}
+
+	for i, stmt := range sqlStatements {
+		u.LogUpgrade("执行SQL语句 #%d/%d: %s", i+1, len(sqlStatements), truncateString(stmt, 100))
+		_, err := u.db.Exec(stmt)
+		if err != nil {
+			u.LogUpgrade("执行SQL语句失败: %v, 语句: %s", err, truncateString(stmt, 100))
+		}
+	}
+
+	return nil
+}
+
 // executeDataProcessingLogic 执行特定版本的数据处理业务逻辑
 func (u *Upgrade) executeDataProcessingLogic(version string) error {
 	// 这里可以添加特定版本的数据处理业务逻辑
@@ -339,6 +359,8 @@ func (u *Upgrade) executeDataProcessingLogic(version string) error {
 		return u.processDataForV1_7_0()
 	case "v1.8.0":
 		return u.processDataForV1_8_0()
+	case "v1.9.0":
+		return u.processDataForV1_9_0()
 	default:
 		// 对于未特殊处理的版本，可以执行通用数据处理逻辑
 		u.LogUpgrade("执行版本 %s 的通用数据处理逻辑", version)
@@ -372,6 +394,24 @@ func (u *Upgrade) processDataForV1_8_0() error {
 	}
 
 	u.LogUpgrade("默认配置初始化完成：allow_register=true")
+	return nil
+}
+
+// processDataForV1_9_0 版本1.9.0的数据处理业务逻辑
+func (u *Upgrade) processDataForV1_9_0() error {
+	u.LogUpgrade("执行版本 v1.9.0 的数据处理业务逻辑")
+
+	// 为所有现有用户生成api_key
+	_, err := u.db.Exec(`
+		UPDATE users 
+		SET api_key = lower(hex(randomblob(16)))
+		WHERE api_key IS NULL OR api_key = ''
+	`)
+	if err != nil {
+		return fmt.Errorf("为现有用户生成api_key失败: %w", err)
+	}
+
+	u.LogUpgrade("为现有用户生成api_key完成")
 	return nil
 }
 
