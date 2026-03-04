@@ -45,7 +45,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v1.8.0"
+	appVersion = "v1.9.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -99,6 +99,7 @@ type user struct {
 	Avatar    *string `json:"avatar"`
 	IsActive  bool    `json:"is_active"`
 	IsAdmin   bool    `json:"is_admin"`
+	APIKey    *string `json:"api_key,omitempty"`
 	CreatedAt string  `json:"created_at"`
 }
 
@@ -265,6 +266,7 @@ func main() {
 			r.Post("/login", s.handleLogin)
 			r.Post("/logout", s.handleLogout)
 			r.Post("/change-password", s.authMiddleware(s.handleChangePassword))
+			r.Post("/regenerate-api-key", s.authMiddleware(s.handleRegenerateAPIKey))
 			r.Get("/me", s.authMiddleware(s.handleGetCurrentUser))
 			r.Get("/check", s.handleCheckAuth)
 		})
@@ -2937,20 +2939,38 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			token = r.URL.Query().Get("token")
 		}
 
-		if token == "" {
-			respondError(w, http.StatusUnauthorized, errors.New("未提供认证token"))
-			return
+		var userID int64
+		var err error
+
+		if token != "" {
+			err = s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
 		}
 
-		var userID int64
-		err := s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				respondError(w, http.StatusUnauthorized, errors.New("无效的token"))
+		if err != nil || token == "" {
+			if token != "" && !errors.Is(err, sql.ErrNoRows) {
+				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
-			respondError(w, http.StatusInternalServerError, err)
-			return
+
+			apiKey := r.Header.Get("X-API-Key")
+			if apiKey == "" {
+				apiKey = r.URL.Query().Get("api_key")
+			}
+
+			if apiKey != "" {
+				err = s.db.QueryRow("SELECT id FROM users WHERE api_key = ? AND is_active = 1", apiKey).Scan(&userID)
+				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						respondError(w, http.StatusUnauthorized, errors.New("无效的api_key"))
+						return
+					}
+					respondError(w, http.StatusInternalServerError, err)
+					return
+				}
+			} else {
+				respondError(w, http.StatusUnauthorized, errors.New("未提供认证token或api_key"))
+				return
+			}
 		}
 
 		ctx := context.WithValue(r.Context(), userContextKey, userID)
@@ -3064,7 +3084,8 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := uuid.New().String()
-	_, err = tx.Exec("UPDATE users SET token = ? WHERE id = ?", token, userID)
+	apiKey := strings.ToLower(fmt.Sprintf("%x", uuid.New()))
+	_, err = tx.Exec("UPDATE users SET token = ?, api_key = ? WHERE id = ?", token, apiKey, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -3127,16 +3148,17 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		IsActive  int
 		IsAdmin   int
 		Token     string
+		APIKey    sql.NullString
 		CreatedAt string
 	}
 
 	err := s.db.QueryRow(`
-		SELECT id, username, password, nickname, email, avatar, is_active, is_admin, token, created_at
+		SELECT id, username, password, nickname, email, avatar, is_active, is_admin, token, api_key, created_at
 		FROM users WHERE username = ?
 	`, req.Username).Scan(
 		&dbUser.ID, &dbUser.Username, &dbUser.Password, &dbUser.Nickname,
 		&dbUser.Email, &dbUser.Avatar, &dbUser.IsActive, &dbUser.IsAdmin,
-		&dbUser.Token, &dbUser.CreatedAt,
+		&dbUser.Token, &dbUser.APIKey, &dbUser.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -3167,6 +3189,15 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if !dbUser.APIKey.Valid || dbUser.APIKey.String == "" {
+		apiKey := strings.ToLower(fmt.Sprintf("%x", uuid.New()))
+		_, err = s.db.Exec("UPDATE users SET api_key = ? WHERE id = ?", apiKey, dbUser.ID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
 	user := &user{
 		ID:        dbUser.ID,
 		Username:  dbUser.Username,
@@ -3178,6 +3209,9 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if dbUser.Avatar.Valid {
 		user.Avatar = &dbUser.Avatar.String
+	}
+	if dbUser.APIKey.Valid {
+		user.APIKey = &dbUser.APIKey.String
 	}
 
 	respondJSON(w, http.StatusOK, authResponse{
@@ -3215,15 +3249,16 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		Avatar    sql.NullString
 		IsActive  int
 		IsAdmin   int
+		APIKey    sql.NullString
 		CreatedAt string
 	}
 
 	err := s.db.QueryRow(`
-		SELECT id, username, nickname, email, avatar, is_active, is_admin, created_at
+		SELECT id, username, nickname, email, avatar, is_active, is_admin, api_key, created_at
 		FROM users WHERE id = ?
 	`, userID).Scan(
 		&dbUser.ID, &dbUser.Username, &dbUser.Nickname,
-		&dbUser.Email, &dbUser.Avatar, &dbUser.IsActive, &dbUser.IsAdmin, &dbUser.CreatedAt,
+		&dbUser.Email, &dbUser.Avatar, &dbUser.IsActive, &dbUser.IsAdmin, &dbUser.APIKey, &dbUser.CreatedAt,
 	)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
@@ -3241,6 +3276,9 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if dbUser.Avatar.Valid {
 		user.Avatar = &dbUser.Avatar.String
+	}
+	if dbUser.APIKey.Valid {
+		user.APIKey = &dbUser.APIKey.String
 	}
 
 	respondJSON(w, http.StatusOK, user)
@@ -3329,6 +3367,24 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "密码修改成功"})
+}
+
+// handleRegenerateAPIKey 重新生成api_key
+func (s *server) handleRegenerateAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	newAPIKey := strings.ToLower(fmt.Sprintf("%x", uuid.New()))
+
+	_, err := s.db.Exec("UPDATE users SET api_key = ? WHERE id = ?", newAPIKey, userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"api_key": newAPIKey,
+		"message": "api_key重新生成成功",
+	})
 }
 
 // migrateOldIcons 迁移旧图标从 static/icons 到新路径
