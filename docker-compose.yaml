@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  bookmarks:
+    image: techfunways/bookmarks:latest
+    container_name: bookmarks
+    restart: unless-stopped
+    ports:
+      - "8901:8901"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8901"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - bookmarks-network
+
+networks:
+  bookmarks-network:
+    driver: bridge
