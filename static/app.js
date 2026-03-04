@@ -311,6 +311,13 @@ const app = createApp({
           loading: false,
           error: ''
         },
+        // Plugin API Key模态框状态
+        pluginAPIKeyModal: {
+          visible: false,
+          apiKey: '',
+          loading: false,
+          error: ''
+        },
         // 每行显示数量设置
         itemsPerRow: 1,
         // 配置相关
@@ -497,6 +504,59 @@ const app = createApp({
       this.changePasswordModal.confirmPassword = '';
       this.changePasswordModal.error = '';
       this.changePasswordModal.loading = false;
+    },
+    openPluginAPIKeyModal() {
+      this.userDropdownVisible = false;
+      this.pluginAPIKeyModal.visible = true;
+      this.pluginAPIKeyModal.apiKey = this.currentUser.api_key || '';
+      this.pluginAPIKeyModal.error = '';
+      this.pluginAPIKeyModal.loading = false;
+    },
+    closePluginAPIKeyModal() {
+      this.pluginAPIKeyModal.visible = false;
+      this.pluginAPIKeyModal.apiKey = '';
+      this.pluginAPIKeyModal.error = '';
+      this.pluginAPIKeyModal.loading = false;
+    },
+    async regeneratePluginAPIKey() {
+      this.pluginAPIKeyModal.error = '';
+      this.pluginAPIKeyModal.loading = true;
+
+      try {
+        const response = await fetch('/api/auth/regenerate-api-key', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': this.token
+          }
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          this.pluginAPIKeyModal.apiKey = data.api_key;
+          if (this.currentUser) {
+            this.currentUser.api_key = data.api_key;
+          }
+          this.showToast('API Key重新生成成功', 'success');
+        } else {
+          this.pluginAPIKeyModal.error = data.error || '重新生成失败';
+        }
+      } catch (error) {
+        console.error('重新生成API Key失败:', error);
+        this.pluginAPIKeyModal.error = '网络错误，请稍后重试';
+      } finally {
+        this.pluginAPIKeyModal.loading = false;
+      }
+    },
+    async copyPluginAPIKey() {
+      try {
+        await navigator.clipboard.writeText(this.pluginAPIKeyModal.apiKey);
+        this.showToast('已复制到剪贴板', 'success');
+      } catch (error) {
+        console.error('复制失败:', error);
+        this.showToast('复制失败，请手动复制', 'error');
+      }
     },
     openUserManagement() {
       this.userDropdownVisible = false;
