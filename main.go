@@ -3084,7 +3084,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := uuid.New().String()
-	apiKey := strings.ToLower(fmt.Sprintf("%x", uuid.New()))
+	apiKey := strings.ReplaceAll(uuid.New().String(), "-", "")
 	_, err = tx.Exec("UPDATE users SET token = ?, api_key = ? WHERE id = ?", token, apiKey, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
@@ -3190,7 +3190,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !dbUser.APIKey.Valid || dbUser.APIKey.String == "" {
-		apiKey := strings.ToLower(fmt.Sprintf("%x", uuid.New()))
+		apiKey := strings.ReplaceAll(uuid.New().String(), "-", "")
 		_, err = s.db.Exec("UPDATE users SET api_key = ? WHERE id = ?", apiKey, dbUser.ID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err)
@@ -3369,11 +3369,11 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": "密码修改成功"})
 }
 
-// handleRegenerateAPIKey 重新生成api_key
+// handleRegenerateAPIKey 重新生成 api_key
 func (s *server) handleRegenerateAPIKey(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
-	newAPIKey := strings.ToLower(fmt.Sprintf("%x", uuid.New()))
+	newAPIKey := strings.ReplaceAll(uuid.New().String(), "-", "")
 
 	_, err := s.db.Exec("UPDATE users SET api_key = ? WHERE id = ?", newAPIKey, userID)
 	if err != nil {
@@ -3383,7 +3383,7 @@ func (s *server) handleRegenerateAPIKey(w http.ResponseWriter, r *http.Request) 
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"api_key": newAPIKey,
-		"message": "api_key重新生成成功",
+		"message": "api_key 重新生成成功",
 	})
 }
 
