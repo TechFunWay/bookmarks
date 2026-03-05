@@ -401,10 +401,10 @@ func (u *Upgrade) processDataForV1_8_0() error {
 func (u *Upgrade) processDataForV1_9_0() error {
 	u.LogUpgrade("执行版本 v1.9.0 的数据处理业务逻辑")
 
-	// 为所有现有用户生成api_key
+	// 为所有现有用户生成 api_key (32 位)
 	_, err := u.db.Exec(`
 		UPDATE users 
-		SET api_key = lower(hex(randomblob(16)))
+		SET api_key = lower(replace(hex(randomblob(16)), '-', ''))
 		WHERE api_key IS NULL OR api_key = ''
 	`)
 	if err != nil {
