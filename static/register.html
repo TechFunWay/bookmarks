@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>注册 - 书签管理</title>
     <link rel="stylesheet" href="style.css">
+    <script src="js/md5.js"></script>
     <style>
         .register-container {
             min-height: 100vh;
@@ -211,6 +212,8 @@
                 registerBtn.textContent = '注册中...';
 
                 try {
+                    // 对密码进行 MD5 加密（前端第一次 MD5）
+                    const hashedPassword = MD5(password);
                     const response = await fetch('/api/auth/register', {
                         method: 'POST',
                         headers: {
@@ -218,7 +221,7 @@
                         },
                         body: JSON.stringify({ 
                             username, 
-                            password,
+                            password: hashedPassword,
                             nickname: nickname || undefined,
                             email: email || undefined
                         })
