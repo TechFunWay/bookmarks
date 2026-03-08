@@ -596,6 +596,9 @@ const app = createApp({
       this.changePasswordModal.loading = true;
 
       try {
+        // 对旧密码和新密码都进行 MD5 加密（前端第一次 MD5）
+        const hashedOldPassword = MD5(this.changePasswordModal.oldPassword);
+        const hashedNewPassword = MD5(this.changePasswordModal.newPassword);
         const response = await fetch('/api/auth/change-password', {
           method: 'POST',
           headers: {
@@ -603,8 +606,8 @@ const app = createApp({
             'Authorization': this.token
           },
           body: JSON.stringify({
-            old_password: this.changePasswordModal.oldPassword,
-            new_password: this.changePasswordModal.newPassword
+            old_password: hashedOldPassword,
+            new_password: hashedNewPassword
           })
         });
 

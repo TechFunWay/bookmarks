@@ -1,7 +1,9 @@
 package logic
 
 import (
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -14,6 +16,13 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+// md5Hash 计算字符串的 MD5 哈希值（32位小写十六进制）
+func md5Hash(text string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(text))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
 
 // UpgradeRecord 升级记录模型
 type UpgradeRecord struct {
@@ -397,7 +406,7 @@ func (u *Upgrade) processDataForV1_8_0() error {
 	return nil
 }
 
-// processDataForV1_9_0 版本1.9.0的数据处理业务逻辑
+// processDataForV1_9_0 版本 1.9.0 的数据处理业务逻辑
 func (u *Upgrade) processDataForV1_9_0() error {
 	u.LogUpgrade("执行版本 v1.9.0 的数据处理业务逻辑")
 
@@ -408,10 +417,57 @@ func (u *Upgrade) processDataForV1_9_0() error {
 		WHERE api_key IS NULL OR api_key = ''
 	`)
 	if err != nil {
-		return fmt.Errorf("为现有用户生成api_key失败: %w", err)
+		return fmt.Errorf("为现有用户生成 api_key 失败：%w", err)
+	}
+	u.LogUpgrade("为现有用户生成 api_key 完成")
+
+	// 重置所有用户的密码为 "用户名+2026" 的双重 MD5
+	u.LogUpgrade("开始重置用户密码...")
+
+	// 查询所有用户
+	rows, err := u.db.Query("SELECT id, username FROM users")
+	if err != nil {
+		return fmt.Errorf("查询用户列表失败：%w", err)
+	}
+	defer rows.Close()
+
+	type userInfo struct {
+		id       int64
+		username string
+	}
+	var users []userInfo
+
+	for rows.Next() {
+		var user userInfo
+		if err := rows.Scan(&user.id, &user.username); err != nil {
+			return fmt.Errorf("扫描用户信息失败：%w", err)
+		}
+		users = append(users, user)
+	}
+	rows.Close()
+
+	// 为每个用户重置密码
+	for _, user := range users {
+		// 新密码 = 用户名 + "2026"
+		newPassword := user.username + "2026"
+
+		// 第一次 MD5（模拟前端）
+		firstHash := md5Hash(newPassword)
+
+		// 第二次 MD5（后端）
+		secondHash := md5Hash(firstHash)
+
+		// 更新密码
+		_, err := u.db.Exec("UPDATE users SET password = ? WHERE id = ?", secondHash, user.id)
+		if err != nil {
+			u.LogUpgrade("重置用户 %s 的密码失败：%v", user.username, err)
+			continue
+		}
+
+		u.LogUpgrade("用户 %s 的密码已重置为：%s2026", user.username, user.username)
 	}
 
-	u.LogUpgrade("为现有用户生成api_key完成")
+	u.LogUpgrade("用户密码重置完成，共处理 %d 个用户", len(users))
 	return nil
 }
 
