@@ -5,10 +5,12 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"context"
+	"crypto/md5"
 	"crypto/tls"
 	"database/sql"
 	"embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -2167,6 +2169,13 @@ func respondError(w http.ResponseWriter, status int, err error) {
 	})
 }
 
+// md5Hash 计算字符串的 MD5 哈希值（32位小写十六进制）
+func md5Hash(text string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(text))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
 // handleGetSystemConfig 获取系统级配置（无需认证）
 func (s *server) handleGetSystemConfig(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM sys_config WHERE user_id = 0")
@@ -2544,13 +2553,10 @@ func (s *server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, err)
-		return
-	}
+	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
+	doubleHashedPassword := md5Hash(req.NewPassword)
 
-	_, err = s.db.Exec("UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", string(hashedPassword), targetUserID)
+	_, err = s.db.Exec("UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", doubleHashedPassword, targetUserID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -3037,11 +3043,8 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Errorf("密码加密失败: %w", err))
-		return
-	}
+	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
+	doubleHashedPassword := md5Hash(req.Password)
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -3068,7 +3071,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	result, err := tx.Exec(`
 		INSERT INTO users (username, password, nickname, email, is_admin)
 		VALUES (?, ?, ?, ?, ?)
-	`, req.Username, string(hashedPassword), nickname, req.Email, isAdmin)
+	`, req.Username, doubleHashedPassword, nickname, req.Email, isAdmin)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			respondError(w, http.StatusBadRequest, errors.New("用户名已存在"))
@@ -3143,11 +3146,11 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Username  string
 		Password  string
 		Nickname  string
-		Email     string
+		Email     sql.NullString
 		Avatar    sql.NullString
 		IsActive  int
 		IsAdmin   int
-		Token     string
+		Token     sql.NullString
 		APIKey    sql.NullString
 		CreatedAt string
 	}
@@ -3174,15 +3177,25 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(req.Password))
-	if err != nil {
-		respondError(w, http.StatusUnauthorized, errors.New("用户名或密码错误"))
-		return
+	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
+	doubleHashedPassword := md5Hash(req.Password)
+
+	// 兼容处理：先检查是否是新格式（双重MD5），再检查旧格式（bcrypt）
+	if dbUser.Password != doubleHashedPassword {
+		// 尝试旧格式（bcrypt）验证
+		err = bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(doubleHashedPassword))
+		if err != nil {
+			respondError(w, http.StatusUnauthorized, errors.New("用户名或密码错误"))
+			return
+		}
+		// 旧方式验证成功，升级密码存储方式为新格式
+		_, _ = s.db.Exec("UPDATE users SET password = ? WHERE id = ?", doubleHashedPassword, dbUser.ID)
 	}
 
-	if dbUser.Token == "" {
-		dbUser.Token = uuid.New().String()
-		_, err = s.db.Exec("UPDATE users SET token = ? WHERE id = ?", dbUser.Token, dbUser.ID)
+	token := dbUser.Token.String
+	if !dbUser.Token.Valid || dbUser.Token.String == "" {
+		token = uuid.New().String()
+		_, err = s.db.Exec("UPDATE users SET token = ? WHERE id = ?", token, dbUser.ID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err)
 			return
@@ -3202,10 +3215,12 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		ID:        dbUser.ID,
 		Username:  dbUser.Username,
 		Nickname:  dbUser.Nickname,
-		Email:     dbUser.Email,
 		IsActive:  dbUser.IsActive == 1,
 		IsAdmin:   dbUser.IsAdmin == 1,
 		CreatedAt: dbUser.CreatedAt,
+	}
+	if dbUser.Email.Valid {
+		user.Email = dbUser.Email.String
 	}
 	if dbUser.Avatar.Valid {
 		user.Avatar = &dbUser.Avatar.String
@@ -3215,7 +3230,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, authResponse{
-		Token: dbUser.Token,
+		Token: token,
 		User:  user,
 	})
 }
@@ -3348,19 +3363,23 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(req.OldPassword))
-	if err != nil {
-		respondError(w, http.StatusUnauthorized, errors.New("旧密码错误"))
-		return
+	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
+	doubleHashedOldPassword := md5Hash(req.OldPassword)
+
+	// 兼容处理：先检查是否是新格式（双重MD5），再检查旧格式（bcrypt）
+	if dbPassword != doubleHashedOldPassword {
+		// 尝试旧格式（bcrypt）验证
+		err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(doubleHashedOldPassword))
+		if err != nil {
+			respondError(w, http.StatusUnauthorized, errors.New("旧密码错误"))
+			return
+		}
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Errorf("密码加密失败: %w", err))
-		return
-	}
+	// 新密码同样进行双重 MD5
+	doubleHashedNewPassword := md5Hash(req.NewPassword)
 
-	_, err = s.db.Exec("UPDATE users SET password = ? WHERE id = ?", string(hashedPassword), userID)
+	_, err = s.db.Exec("UPDATE users SET password = ? WHERE id = ?", doubleHashedNewPassword, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
