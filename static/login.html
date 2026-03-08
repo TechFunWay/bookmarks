@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - 书签管理</title>
     <link rel="stylesheet" href="style.css">
+    <script src="js/md5.js"></script>
     <style>
         .login-container {
             min-height: 100vh;
@@ -177,12 +178,14 @@
                 loginBtn.textContent = '登录中...';
 
                 try {
+                    // 对密码进行 MD5 加密（前端第一次 MD5）
+                    const hashedPassword = MD5(password);
                     const response = await fetch('/api/auth/login', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ username, password })
+                        body: JSON.stringify({ username, password: hashedPassword })
                     });
 
                     const data = await response.json();
