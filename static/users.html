@@ -6,6 +6,7 @@
   <title>用户管理 - 网址收藏夹</title>
   <link rel="icon" href="/favicon.ico" />
   <link rel="stylesheet" href="/style.css" />
+  <script src="/js/md5.js"></script>
   <script src="/vue.global.prod.js"></script>
   <style>
     .users-container {
@@ -697,13 +698,15 @@
           }
 
           try {
+            // 对密码进行 MD5 加密（前端第一次 MD5）
+            const hashedPassword = MD5(this.resetPasswordForm.new_password);
             const response = await fetch(`/api/users/${this.editingUser.id}/reset-password`, {
               method: 'POST',
               headers: {
                 'Authorization': this.token,
                 'Content-Type': 'application/json'
               },
-              body: JSON.stringify(this.resetPasswordForm)
+              body: JSON.stringify({ new_password: hashedPassword })
             });
 
             if (!response.ok) {
