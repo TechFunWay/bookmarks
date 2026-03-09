@@ -1044,7 +1044,7 @@ button {
 }
 
 .modal {
-  width: 420px;
+  width: 520px;
   background: var(--card-bg);
   border-radius: 16px;
   padding: 24px;
@@ -1366,6 +1366,15 @@ button {
 }
 
 .url-input input {
+  flex: 1;
+}
+
+.api-key-display {
+  display: flex;
+  gap: 12px;
+}
+
+.api-key-display input {
   flex: 1;
 }
 
