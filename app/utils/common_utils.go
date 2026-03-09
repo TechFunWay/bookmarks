@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"time"
@@ -152,4 +154,16 @@ func MapInts(slice []int, mapper func(int) int) []int {
 		result[i] = mapper(item)
 	}
 	return result
+}
+
+// MD5Hash 计算字符串的 MD5 哈希值（32位小写十六进制）
+// salt 为盐值，为空字符串时不添加盐
+func MD5Hash(text string, salt string) string {
+	hasher := md5.New()
+	if salt != "" {
+		hasher.Write([]byte(text + salt))
+	} else {
+		hasher.Write([]byte(text))
+	}
+	return hex.EncodeToString(hasher.Sum(nil))
 }
