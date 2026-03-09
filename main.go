@@ -5,12 +5,10 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"context"
-	"crypto/md5"
 	"crypto/tls"
 	"database/sql"
 	"embed"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,6 +28,7 @@ import (
 
 	"bookmark/app/logger"
 	"bookmark/app/logic"
+	"bookmark/app/utils"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -2169,13 +2168,6 @@ func respondError(w http.ResponseWriter, status int, err error) {
 	})
 }
 
-// md5Hash 计算字符串的 MD5 哈希值（32位小写十六进制）
-func md5Hash(text string) string {
-	hasher := md5.New()
-	hasher.Write([]byte(text))
-	return hex.EncodeToString(hasher.Sum(nil))
-}
-
 // handleGetSystemConfig 获取系统级配置（无需认证）
 func (s *server) handleGetSystemConfig(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.QueryContext(r.Context(), "SELECT key, value FROM sys_config WHERE user_id = 0")
@@ -2554,7 +2546,7 @@ func (s *server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
-	doubleHashedPassword := md5Hash(req.NewPassword)
+	doubleHashedPassword := utils.MD5Hash(req.NewPassword, "bookmarks")
 
 	_, err = s.db.Exec("UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", doubleHashedPassword, targetUserID)
 	if err != nil {
@@ -3044,7 +3036,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
-	doubleHashedPassword := md5Hash(req.Password)
+	doubleHashedPassword := utils.MD5Hash(req.Password, "bookmarks")
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -3178,7 +3170,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
-	doubleHashedPassword := md5Hash(req.Password)
+	doubleHashedPassword := utils.MD5Hash(req.Password, "bookmarks")
 
 	// 兼容处理：先检查是否是新格式（双重MD5），再检查旧格式（bcrypt）
 	if dbUser.Password != doubleHashedPassword {
@@ -3364,7 +3356,7 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
-	doubleHashedOldPassword := md5Hash(req.OldPassword)
+	doubleHashedOldPassword := utils.MD5Hash(req.OldPassword, "bookmarks")
 
 	// 兼容处理：先检查是否是新格式（双重MD5），再检查旧格式（bcrypt）
 	if dbPassword != doubleHashedOldPassword {
@@ -3377,7 +3369,7 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 新密码同样进行双重 MD5
-	doubleHashedNewPassword := md5Hash(req.NewPassword)
+	doubleHashedNewPassword := utils.MD5Hash(req.NewPassword, "bookmarks")
 
 	_, err = s.db.Exec("UPDATE users SET password = ? WHERE id = ?", doubleHashedNewPassword, userID)
 	if err != nil {
