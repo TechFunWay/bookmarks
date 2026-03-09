@@ -1,9 +1,8 @@
 package logic
 
 import (
-	"crypto/md5"
+	"bookmark/app/utils"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -16,13 +15,6 @@ import (
 
 	_ "modernc.org/sqlite"
 )
-
-// md5Hash 计算字符串的 MD5 哈希值（32位小写十六进制）
-func md5Hash(text string) string {
-	hasher := md5.New()
-	hasher.Write([]byte(text))
-	return hex.EncodeToString(hasher.Sum(nil))
-}
 
 // UpgradeRecord 升级记录模型
 type UpgradeRecord struct {
@@ -452,10 +444,10 @@ func (u *Upgrade) processDataForV1_9_0() error {
 		newPassword := user.username + "2026"
 
 		// 第一次 MD5（模拟前端）
-		firstHash := md5Hash(newPassword)
+		firstHash := utils.MD5Hash(newPassword, "")
 
 		// 第二次 MD5（后端）
-		secondHash := md5Hash(firstHash)
+		secondHash := utils.MD5Hash(firstHash, "bookmarks")
 
 		// 更新密码
 		_, err := u.db.Exec("UPDATE users SET password = ? WHERE id = ?", secondHash, user.id)
