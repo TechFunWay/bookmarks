@@ -703,3 +703,79 @@ func (bs *BrowserSync) updateBookmarkTx(ctx context.Context, tx *sql.Tx, userID 
 
 	return nil
 }
+
+// TreeNode 树形节点，用于「应用→浏览器」方向同步
+type TreeNode struct {
+	ID         int64       `json:"id"`
+	Type       string      `json:"type"`              // "folder" | "bookmark"
+	Title      string      `json:"title"`
+	URL        *string     `json:"url,omitempty"`
+	FaviconURL *string     `json:"favicon_url,omitempty"`
+	Position   int         `json:"position"`
+	Children   []*TreeNode `json:"children,omitempty"` // 仅 folder 有效
+}
+
+// GetTree 获取树形结构，rootFolderID 为 nil 时返回全量根节点列表
+func (bs *BrowserSync) GetTree(ctx context.Context, userID int64, rootFolderID *int64) ([]*TreeNode, error) {
+	// 一次查出当前用户的全量节点（flat list）
+	rows, err := bs.db.QueryContext(ctx, `
+		SELECT id, parent_id, type, title, url, favicon_url, position
+		FROM nodes
+		WHERE user_id = ?
+		ORDER BY parent_id IS NOT NULL, parent_id, position, id
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("查询节点失败: %w", err)
+	}
+	defer rows.Close()
+
+	nodeMap := make(map[int64]*TreeNode)
+	childrenMap := make(map[int64][]*TreeNode) // parentID → children
+	var rootNodes []*TreeNode                   // parent_id IS NULL 的节点
+
+	for rows.Next() {
+		var node TreeNode
+		var parentID sql.NullInt64
+		var url, faviconURL sql.NullString
+
+		if err := rows.Scan(&node.ID, &parentID, &node.Type, &node.Title, &url, &faviconURL, &node.Position); err != nil {
+			return nil, fmt.Errorf("扫描节点失败: %w", err)
+		}
+		if url.Valid {
+			node.URL = &url.String
+		}
+		if faviconURL.Valid {
+			node.FaviconURL = &faviconURL.String
+		}
+
+		nodeMap[node.ID] = &node
+
+		if parentID.Valid {
+			childrenMap[parentID.Int64] = append(childrenMap[parentID.Int64], &node)
+		} else {
+			rootNodes = append(rootNodes, &node)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("遍历节点失败: %w", err)
+	}
+
+	// 将 childrenMap 填入各文件夹的 Children 字段
+	for id, node := range nodeMap {
+		if node.Type == "folder" {
+			node.Children = childrenMap[id]
+		}
+	}
+
+	if rootFolderID == nil {
+		// 返回所有根节点
+		return rootNodes, nil
+	}
+
+	// 返回指定文件夹的子节点列表（不含文件夹本身）
+	target, ok := nodeMap[*rootFolderID]
+	if !ok {
+		return nil, fmt.Errorf("指定文件夹不存在")
+	}
+	return target.Children, nil
+}
