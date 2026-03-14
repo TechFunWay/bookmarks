@@ -1284,8 +1284,20 @@
 
     <!-- Toast 消息 -->
     <transition name="toast">
-      <div v-if="toast.visible" :class="['toast', toast.type]">
+      <div v-if="toast.visible && toast.type === 'error'" class="toast-overlay" @click="dismissToast"></div>
+    </transition>
+    <transition name="toast">
+      <div v-if="toast.visible && toast.type !== 'error'" :class="['toast', toast.type]">
         {{ toast.message }}
+      </div>
+    </transition>
+    <transition name="toast">
+      <div v-if="toast.visible && toast.type === 'error'" :class="['toast', 'error']">
+        <div class="toast-error-header">
+          <span class="toast-error-icon">⚠️</span>
+          <span class="toast-error-msg">{{ toast.message }}</span>
+        </div>
+        <button class="toast-error-close" @click="dismissToast">知道了</button>
       </div>
     </transition>
   </main>
@@ -2165,6 +2177,7 @@
               const err = await res.json().catch(() => ({}));
               throw new Error(err.error || "删除失败");
             }
+            const data = await res.json().catch(() => ({}));
             if (this.selectedNodeId === node.id) {
               this.selectedNodeId = null;
             }
@@ -2172,7 +2185,11 @@
               this.hideContextMenu();
             }
             await this.loadTree();
-            this.showToast("删除成功", "success");
+            const parts = [];
+            if (data.folders > 0) parts.push(`${data.folders} 个文件夹`);
+            if (data.bookmarks > 0) parts.push(`${data.bookmarks} 个书签`);
+            const detail = parts.length > 0 ? `，共删除 ${parts.join("、")}` : "";
+            this.showToast(`删除成功${detail}`, "success");
           } catch (error) {
             this.showToast(error.message || "删除失败", "error");
           }
@@ -2556,18 +2573,28 @@
         showToast(message, type = "success") {
           if (this.toast.timer) {
             clearTimeout(this.toast.timer);
+            this.toast.timer = null;
           }
 
           this.toast.visible = true;
           this.toast.message = message;
           this.toast.type = type;
 
-          const duration = type === "error" ? 5000 : type === "warning" ? 3500 : 2200;
+          // error 类型不自动消失，需要用户点击关闭
+          if (type === "error") return;
 
+          const duration = type === "warning" ? 3500 : 2200;
           this.toast.timer = setTimeout(() => {
             this.toast.visible = false;
             this.toast.timer = null;
           }, duration);
+        },
+        dismissToast() {
+          if (this.toast.timer) {
+            clearTimeout(this.toast.timer);
+            this.toast.timer = null;
+          }
+          this.toast.visible = false;
         },
         async lookupMetadata() {
           const url = this.modal.form.url.trim();
