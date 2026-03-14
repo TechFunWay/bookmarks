@@ -3,18 +3,25 @@ const elements = {
   syncStatus: document.getElementById('syncStatus'),
   statusMessage: document.getElementById('statusMessage'),
   serverUrl: document.getElementById('serverUrl'),
-  syncMode: document.getElementById('syncMode'),
-  syncInterval: document.getElementById('syncInterval'),
   syncButton: document.getElementById('syncButton'),
+  syncFromAppButton: document.getElementById('syncFromAppButton'),
   lastSync: document.getElementById('lastSync'),
-  syncStatusText: document.getElementById('syncStatusText'),
-  folderSyncStatus: document.getElementById('folderSyncStatus'),
-  syncFolders: document.getElementById('syncFolders'),
+  // 配置信息区
+  e2aSyncStatusText: document.getElementById('e2aSyncStatusText'),
+  a2eSyncStatusItem: document.getElementById('a2eSyncStatusItem'),
+  a2eSyncStatusText: document.getElementById('a2eSyncStatusText'),
   configButton: document.getElementById('configButton'),
-  // 同步方向展示
+  // 浏览器→应用方向展示
+  e2aDirectionTitle: document.getElementById('e2aDirectionTitle'),
   dirEdge: document.getElementById('dirEdge'),
   dirApp: document.getElementById('dirApp'),
   dirSyncMode: document.getElementById('dirSyncMode'),
+  // 应用→浏览器方向展示
+  a2eDirectionSection: document.getElementById('a2eDirectionSection'),
+  a2eDirectionTitle: document.getElementById('a2eDirectionTitle'),
+  dirA2ESource: document.getElementById('dirA2ESource'),
+  dirA2ETarget: document.getElementById('dirA2ETarget'),
+  dirA2ESyncMode: document.getElementById('dirA2ESyncMode'),
   // 内嵌进度面板
   progressSection: document.getElementById('progressSection'),
   progressBar: document.getElementById('progressBar'),
@@ -48,57 +55,78 @@ async function loadConfig() {
     if (response && response.config) {
       const config = response.config;
 
-      elements.serverUrl.textContent = config.serverUrl;
-      elements.syncMode.textContent = getSyncModeText(config.syncMode);
-      elements.syncInterval.textContent = config.enableAutoSync
-        ? formatSyncInterval(config.syncInterval)
-        : '未启用';
+      // 服务器地址
+      elements.serverUrl.textContent = config.serverUrl || '未设置';
 
+      // 最后同步时间
       if (config.lastSyncTime) {
         elements.lastSync.textContent = `最后同步: ${formatTime(config.lastSyncTime)}`;
       }
 
-      // 同步方向展示块
+      // ---- 浏览器→应用（E→A）----
       const edgeMode = config.edgeFolderMode || 'all';
-      const appMode = config.appFolderMode || 'all';
+      const appMode  = config.appFolderMode  || 'all';
       const edgePart = edgeMode === 'select' ? (config.edgeFolderName || '未选择') : '全部书签';
-      const appPart = appMode === 'select' ? (config.appFolderName || '未选择') : '根目录';
-      elements.dirEdge.textContent = edgePart;
-      elements.dirApp.textContent = appPart;
+      const appPart  = appMode  === 'select' ? (config.appFolderName  || '未选择') : '根目录';
+
+      // E→A 方向展示块
+      elements.dirEdge.textContent     = edgePart;
+      elements.dirApp.textContent      = appPart;
       elements.dirSyncMode.textContent = getSyncModeText(config.syncMode);
 
-      let syncInfo = '';
-      if (config.enableAutoSync) {
-        syncInfo += '自动同步';
-        syncInfo += ` (${edgePart} → ${appPart})`;
+      // E→A 标题：「浏览器 → 应用（自动同步 · 每 5 分钟）」或「（手动同步）」
+      const e2aAutoText = config.enableAutoSync
+        ? `自动同步 · 每 ${formatSyncInterval(config.syncInterval)}`
+        : '手动同步';
+      elements.e2aDirectionTitle.textContent = `浏览器 → 应用（${e2aAutoText}）`;
 
-        if (edgeMode === 'select' || appMode === 'select') {
-          elements.folderSyncStatus.style.display = 'flex';
-          elements.syncFolders.textContent = `${edgePart} → ${appPart}`;
-        } else {
-          elements.folderSyncStatus.style.display = 'none';
-        }
+      // E→A 配置信息行
+      elements.e2aSyncStatusText.textContent =
+        config.enableAutoSync
+          ? `自动同步，每 ${formatSyncInterval(config.syncInterval)}，${getSyncModeText(config.syncMode)}`
+          : `手动同步，${getSyncModeText(config.syncMode)}`;
+
+      // ---- 应用→浏览器（A→E）----
+      if (config.enableAppToEdgeSync) {
+        elements.a2eDirectionSection.style.display = 'block';
+        elements.syncFromAppButton.style.display = 'inline-block';
+        elements.a2eSyncStatusItem.style.display = 'flex';
+
+        const srcMode = config.appToEdgeSourceFolderMode || 'all';
+        const srcPart = srcMode === 'select' ? (config.appToEdgeSourceFolderName || '未选择') : '全部书签';
+        const tgtPart = config.appToEdgeTargetFolderName || '未选择目标目录';
+
+        // A→E 方向展示块
+        elements.dirA2ESource.textContent  = srcPart;
+        elements.dirA2ETarget.textContent  = tgtPart;
+        elements.dirA2ESyncMode.textContent = getSyncModeText(config.appToEdgeSyncMode);
+
+        // A→E 标题：「应用 → 浏览器（自动同步 · 每 5 分钟）」或「（手动同步）」
+        const a2eAutoText = config.enableAppToEdgeSync
+          ? (config.appToEdgeSyncInterval
+              ? `自动同步 · 每 ${formatSyncInterval(config.appToEdgeSyncInterval)}`
+              : '自动同步')
+          : '手动同步';
+        elements.a2eDirectionTitle.textContent = `应用 → 浏览器（${a2eAutoText}）`;
+
+        // A→E 配置信息行
+        const a2eIntervalText = config.appToEdgeSyncInterval
+          ? `每 ${formatSyncInterval(config.appToEdgeSyncInterval)}，`
+          : '';
+        elements.a2eSyncStatusText.textContent =
+          `自动同步，${a2eIntervalText}${getSyncModeText(config.appToEdgeSyncMode)}`;
       } else {
-        syncInfo = '手动同步';
-        elements.folderSyncStatus.style.display = 'none';
+        elements.a2eDirectionSection.style.display = 'none';
+        elements.syncFromAppButton.style.display = 'none';
+        elements.a2eSyncStatusItem.style.display = 'none';
       }
-
-      elements.syncStatusText.textContent = syncInfo;
 
       if (config.syncResult) {
         const stats = config.syncResult;
         let resultText = '';
-
-        if (stats.folders > 0) {
-          resultText += `创建文件夹: ${stats.folders} `;
-        }
-        if (stats.bookmarks > 0) {
-          resultText += `创建书签: ${stats.bookmarks} `;
-        }
-        if (stats.skipped > 0) {
-          resultText += `跳过节点: ${stats.skipped}`;
-        }
-
+        if (stats.folders   > 0) resultText += `创建文件夹: ${stats.folders} `;
+        if (stats.bookmarks > 0) resultText += `创建书签: ${stats.bookmarks} `;
+        if (stats.skipped   > 0) resultText += `跳过节点: ${stats.skipped}`;
         if (resultText) {
           console.log('显示同步结果:', resultText);
           showStatus('success', resultText.trim());
@@ -165,7 +193,11 @@ async function loadSyncStatus() {
 // 重置同步UI
 function resetSyncUI() {
   elements.syncButton.disabled = false;
-  elements.syncButton.textContent = '立即同步';
+  elements.syncButton.textContent = '立即同步（浏览器→应用）';
+  if (elements.syncFromAppButton) {
+    elements.syncFromAppButton.disabled = false;
+    elements.syncFromAppButton.textContent = '立即同步（应用→浏览器）';
+  }
   statusCheckCount = 0;
 }
 
@@ -290,7 +322,8 @@ function bindEvents() {
 
     elements.syncButton.disabled = true;
     elements.syncButton.textContent = '同步中...';
-    showStatus('syncing', '正在同步中...');
+    if (elements.syncFromAppButton) elements.syncFromAppButton.disabled = true;
+    showStatus('syncing', '正在同步中（浏览器→应用）...');
 
     startStatusCheck();
 
@@ -317,6 +350,43 @@ function bindEvents() {
       stopStatusCheck();
     }
   });
+
+  // 应用→浏览器同步按钮
+  if (elements.syncFromAppButton) {
+    elements.syncFromAppButton.addEventListener('click', async () => {
+      if (elements.syncFromAppButton.disabled) return;
+
+      elements.statusMessage.style.display = 'none';
+      showProgress();
+
+      elements.syncFromAppButton.disabled = true;
+      elements.syncFromAppButton.textContent = '同步中...';
+      elements.syncButton.disabled = true;
+      showStatus('syncing', '正在同步中（应用→浏览器）...');
+
+      startStatusCheck();
+
+      try {
+        const response = await chrome.runtime.sendMessage({ action: 'syncFromApp' });
+        console.log('应用→浏览器同步响应:', response);
+
+        if (response && response.status === 'success') {
+          console.log('应用→浏览器同步成功');
+        } else if (response && response.status === 'error') {
+          showStatus('error', `同步失败: ${response.error || '未知错误'}`);
+          elements.progressStep.textContent = '同步失败';
+          resetSyncUI();
+          stopStatusCheck();
+        }
+      } catch (error) {
+        console.error('应用→浏览器同步失败:', error);
+        showStatus('error', '同步失败');
+        elements.progressStep.textContent = '同步失败';
+        resetSyncUI();
+        stopStatusCheck();
+      }
+    });
+  }
 
   elements.configButton.addEventListener('click', () => {
     console.log('配置按钮点击');

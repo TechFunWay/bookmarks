@@ -311,6 +311,9 @@ func main() {
 		r.Delete("/folders/{id}", s.handleSyncDeleteFolder)
 
 		r.Post("/batch", s.handleSyncBatchOperation)
+
+		// 应用→浏览器方向：返回完整树形结构供插件拉取
+		r.Get("/tree", s.handleSyncGetTree)
 	})
 
 	// 使用嵌入的静态文件系统
@@ -3860,4 +3863,46 @@ func (s *server) handleSyncBatchOperation(w http.ResponseWriter, r *http.Request
 	}
 
 	respondJSON(w, http.StatusOK, result)
+}
+
+// handleSyncGetTree 返回应用书签的完整树形结构，供插件「应用→浏览器」方向同步使用
+// 查询参数：folder_id（可选，指定根文件夹 ID，不传则返回全量根节点）
+func (s *server) handleSyncGetTree(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	var rootFolderID *int64
+	if idStr := r.URL.Query().Get("folder_id"); idStr != "" {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, fmt.Errorf("invalid folder_id"))
+			return
+		}
+		// 校验该文件夹属于当前用户
+		var nodeType string
+		err = s.db.QueryRowContext(r.Context(), "SELECT type FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(&nodeType)
+		if err == sql.ErrNoRows {
+			respondError(w, http.StatusNotFound, fmt.Errorf("folder not found"))
+			return
+		}
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if nodeType != nodeTypeFolder {
+			respondError(w, http.StatusBadRequest, fmt.Errorf("specified id is not a folder"))
+			return
+		}
+		rootFolderID = &id
+	}
+
+	bs := logic.NewBrowserSync(s.db)
+	tree, err := bs.GetTree(r.Context(), userID, rootFolderID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"nodes": tree,
+	})
 }
