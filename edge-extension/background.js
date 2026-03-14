@@ -8,9 +8,19 @@ const DEFAULT_CONFIG = {
   edgeFolderMode: 'all',   // 'all' | 'select'
   edgeFolderId: null,
   edgeFolderName: '',
-  appFolderMode: 'all',    // 'all' | 'select'
+  appFolderMode: 'all',    // 'all' | 'select'（浏览器→应用方向的目标目录）
   appFolderId: null,
   appFolderName: '',
+  // 应用→浏览器方向配置
+  enableAppToEdgeSync: false,           // 是否开启「应用→浏览器」同步
+  appToEdgeSyncInterval: 5,             // 应用→浏览器自动同步间隔（分钟）
+  appToEdgeSyncMode: 'merge',           // 'merge' | 'replace'
+  appToEdgeSourceFolderMode: 'all',     // 'all' | 'select'  应用侧来源目录
+  appToEdgeSourceFolderId: null,
+  appToEdgeSourceFolderName: '',
+  appToEdgeTargetFolderMode: 'select',  // 浏览器侧目标目录（必选，防止误覆盖）
+  appToEdgeTargetFolderId: null,
+  appToEdgeTargetFolderName: '',
   lastSyncTime: null,
   folderIdMap: {}  // Edge 文件夹 ID 到服务器文件夹 ID 的映射
 };
@@ -67,20 +77,35 @@ async function loadConfig() {
 // 注册同步定时器
 function registerSyncAlarm() {
   chrome.alarms.clear('syncBookmarks');
-  
+  chrome.alarms.clear('syncFromApp');
+
   if (config.enableAutoSync) {
     chrome.alarms.create('syncBookmarks', {
       periodInMinutes: config.syncInterval
     });
-    console.log(`同步定时器已注册，间隔: ${config.syncInterval}分钟`);
+    console.log(`E→A 定时器已注册，间隔: ${config.syncInterval}分钟`);
   } else {
-    console.log('自动同步未启用，不注册定时器');
+    console.log('E→A 自动同步未启用，不注册定时器');
   }
-  
+
+  if (config.enableAppToEdgeSync) {
+    const a2eInterval = config.appToEdgeSyncInterval || 5;
+    chrome.alarms.create('syncFromApp', {
+      periodInMinutes: a2eInterval
+    });
+    console.log(`A→E 定时器已注册，间隔: ${a2eInterval}分钟`);
+  } else {
+    console.log('A→E 自动同步未启用，不注册定时器');
+  }
+
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'syncBookmarks' && config.enableAutoSync) {
-      console.log('执行定时同步');
+      console.log('执行定时 E→A 同步');
       syncBookmarks();
+    }
+    if (alarm.name === 'syncFromApp' && config.enableAppToEdgeSync) {
+      console.log('执行定时 A→E 同步');
+      syncFromApp();
     }
   });
 }
@@ -953,6 +978,236 @@ async function manualSync() {
   }
 }
 
+// ============================================================
+// 应用→浏览器方向同步
+// ============================================================
+
+/**
+ * 从应用拉取树形数据写入浏览器书签
+ */
+async function syncFromApp() {
+  if (syncInProgress) {
+    console.log('同步已在进行中，跳过');
+    return;
+  }
+
+  syncInProgress = true;
+  syncProgress = {
+    total: 0,
+    processed: 0,
+    currentStep: '准备同步（应用→浏览器）...',
+    steps: ['拉取应用数据', '准备浏览器目录', '写入书签', '完成']
+  };
+
+  try {
+    if (!config.apiKey) throw new Error('请先配置 API Key');
+
+    // 1. 确认浏览器目标目录（必须选择）
+    if (!config.appToEdgeTargetFolderId) {
+      throw new Error('请先在设置中指定「浏览器目标目录」');
+    }
+    const targetEdgeFolderId = String(config.appToEdgeTargetFolderId);
+
+    // 验证目标文件夹是否存在
+    await new Promise((resolve, reject) => {
+      chrome.bookmarks.get(targetEdgeFolderId, (result) => {
+        if (chrome.runtime.lastError || !result || result.length === 0) {
+          reject(new Error(`浏览器目标目录不存在，请重新选择`));
+        } else {
+          resolve(result[0]);
+        }
+      });
+    });
+
+    // 2. 从后端拉取树形数据
+    syncProgress.currentStep = '拉取应用数据...';
+    sendProgressToWindow();
+
+    let treeUrl = `${config.serverUrl}/api/sync/tree`;
+    if (config.appToEdgeSourceFolderMode === 'select' && config.appToEdgeSourceFolderId) {
+      treeUrl += `?folder_id=${config.appToEdgeSourceFolderId}`;
+    }
+
+    const treeResp = await fetch(treeUrl, {
+      headers: { 'X-API-Key': config.apiKey }
+    });
+    if (!treeResp.ok) {
+      const errText = await treeResp.text();
+      throw new Error(`拉取应用数据失败: ${treeResp.status} ${errText}`);
+    }
+    const treeData = await treeResp.json();
+    const appNodes = treeData.nodes || [];
+    console.log('拉取到应用节点数:', appNodes.length);
+
+    // 统计总书签数用于进度显示
+    function countNodes(nodes) {
+      let n = 0;
+      nodes.forEach(node => {
+        n++;
+        if (node.children) n += countNodes(node.children);
+      });
+      return n;
+    }
+    syncProgress.total = countNodes(appNodes);
+    sendProgressToWindow();
+
+    // 3. 准备浏览器目标目录 —— 读取其现有子节点（用于 merge/replace 对比）
+    syncProgress.currentStep = '准备浏览器目录...';
+    sendProgressToWindow();
+
+    const existingEdgeChildren = await new Promise((resolve, reject) => {
+      chrome.bookmarks.getChildren(targetEdgeFolderId, (children) => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else resolve(children || []);
+      });
+    });
+
+    // 4. 递归写入
+    syncProgress.currentStep = '写入书签...';
+    sendProgressToWindow();
+
+    const stats = { created: 0, updated: 0, deleted: 0, folders: 0 };
+    await writeNodesToEdge(appNodes, targetEdgeFolderId, existingEdgeChildren, config.appToEdgeSyncMode, stats);
+
+    syncProgress.processed = syncProgress.total;
+    syncProgress.currentStep = '同步完成';
+    config.lastSyncTime = new Date().toISOString();
+    config.syncResult = stats;
+    await chrome.storage.local.set({ config });
+
+    console.log('应用→浏览器同步完成:', stats);
+    sendSyncCompleteToWindow();
+    return { stats };
+  } catch (error) {
+    console.error('应用→浏览器同步失败:', error);
+    syncProgress.currentStep = '同步失败: ' + error.message;
+    config.lastError = error.message;
+    await chrome.storage.local.set({ config });
+    sendSyncErrorToWindow(error.message);
+    throw error;
+  } finally {
+    syncInProgress = false;
+  }
+}
+
+/**
+ * 递归将 appNodes 写入浏览器 parentEdgeId 文件夹
+ * @param {Array} appNodes   - 应用侧节点（TreeNode[]）
+ * @param {string} parentEdgeId - 目标浏览器文件夹 ID
+ * @param {Array} existingChildren - 该浏览器文件夹的现有子节点
+ * @param {string} syncMode  - 'merge' | 'replace'
+ * @param {object} stats     - 统计对象
+ */
+async function writeNodesToEdge(appNodes, parentEdgeId, existingChildren, syncMode, stats) {
+  // 建立现有子节点的快速查找：title → edge node
+  const existingByTitle = new Map();
+  existingChildren.forEach(n => {
+    const key = `${n.url ? 'bm' : 'dir'}_${n.title}`;
+    if (!existingByTitle.has(key)) existingByTitle.set(key, []);
+    existingByTitle.get(key).push(n);
+  });
+
+  const processedEdgeIds = new Set();
+
+  for (const appNode of appNodes) {
+    const isFolder = appNode.type === 'folder';
+    const key = `${isFolder ? 'dir' : 'bm'}_${appNode.title}`;
+    const candidates = existingByTitle.get(key) || [];
+
+    if (isFolder) {
+      // 文件夹：找同名的已有文件夹
+      let edgeFolder = candidates.find(c => !c.url);
+      if (!edgeFolder) {
+        // 创建新文件夹
+        edgeFolder = await new Promise((resolve, reject) => {
+          chrome.bookmarks.create({ parentId: parentEdgeId, title: appNode.title }, (node) => {
+            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else resolve(node);
+          });
+        });
+        stats.folders++;
+        stats.created++;
+        console.log(`创建文件夹: ${appNode.title}`);
+      } else {
+        processedEdgeIds.add(edgeFolder.id);
+      }
+
+      // 递归处理子节点
+      if (appNode.children && appNode.children.length > 0) {
+        const folderChildren = await new Promise((resolve, reject) => {
+          chrome.bookmarks.getChildren(edgeFolder.id, (children) => {
+            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else resolve(children || []);
+          });
+        });
+        await writeNodesToEdge(appNode.children, edgeFolder.id, folderChildren, syncMode, stats);
+      }
+      processedEdgeIds.add(edgeFolder.id);
+    } else {
+      // 书签：先找同 URL 的，再找同名的
+      let existingBm = existingChildren.find(c => c.url === appNode.url);
+      if (!existingBm) existingBm = candidates.find(c => c.url);
+
+      if (existingBm) {
+        // 更新标题（如果不同）
+        if (existingBm.title !== appNode.title) {
+          await new Promise((resolve, reject) => {
+            chrome.bookmarks.update(existingBm.id, { title: appNode.title }, (node) => {
+              if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+              else resolve(node);
+            });
+          });
+          stats.updated++;
+        }
+        processedEdgeIds.add(existingBm.id);
+      } else {
+        // 创建新书签
+        const newNode = await new Promise((resolve, reject) => {
+          chrome.bookmarks.create({
+            parentId: parentEdgeId,
+            title: appNode.title,
+            url: appNode.url
+          }, (node) => {
+            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else resolve(node);
+          });
+        });
+        processedEdgeIds.add(newNode.id);
+        stats.created++;
+        syncProgress.processed++;
+        sendProgressToWindow();
+      }
+    }
+  }
+
+  // Replace 模式：删除浏览器中应用侧不存在的节点
+  if (syncMode === 'replace') {
+    for (const child of existingChildren) {
+      if (!processedEdgeIds.has(child.id)) {
+        try {
+          await new Promise((resolve, reject) => {
+            if (child.url) {
+              chrome.bookmarks.remove(child.id, () => {
+                if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+                else resolve();
+              });
+            } else {
+              chrome.bookmarks.removeTree(child.id, () => {
+                if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+                else resolve();
+              });
+            }
+          });
+          stats.deleted++;
+          console.log(`删除浏览器节点: ${child.title}`);
+        } catch (e) {
+          console.error(`删除浏览器节点失败: ${child.title}`, e);
+        }
+      }
+    }
+  }
+}
+
 async function updateConfig(newConfig) {
   config = { ...config, ...newConfig };
   await chrome.storage.local.set({ config });
@@ -971,12 +1226,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   switch (message.action) {
     case 'sync':
-      console.log('处理 sync 消息');
+      // 默认：浏览器→应用方向
+      console.log('处理 sync 消息（浏览器→应用）');
       manualSync().then((result) => {
         console.log('同步完成，发送响应:', result);
         sendResponse(result);
       }).catch((error) => {
         console.error('同步失败，发送错误响应:', error);
+        sendResponse({ status: 'error', error: error.message });
+      });
+      return true;
+    case 'syncFromApp':
+      // 应用→浏览器方向
+      console.log('处理 syncFromApp 消息');
+      syncFromApp().then((result) => {
+        sendResponse({ status: 'success', result });
+      }).catch((error) => {
         sendResponse({ status: 'error', error: error.message });
       });
       return true;
