@@ -1805,6 +1805,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || "删除失败");
         }
+        const data = await res.json().catch(() => ({}));
         if (this.selectedNodeId === node.id) {
           this.selectedNodeId = null;
         }
@@ -1812,7 +1813,12 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           this.hideContextMenu();
         }
         await this.loadTree();
-        this.showToast("删除成功", "success");
+        // 拼出详细提示：书签和文件夹分别统计
+        const parts = [];
+        if (data.folders > 0) parts.push(`${data.folders} 个文件夹`);
+        if (data.bookmarks > 0) parts.push(`${data.bookmarks} 个书签`);
+        const detail = parts.length > 0 ? `，共删除 ${parts.join("、")}` : "";
+        this.showToast(`删除成功${detail}`, "success");
       } catch (error) {
         this.showToast(error.message || "删除失败", "error");
       }
@@ -2138,6 +2144,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       // 清除之前的定时器
       if (this.toast.timer) {
         clearTimeout(this.toast.timer);
+        this.toast.timer = null;
       }
       
       // 设置新的消息
@@ -2145,13 +2152,22 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.toast.message = message;
       this.toast.type = type;
       
-      // 根据类型设置不同的显示时间
-      const duration = type === "error" ? 5000 : type === "warning" ? 3500 : 2200;
-      
+      // error 类型不自动消失，需要用户点击关闭
+      if (type === "error") return;
+
+      // 其他类型按时自动消失
+      const duration = type === "warning" ? 3500 : 2200;
       this.toast.timer = setTimeout(() => {
         this.toast.visible = false;
         this.toast.timer = null;
       }, duration);
+    },
+    dismissToast() {
+      if (this.toast.timer) {
+        clearTimeout(this.toast.timer);
+        this.toast.timer = null;
+      }
+      this.toast.visible = false;
     },
     // 编辑模式相关方法
     toggleBookmarkEdit() {

@@ -107,6 +107,37 @@
       text-align: center;
       margin-top: 8px;
     }
+    .progress-container {
+      margin-bottom: 12px;
+      padding: 8px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background-color: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background-color: #4CAF50;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 6px;
+      text-align: center;
+    }
+    .progress-detail {
+      font-size: 11px;
+      color: #999;
+      text-align: center;
+      margin-top: 2px;
+    }
   </style>
 </head>
 <body>
@@ -117,7 +148,15 @@
       <span class="status-icon">📋</span>
       <span id="statusMessage">就绪</span>
     </div>
-    
+
+    <div id="syncProgressContainer" class="progress-container" style="display: none;">
+      <div class="progress-bar">
+        <div id="progressBar" class="progress-fill"></div>
+      </div>
+      <div id="progressText" class="progress-text">准备同步...</div>
+      <div id="progressDetail" class="progress-detail">0 / 0</div>
+    </div>
+
     <div class="status-section">
       <div class="status-item">
         <span class="status-label">服务器地址:</span>
@@ -143,6 +182,8 @@
     
     <button id="syncButton" class="sync-button">立即同步</button>
     
+    <a href="#" id="openWindowLink" class="options-link">🪟 打开独立窗口</a>
+    
     <a href="options.html" target="_blank" class="options-link">⚙️ 选项设置</a>
     
     <div id="lastSync" class="last-sync">
@@ -151,5 +192,19 @@
   </div>
   
   <script src="popup.js"></script>
+  <script>
+    // 打开独立同步窗口
+    document.getElementById('openWindowLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      console.log('点击打开独立窗口，发送消息到 background.js');
+      chrome.runtime.sendMessage({ action: 'openSyncWindow' }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('打开窗口失败:', chrome.runtime.lastError);
+        } else {
+          console.log('打开窗口响应:', response);
+        }
+      });
+    });
+  </script>
 </body>
 </html>
