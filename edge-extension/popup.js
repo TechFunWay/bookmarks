@@ -9,7 +9,11 @@ const elements = {
   lastSync: document.getElementById('lastSync'),
   syncStatusText: document.getElementById('syncStatusText'),
   folderSyncStatus: document.getElementById('folderSyncStatus'),
-  syncFolders: document.getElementById('syncFolders')
+  syncFolders: document.getElementById('syncFolders'),
+  syncProgressContainer: document.getElementById('syncProgressContainer'),
+  progressBar: document.getElementById('progressBar'),
+  progressText: document.getElementById('progressText'),
+  progressDetail: document.getElementById('progressDetail')
 };
 
 // 初始化页面
@@ -49,19 +53,16 @@ async function loadConfig() {
       let syncInfo = '';
       if (config.enableAutoSync) {
         syncInfo += '自动同步';
-        if (config.syncScope === 'folder') {
-          const appFolderName = config.appFolderName || '未选择';
-          syncInfo += ` (同步到 ${appFolderName})`;
+        const edgeMode = config.edgeFolderMode || 'all';
+        const appMode = config.appFolderMode || 'all';
+        const edgePart = edgeMode === 'select' ? (config.edgeFolderName || '未选择') : '全部书签';
+        const appPart = appMode === 'select' ? (config.appFolderName || '未选择') : '根目录';
+        syncInfo += ` (${edgePart} → ${appPart})`;
+
+        if (edgeMode === 'select' || appMode === 'select') {
           elements.folderSyncStatus.style.display = 'flex';
-          elements.syncFolders.textContent = `同步到 ${appFolderName}`;
-        } else if (config.syncScope === 'edge-to-app') {
-          const edgeFolderName = config.edgeFolderName || '未选择';
-          const appFolderName = config.appFolderName || '未选择';
-          syncInfo += ` (${edgeFolderName} → ${appFolderName})`;
-          elements.folderSyncStatus.style.display = 'flex';
-          elements.syncFolders.textContent = `${edgeFolderName} → ${appFolderName}`;
+          elements.syncFolders.textContent = `${edgePart} → ${appPart}`;
         } else {
-          syncInfo += ' (同步到根目录)';
           elements.folderSyncStatus.style.display = 'none';
         }
       } else {
@@ -110,34 +111,80 @@ async function loadSyncStatus() {
     if (response) {
       if (response.syncInProgress) {
         statusCheckCount++;
-        
+
         if (statusCheckCount >= MAX_STATUS_CHECKS) {
           console.warn('同步状态检查超时，停止检查');
           showStatus('error', '同步超时，请重试');
-          elements.syncButton.disabled = false;
-          elements.syncButton.textContent = '立即同步';
+          hideProgress();
+          resetSyncUI();
           stopStatusCheck();
           return;
         }
-        
+
+        // 显示进度
+        if (response.syncProgress) {
+          showProgress(response.syncProgress);
+        }
         showStatus('syncing', '正在同步中...');
         elements.syncButton.disabled = true;
         elements.syncButton.textContent = '同步中...';
       } else {
-        showStatus('success', '就绪');
-        elements.syncButton.disabled = false;
-        elements.syncButton.textContent = '立即同步';
+        // 同步完成或没有进行中的同步
+        hideProgress();
+
+        // 如果之前是在同步中，现在完成了，显示成功
+        if (statusCheckCount > 0) {
+          showStatus('success', '同步完成');
+          await loadConfig();
+        } else {
+          showStatus('success', '就绪');
+        }
+
+        resetSyncUI();
         stopStatusCheck();
-        await loadConfig();
       }
     }
   } catch (error) {
     console.error('加载同步状态失败:', error);
     showStatus('error', '获取状态失败');
-    elements.syncButton.disabled = false;
-    elements.syncButton.textContent = '立即同步';
+    hideProgress();
+    resetSyncUI();
     stopStatusCheck();
   }
+}
+
+// 显示进度
+function showProgress(progress) {
+  if (!elements.syncProgressContainer || !elements.progressBar || !elements.progressText) {
+    return;
+  }
+
+  elements.syncProgressContainer.style.display = 'block';
+
+  if (progress.total > 0) {
+    const percent = Math.round((progress.processed / progress.total) * 100);
+    elements.progressBar.style.width = `${percent}%`;
+    elements.progressDetail.textContent = `${progress.processed} / ${progress.total}`;
+  } else {
+    elements.progressBar.style.width = '0%';
+    elements.progressDetail.textContent = '计算中...';
+  }
+
+  elements.progressText.textContent = progress.currentStep || '准备同步...';
+}
+
+// 隐藏进度
+function hideProgress() {
+  if (elements.syncProgressContainer) {
+    elements.syncProgressContainer.style.display = 'none';
+  }
+}
+
+// 重置同步UI
+function resetSyncUI() {
+  elements.syncButton.disabled = false;
+  elements.syncButton.textContent = '立即同步';
+  statusCheckCount = 0;
 }
 
 function startStatusCheck() {
@@ -162,31 +209,43 @@ function stopStatusCheck() {
 function bindEvents() {
   elements.syncButton.addEventListener('click', async () => {
     console.log('同步按钮点击');
-    
+
+    // 防止重复点击
+    if (elements.syncButton.disabled) {
+      console.log('同步按钮已禁用，忽略点击');
+      return;
+    }
+
     elements.syncButton.disabled = true;
     elements.syncButton.textContent = '同步中...';
     showStatus('syncing', '正在同步中...');
-    
+
+    // 立即开始状态检查（用于显示进度）
+    startStatusCheck();
+
     try {
       const response = await chrome.runtime.sendMessage({ action: 'sync' });
       console.log('同步请求响应:', response);
-      
+
       if (response && response.status === 'success') {
-        console.log('同步成功');
-        showStatus('success', '同步完成');
-        await loadConfig();
+        console.log('同步成功，等待状态检查检测到完成');
+        // 状态检查会自动检测到同步完成并更新UI
       } else if (response && response.status === 'error') {
         console.error('同步失败:', response.error);
         showStatus('error', `同步失败: ${response.error || '未知错误'}`);
+        hideProgress();
+        resetSyncUI();
+        stopStatusCheck();
       } else {
         console.warn('同步响应状态未知:', response);
-        startStatusCheck();
+        // 继续状态检查
       }
     } catch (error) {
       console.error('同步请求失败:', error);
       showStatus('error', '同步失败');
-      elements.syncButton.disabled = false;
-      elements.syncButton.textContent = '立即同步';
+      hideProgress();
+      resetSyncUI();
+      stopStatusCheck();
     }
   });
 }
@@ -254,6 +313,3 @@ function getSyncModeText(mode) {
       return '未知';
   }
 }
-
-// 初始化
-initialize();
