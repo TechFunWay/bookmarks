@@ -5,96 +5,307 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>【网址收藏夹】同步助手 - 选项</title>
   <style>
+    * { box-sizing: border-box; }
+
     body {
       font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
+      background-color: #f0f2f5;
       margin: 0;
       padding: 20px;
     }
+
     .container {
-      max-width: 600px;
+      max-width: 100%;
       margin: 0 auto;
       background-color: white;
-      border-radius: 8px;
-      padding: 24px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
+      padding: 28px 40px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     }
+
     h1 {
-      font-size: 24px;
-      margin-top: 0;
-      margin-bottom: 24px;
-      color: #333;
+      font-size: 22px;
+      margin: 0 0 24px;
+      color: #222;
       text-align: center;
     }
-    .form-group {
-      margin-bottom: 20px;
+
+    /* ---- 基本配置区 ---- */
+    .basic-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 24px;
     }
+
+    /* ---- 分割线 ---- */
+    .divider {
+      border: none;
+      border-top: 2px solid #e8e8e8;
+      margin: 24px 0;
+      position: relative;
+    }
+    .divider-label {
+      position: absolute;
+      top: -11px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      padding: 0 12px;
+      color: #888;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    /* ---- 双列同步区 ---- */
+    .sync-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 20px;
+    }
+
+    .sync-col {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+
+    .sync-col.e2a {
+      border-top: 3px solid #4CAF50;
+    }
+
+    .sync-col.a2e {
+      border-top: 3px solid #2196F3;
+    }
+
+    .sync-col-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sync-col.e2a .sync-col-title { color: #2e7d32; }
+    .sync-col.a2e .sync-col-title { color: #1565C0; }
+
+    .col-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: auto;
+    }
+    .e2a .col-badge { background: #e8f5e9; color: #2e7d32; }
+    .a2e .col-badge { background: #e3f2fd; color: #1565C0; }
+
+    /* ---- 通用表单元素 ---- */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
     .form-label {
       display: block;
-      font-size: 14px;
-      font-weight: 500;
-      color: #333;
-      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #444;
+      margin-bottom: 6px;
     }
+
     .form-input {
       width: 100%;
-      padding: 10px;
+      padding: 9px 10px;
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 14px;
-      box-sizing: border-box;
     }
+
     .form-input:focus {
       outline: none;
       border-color: #4CAF50;
-      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+      box-shadow: 0 0 0 2px rgba(76,175,80,0.2);
     }
+
     .form-select {
       width: 100%;
-      padding: 10px;
+      padding: 8px 10px;
       border: 1px solid #ddd;
       border-radius: 4px;
-      font-size: 14px;
-      box-sizing: border-box;
+      font-size: 13px;
       background-color: white;
     }
-    .form-range {
-      width: 100%;
-      margin: 10px 0;
+
+    .form-note {
+      font-size: 11px;
+      color: #999;
+      margin-top: 4px;
     }
-    .range-value {
-      display: inline-block;
-      width: 60px;
+
+    /* ---- 开关行 ---- */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: #f8f8f8;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: #4CAF50;
+      margin: 0;
+    }
+
+    .a2e .toggle-row input[type="checkbox"] {
+      accent-color: #2196F3;
+    }
+
+    .toggle-label {
       font-size: 14px;
-      color: #666;
+      font-weight: 600;
+      color: #333;
+      cursor: pointer;
+    }
+
+    /* ---- 同步间隔 ---- */
+    .range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .form-range {
+      flex: 1;
+      margin: 0;
+      accent-color: #4CAF50;
+    }
+
+    .a2e .form-range {
+      accent-color: #2196F3;
+    }
+
+    .range-value {
+      font-size: 13px;
+      color: #555;
+      white-space: nowrap;
+      min-width: 52px;
       text-align: right;
     }
-    .save-button {
-      padding: 12px 24px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
+
+    /* ---- radio 行 ---- */
+    .radio-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      color: #333;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .radio-option input[type="radio"] {
+      margin: 0;
+      cursor: pointer;
+    }
+
+    /* ---- 文件夹 select + 刷新按钮 ---- */
+    .folder-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .folder-row .form-select {
+      flex: 1;
+    }
+
+    .refresh-btn {
+      padding: 7px 12px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
       border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      color: #555;
+    }
+
+    .refresh-btn:hover { background: #e8e8e8; }
+
+    /* ---- 必选标签 ---- */
+    .required-tag {
+      font-size: 11px;
+      color: #c62828;
+      margin-left: 4px;
+    }
+
+    /* ---- 折叠区域（开关关闭时收起） ---- */
+    .collapsible {
+      overflow: hidden;
+      transition: opacity 0.2s;
+    }
+
+    .collapsible.hidden {
+      display: none;
+    }
+
+    /* ---- 底部按钮 ---- */
+    .button-group {
+      margin-top: 28px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 10px 22px;
+      border-radius: 5px;
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
+      border: none;
       transition: background-color 0.2s;
     }
-    .save-button:hover {
-      background-color: #45a049;
+
+    .btn-primary {
+      background-color: #4CAF50;
+      color: white;
     }
-    .save-button:active {
-      background-color: #3d8b40;
+    .btn-primary:hover { background-color: #45a049; }
+    .btn-primary:disabled { background-color: #ccc; cursor: not-allowed; }
+
+    .btn-secondary {
+      background-color: #f5f5f5;
+      color: #333;
+      border: 1px solid #ddd;
     }
-    .save-button:disabled {
-      background-color: #cccccc;
-      cursor: not-allowed;
+    .btn-secondary:hover { background-color: #e8e8e8; }
+
+    .btn-blue {
+      background-color: #2196F3;
+      color: white;
     }
+    .btn-blue:hover { background-color: #1976D2; }
+
+    /* ---- 状态消息 ---- */
     .status-message {
-      margin-top: 20px;
-      padding: 12px;
+      margin-top: 16px;
+      padding: 10px 14px;
       border-radius: 4px;
-      font-size: 14px;
+      font-size: 13px;
       display: none;
     }
     .status-message.success {
@@ -109,205 +320,191 @@
       border: 1px solid #ffcdd2;
       display: block;
     }
-    .form-note {
-      font-size: 12px;
-      color: #666;
-      margin-top: 4px;
-      font-style: italic;
-    }
-    .section-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: #333;
-      margin-top: 30px;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #eee;
-    }
-    .reset-button {
-      padding: 10px 20px;
-      background-color: #f5f5f5;
-      color: #333;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 14px;
-      cursor: pointer;
-      margin-left: 10px;
-      transition: background-color 0.2s;
-    }
-    .reset-button:hover {
-      background-color: #e0e0e0;
-    }
-    .folder-select-row {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-    .radio-option {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 14px;
-      color: #333;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .radio-option input[type="radio"] {
-      margin: 0;
-      cursor: pointer;
-    }
-    .folder-select {
-      flex: 1;
-      min-width: 160px;
-    }
-    .range-labels {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-      color: #666;
-      margin-top: 4px;
-    }
-    .button-group {
-      margin-top: 30px;
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-    }
-    .open-window-button {
-      padding: 12px 24px;
-      background-color: #2196F3;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    }
-    .open-window-button:hover {
-      background-color: #1976D2;
-    }
-    .open-window-button:active {
-      background-color: #1565C0;
+
+    /* ---- 响应式：窄屏转单列 ---- */
+    @media (max-width: 600px) {
+      .basic-section,
+      .sync-columns {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>【网址收藏夹】同步助手 - 选项</h1>
-    
-    <div class="section-title">服务器配置</div>
 
-    <div class="form-group">
-      <label class="form-label" for="serverUrl">服务器地址</label>
-      <input
-        type="text"
-        id="serverUrl"
-        class="form-input"
-        placeholder="http://localhost:8901"
-      >
-      <div class="form-note">请输入后端服务的完整地址，包括协议和端口</div>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" for="apiKey">API Key</label>
-      <input
-        type="text"
-        id="apiKey"
-        class="form-input"
-        placeholder="请输入 API Key"
-      >
-      <div class="form-note">在应用设置页面获取 API Key，用于浏览器扩展认证</div>
-    </div>
-    
-    <div class="section-title">同步配置</div>
-    
-    <div class="form-group">
-      <label class="form-label">
-        <input type="checkbox" id="enableAutoSync">
-        启用自动同步
-      </label>
-      <div class="form-note">启用后，插件会自动同步书签（定时和书签变更时）</div>
-    </div>
-    
-    <div class="form-group">
-      <label class="form-label">浏览器同步目录</label>
-      <div class="folder-select-row">
-        <label class="radio-option">
-          <input type="radio" name="edgeFolderMode" id="edgeFolderModeAll" value="all" checked>
-          全部
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="edgeFolderMode" id="edgeFolderModeSelect" value="select">
-          指定目录
-        </label>
-        <select id="edgeFolder" class="form-select folder-select" style="display:none;">
-          <option value="">加载中...</option>
-        </select>
+    <!-- 基本配置 -->
+    <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:14px;">基本配置</div>
+    <div class="basic-section">
+      <div class="form-group">
+        <label class="form-label" for="serverUrl">服务器地址</label>
+        <input type="text" id="serverUrl" class="form-input" placeholder="http://localhost:8901">
+        <div class="form-note">后端服务的完整地址，包括协议和端口</div>
       </div>
-      <div class="form-note">选择浏览器中参与同步的书签目录，默认同步全部</div>
+      <div class="form-group">
+        <label class="form-label" for="apiKey">API Key</label>
+        <input type="text" id="apiKey" class="form-input" placeholder="请输入 API Key">
+        <div class="form-note">在应用设置页面获取，用于扩展认证</div>
+      </div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">应用同步目录</label>
-      <div class="folder-select-row">
-        <label class="radio-option">
-          <input type="radio" name="appFolderMode" id="appFolderModeAll" value="all" checked>
-          全部
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="appFolderMode" id="appFolderModeSelect" value="select">
-          指定目录
-        </label>
-        <select id="appFolder" class="form-select folder-select" style="display:none;">
-          <option value="">加载中...</option>
-        </select>
-      </div>
-      <div class="form-note">选择应用中参与同步的书签目录，默认同步全部</div>
-    </div>
+    <!-- 分割线 -->
+    <hr class="divider"><span class="divider-label">同步方向配置</span>
 
-    <div class="form-group" id="refreshFolders" style="display: none;">
-      <button type="button" id="refreshFoldersBtn" class="reset-button">刷新文件夹列表</button>
-    </div>
-    
-    <div class="form-group">
-      <label class="form-label" for="syncMode">同步方式</label>
-      <select id="syncMode" class="form-select">
-        <option value="merge">合并同步（浏览器和应用合并）</option>
-        <option value="replace">替换同步（浏览器覆盖应用）</option>
-      </select>
-      <div class="form-note">选择同步方式：合并会保留两边的内容，替换会用浏览器书签覆盖应用书签</div>
-    </div>
-    
-    <div class="form-group">
-      <label class="form-label" for="syncInterval">同步间隔</label>
-      <input 
-        type="range" 
-        id="syncInterval" 
-        class="form-range" 
-        min="1" 
-        max="1440" 
-        value="5"
-      >
-      <div class="range-labels">
-        <span>1分钟</span>
-        <span class="range-value" id="syncIntervalValue">5分钟</span>
-        <span>1天</span>
+    <!-- 双列同步配置 -->
+    <div class="sync-columns">
+
+      <!-- 左列：浏览器 → 应用 -->
+      <div class="sync-col e2a">
+        <div class="sync-col-title">
+          🌐 浏览器 → 应用
+          <span class="col-badge">E→A</span>
+        </div>
+
+        <!-- 自动同步开关 -->
+        <div class="toggle-row">
+          <input type="checkbox" id="enableAutoSync">
+          <label class="toggle-label" for="enableAutoSync">启用自动同步</label>
+        </div>
+
+        <!-- 同步频率 -->
+        <div class="form-group">
+          <label class="form-label" for="e2aSyncInterval">同步频率</label>
+          <div class="range-wrap">
+            <input type="range" id="e2aSyncInterval" class="form-range" min="1" max="1440" value="5">
+            <span class="range-value" id="e2aSyncIntervalValue">5分钟</span>
+          </div>
+          <div class="form-note">1分钟 ～ 1天</div>
+        </div>
+
+        <!-- 浏览器来源目录 -->
+        <div class="form-group">
+          <label class="form-label">浏览器来源目录</label>
+          <div class="radio-row">
+            <label class="radio-option">
+              <input type="radio" name="edgeFolderMode" value="all" checked> 全部
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="edgeFolderMode" value="select"> 指定目录
+            </label>
+          </div>
+          <div class="folder-row" id="edgeFolderWrap" style="display:none;">
+            <select id="edgeFolder" class="form-select">
+              <option value="">选择浏览器目录...</option>
+            </select>
+            <button type="button" id="refreshEdgeFolderBtn" class="refresh-btn">刷新</button>
+          </div>
+        </div>
+
+        <!-- 应用目标目录 -->
+        <div class="form-group">
+          <label class="form-label">应用目标目录</label>
+          <div class="radio-row">
+            <label class="radio-option">
+              <input type="radio" name="appFolderMode" value="all" checked> 全部
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="appFolderMode" value="select"> 指定目录
+            </label>
+          </div>
+          <div class="folder-row" id="appFolderWrap" style="display:none;">
+            <select id="appFolder" class="form-select">
+              <option value="">选择应用目录...</option>
+            </select>
+            <button type="button" id="refreshAppFolderBtn" class="refresh-btn">刷新</button>
+          </div>
+        </div>
+
+        <!-- 同步方式 -->
+        <div class="form-group">
+          <label class="form-label" for="e2aSyncMode">同步方式</label>
+          <select id="e2aSyncMode" class="form-select">
+            <option value="merge">合并（保留双方内容）</option>
+            <option value="replace">替换（浏览器覆盖应用）</option>
+          </select>
+        </div>
       </div>
-      <div class="form-note">设置自动同步的时间间隔（1分钟到1天）</div>
-    </div>
-    
+
+      <!-- 右列：应用 → 浏览器 -->
+      <div class="sync-col a2e">
+        <div class="sync-col-title">
+          📱 应用 → 浏览器
+          <span class="col-badge">A→E</span>
+        </div>
+
+        <!-- 自动同步开关 -->
+        <div class="toggle-row">
+          <input type="checkbox" id="enableAppToEdgeSync">
+          <label class="toggle-label" for="enableAppToEdgeSync">启用自动同步</label>
+        </div>
+
+        <!-- 同步频率 -->
+        <div class="form-group">
+          <label class="form-label" for="a2eSyncInterval">同步频率</label>
+          <div class="range-wrap">
+            <input type="range" id="a2eSyncInterval" class="form-range" min="1" max="1440" value="5">
+            <span class="range-value" id="a2eSyncIntervalValue">5分钟</span>
+          </div>
+          <div class="form-note">1分钟 ～ 1天</div>
+        </div>
+
+        <!-- 应用来源目录 -->
+        <div class="form-group">
+          <label class="form-label">应用来源目录</label>
+          <div class="radio-row">
+            <label class="radio-option">
+              <input type="radio" name="appToEdgeSourceFolderMode" value="all" checked> 全部
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="appToEdgeSourceFolderMode" value="select"> 指定目录
+            </label>
+          </div>
+          <div class="folder-row" id="a2eSourceFolderWrap" style="display:none;">
+            <select id="appToEdgeSourceFolder" class="form-select">
+              <option value="">选择应用目录...</option>
+            </select>
+            <button type="button" id="refreshA2ESourceBtn" class="refresh-btn">刷新</button>
+          </div>
+        </div>
+
+        <!-- 浏览器目标目录 -->
+        <div class="form-group">
+          <label class="form-label">
+            浏览器目标目录
+            <span class="required-tag">* 必选</span>
+          </label>
+          <div class="folder-row">
+            <select id="appToEdgeTargetFolder" class="form-select">
+              <option value="">选择浏览器目录...</option>
+            </select>
+            <button type="button" id="refreshA2ETargetBtn" class="refresh-btn">刷新</button>
+          </div>
+          <div class="form-note">应用书签将写入此浏览器目录</div>
+        </div>
+
+        <!-- 同步方式 -->
+        <div class="form-group">
+          <label class="form-label" for="a2eSyncMode">同步方式</label>
+          <select id="a2eSyncMode" class="form-select">
+            <option value="merge">合并（保留浏览器中额外的书签）</option>
+            <option value="replace">替换（应用覆盖浏览器目标目录）</option>
+          </select>
+        </div>
+      </div>
+
+    </div><!-- /sync-columns -->
+
+    <!-- 底部按钮 -->
     <div class="button-group">
-      <button id="openSyncWindowBtn" class="open-window-button">🪟 打开同步窗口</button>
-      <button id="resetButton" class="reset-button">恢复默认</button>
-      <button id="saveButton" class="save-button">保存配置</button>
+      <button id="openSyncWindowBtn" class="btn btn-blue">🪟 打开同步窗口</button>
+      <button id="resetButton" class="btn btn-secondary">恢复默认</button>
+      <button id="saveButton" class="btn btn-primary">保存配置</button>
     </div>
-    
+
     <div id="statusMessage" class="status-message"></div>
   </div>
-  
+
   <script src="options.js"></script>
 </body>
 </html>
