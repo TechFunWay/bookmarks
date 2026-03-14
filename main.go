@@ -260,39 +260,57 @@ func main() {
 	r.Use(logger.LoggingMiddleware(logFile))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.AllowContentType("application/json", "text/plain", "application/x-www-form-urlencoded"))
+	r.Use(corsMiddleware)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", s.handleRegister)
 			r.Post("/login", s.handleLogin)
 			r.Post("/logout", s.handleLogout)
-			r.Post("/change-password", s.authMiddleware(s.handleChangePassword))
-			r.Post("/regenerate-api-key", s.authMiddleware(s.handleRegenerateAPIKey))
-			r.Get("/me", s.authMiddleware(s.handleGetCurrentUser))
+			r.Post("/change-password", s.tokenAuthMiddleware(s.handleChangePassword))
+			r.Post("/regenerate-api-key", s.tokenAuthMiddleware(s.handleRegenerateAPIKey))
+			r.Get("/me", s.tokenAuthMiddleware(s.handleGetCurrentUser))
 			r.Get("/check", s.handleCheckAuth)
 		})
 		r.Route("/users", func(r chi.Router) {
-			r.Get("/", s.authMiddleware(s.adminMiddleware(s.handleGetUsers)))
-			r.Get("/{id}", s.authMiddleware(s.adminMiddleware(s.handleGetUser)))
-			r.Put("/{id}", s.authMiddleware(s.adminMiddleware(s.handleUpdateUser)))
-			r.Delete("/{id}", s.authMiddleware(s.adminMiddleware(s.handleDeleteUser)))
-			r.Post("/{id}/reset-password", s.authMiddleware(s.adminMiddleware(s.handleResetPassword)))
-			r.Post("/batch", s.authMiddleware(s.adminMiddleware(s.handleBatchUsers)))
+			r.Get("/", s.tokenAuthMiddleware(s.adminMiddleware(s.handleGetUsers)))
+			r.Get("/{id}", s.tokenAuthMiddleware(s.adminMiddleware(s.handleGetUser)))
+			r.Put("/{id}", s.tokenAuthMiddleware(s.adminMiddleware(s.handleUpdateUser)))
+			r.Delete("/{id}", s.tokenAuthMiddleware(s.adminMiddleware(s.handleDeleteUser)))
+			r.Post("/{id}/reset-password", s.tokenAuthMiddleware(s.adminMiddleware(s.handleResetPassword)))
+			r.Post("/batch", s.tokenAuthMiddleware(s.adminMiddleware(s.handleBatchUsers)))
 		})
-		r.Get("/tree", s.authMiddleware(s.handleGetTree))
+		r.Get("/tree", s.tokenAuthMiddleware(s.handleGetTree))
 		r.Get("/metadata", s.handleMetadata)
 		r.Get("/version", s.handleGetVersion)
-		r.Post("/folders", s.authMiddleware(s.handleCreateFolder))
-		r.Post("/bookmarks", s.authMiddleware(s.handleCreateBookmark))
-		r.Put("/nodes/{id}", s.authMiddleware(s.handleUpdateNode))
-		r.Delete("/nodes/{id}", s.authMiddleware(s.handleDeleteNode))
-		r.Post("/nodes/batch-delete", s.authMiddleware(s.handleBatchDeleteNodes))
-		r.Post("/nodes/reorder", s.authMiddleware(s.handleReorderNodes))
-		r.Post("/import", s.authMiddleware(s.handleImport))
-		r.Post("/import-edge", s.authMiddleware(s.handleEdgeImport))
+		r.Post("/folders", s.tokenAuthMiddleware(s.handleCreateFolder))
+		r.Post("/bookmarks", s.tokenAuthMiddleware(s.handleCreateBookmark))
+		r.Put("/nodes/{id}", s.tokenAuthMiddleware(s.handleUpdateNode))
+		r.Delete("/nodes/{id}", s.tokenAuthMiddleware(s.handleDeleteNode))
+		r.Post("/nodes/batch-delete", s.tokenAuthMiddleware(s.handleBatchDeleteNodes))
+		r.Post("/nodes/reorder", s.tokenAuthMiddleware(s.handleReorderNodes))
+		r.Post("/import", s.tokenAuthMiddleware(s.handleImport))
+		r.Post("/import-edge", s.tokenAuthMiddleware(s.handleEdgeImport))
 		r.Get("/config/system", s.handleGetSystemConfig)
-		r.Get("/config", s.authMiddleware(s.handleGetConfig))
-		r.Post("/config", s.authMiddleware(s.handleUpdateConfig))
+		r.Get("/config", s.tokenAuthMiddleware(s.handleGetConfig))
+		r.Post("/config", s.tokenAuthMiddleware(s.handleUpdateConfig))
+	})
+
+	// 浏览器书签同步接口（使用 API Key 认证）
+	r.Route("/api/sync", func(r chi.Router) {
+		r.Use(s.apiKeyAuthMiddlewareForChi)
+
+		r.Get("/bookmarks", s.handleSyncGetBookmarks)
+		r.Post("/bookmarks", s.handleSyncCreateBookmark)
+		r.Put("/bookmarks/{id}", s.handleSyncUpdateBookmark)
+		r.Delete("/bookmarks/{id}", s.handleSyncDeleteBookmark)
+
+		r.Get("/folders", s.handleSyncGetFolders)
+		r.Post("/folders", s.handleSyncCreateFolder)
+		r.Put("/folders/{id}", s.handleSyncUpdateFolder)
+		r.Delete("/folders/{id}", s.handleSyncDeleteFolder)
+
+		r.Post("/batch", s.handleSyncBatchOperation)
 	})
 
 	// 使用嵌入的静态文件系统
@@ -590,17 +608,82 @@ func (s *server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
 		return
 	}
-	res, err := s.db.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ? AND user_id = ?", id, userID)
+
+	// 先确认节点存在且属于当前用户
+	var nodeType string
+	err = s.db.QueryRowContext(r.Context(), "SELECT type FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(&nodeType)
+	if err == sql.ErrNoRows {
+		respondError(w, http.StatusNotFound, errors.New("node not found"))
+		return
+	}
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
+
+	// 用递归 CTE 收集该节点及所有子孙节点的 id 与 type
+	rows, err := s.db.QueryContext(r.Context(), `
+		WITH RECURSIVE subtree(id, type) AS (
+			SELECT id, type FROM nodes WHERE id = ? AND user_id = ?
+			UNION ALL
+			SELECT n.id, n.type FROM nodes n
+			INNER JOIN subtree s ON n.parent_id = s.id
+			WHERE n.user_id = ?
+		)
+		SELECT id, type FROM subtree
+	`, id, userID, userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	var allIDs []int64
+	var folders, bookmarks int64
+	for rows.Next() {
+		var nid int64
+		var ntype string
+		if err := rows.Scan(&nid, &ntype); err != nil {
+			rows.Close()
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		allIDs = append(allIDs, nid)
+		if ntype == nodeTypeFolder {
+			folders++
+		} else {
+			bookmarks++
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if len(allIDs) == 0 {
 		respondError(w, http.StatusNotFound, errors.New("node not found"))
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+
+	// 构建 IN 子句批量删除
+	placeholders := make([]string, len(allIDs))
+	args := make([]interface{}, len(allIDs)+1)
+	args[0] = userID
+	for i, nid := range allIDs {
+		placeholders[i] = "?"
+		args[i+1] = nid
+	}
+	query := "DELETE FROM nodes WHERE user_id = ? AND id IN (" + strings.Join(placeholders, ",") + ")"
+	if _, err = s.db.ExecContext(r.Context(), query, args...); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":    "deleted",
+		"folders":   folders,
+		"bookmarks": bookmarks,
+	})
 }
 
 type batchDeleteRequest struct {
@@ -2888,6 +2971,12 @@ func (s *server) faviconWorker() {
 			continue
 		}
 
+		// 只处理 http/https 协议，跳过 chrome-extension://、file:// 等不可访问的 URL
+		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			Debug("书签 %d URL 协议不支持，跳过 favicon 抓取: %s", nodeID, url)
+			continue
+		}
+
 		// 如果已经有图标，跳过
 		var existingFavicon sql.NullString
 		err = s.db.QueryRow("SELECT favicon_url FROM nodes WHERE id = ?", nodeID).Scan(&existingFavicon)
@@ -2929,51 +3018,90 @@ func (s *server) queueFaviconFetch(nodeID int64) {
 	}
 }
 
-// authMiddleware 认证中间件
-func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+// tokenAuthMiddleware 仅支持 Token 的认证中间件
+func (s *server) tokenAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if token == "" {
 			token = r.URL.Query().Get("token")
 		}
 
-		var userID int64
-		var err error
-
-		if token != "" {
-			err = s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
+		if token == "" {
+			respondError(w, http.StatusUnauthorized, errors.New("未提供认证token"))
+			return
 		}
 
-		if err != nil || token == "" {
-			if token != "" && !errors.Is(err, sql.ErrNoRows) {
-				respondError(w, http.StatusInternalServerError, err)
+		var userID int64
+		err := s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				respondError(w, http.StatusUnauthorized, errors.New("无效的token"))
 				return
 			}
-
-			apiKey := r.Header.Get("X-API-Key")
-			if apiKey == "" {
-				apiKey = r.URL.Query().Get("api_key")
-			}
-
-			if apiKey != "" {
-				err = s.db.QueryRow("SELECT id FROM users WHERE api_key = ? AND is_active = 1", apiKey).Scan(&userID)
-				if err != nil {
-					if errors.Is(err, sql.ErrNoRows) {
-						respondError(w, http.StatusUnauthorized, errors.New("无效的api_key"))
-						return
-					}
-					respondError(w, http.StatusInternalServerError, err)
-					return
-				}
-			} else {
-				respondError(w, http.StatusUnauthorized, errors.New("未提供认证token或api_key"))
-				return
-			}
+			respondError(w, http.StatusInternalServerError, err)
+			return
 		}
 
 		ctx := context.WithValue(r.Context(), userContextKey, userID)
 		next(w, r.WithContext(ctx))
 	}
+}
+
+// apiKeyAuthMiddleware 仅支持 API Key 的认证中间件
+func (s *server) apiKeyAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey == "" {
+			apiKey = r.URL.Query().Get("api_key")
+		}
+
+		if apiKey == "" {
+			respondError(w, http.StatusUnauthorized, errors.New("未提供api_key"))
+			return
+		}
+
+		var userID int64
+		err := s.db.QueryRow("SELECT id FROM users WHERE api_key = ? AND is_active = 1", apiKey).Scan(&userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				respondError(w, http.StatusUnauthorized, errors.New("无效的api_key"))
+				return
+			}
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userContextKey, userID)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+// apiKeyAuthMiddlewareForChi 适配 Chi 路由器的 API Key 中间件
+func (s *server) apiKeyAuthMiddlewareForChi(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.apiKeyAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})(w, r)
+	})
+}
+
+// corsMiddleware CORS 跨域中间件
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 设置 CORS 头
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+
+		// 处理预检请求
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // getUserID 从上下文中获取用户ID
@@ -3525,4 +3653,211 @@ func migrateOldDatabase(oldPath, newPath, oldName, newName string) {
 	}
 
 	fmt.Printf("成功迁移数据库文件: %s -> %s\n", oldFilePath, newFilePath)
+}
+
+// ========== 浏览器书签同步接口处理器 ==========
+
+// handleSyncGetBookmarks 获取所有书签（扁平化列表）
+func (s *server) handleSyncGetBookmarks(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	bs := logic.NewBrowserSync(s.db)
+	bookmarks, err := bs.GetBookmarks(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"bookmarks": bookmarks,
+	})
+}
+
+// handleSyncCreateBookmark 创建书签
+func (s *server) handleSyncCreateBookmark(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	var bookmark logic.SyncBookmark
+	if err := json.NewDecoder(r.Body).Decode(&bookmark); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if bookmark.Title == "" || bookmark.URL == "" {
+		respondError(w, http.StatusBadRequest, errors.New("title and url are required"))
+		return
+	}
+
+	bs := logic.NewBrowserSync(s.db)
+	created, err := bs.CreateBookmark(r.Context(), userID, &bookmark)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, created)
+}
+
+// handleSyncUpdateBookmark 更新书签
+func (s *server) handleSyncUpdateBookmark(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
+		return
+	}
+
+	var bookmark logic.SyncBookmark
+	if err := json.NewDecoder(r.Body).Decode(&bookmark); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	bookmark.ID = id
+
+	bs := logic.NewBrowserSync(s.db)
+	if err := bs.UpdateBookmark(r.Context(), userID, &bookmark); err != nil {
+		respondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "updated"})
+}
+
+// handleSyncDeleteBookmark 删除书签
+func (s *server) handleSyncDeleteBookmark(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
+		return
+	}
+
+	bs := logic.NewBrowserSync(s.db)
+	if err := bs.DeleteBookmark(r.Context(), userID, id); err != nil {
+		respondError(w, http.StatusNotFound, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "deleted"})
+}
+
+// handleSyncGetFolders 获取所有文件夹（扁平化列表）
+func (s *server) handleSyncGetFolders(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	bs := logic.NewBrowserSync(s.db)
+	folders, err := bs.GetFolders(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"folders": folders,
+	})
+}
+
+// handleSyncCreateFolder 创建文件夹
+func (s *server) handleSyncCreateFolder(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	var folder logic.SyncFolder
+	if err := json.NewDecoder(r.Body).Decode(&folder); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if folder.Title == "" {
+		respondError(w, http.StatusBadRequest, errors.New("title is required"))
+		return
+	}
+
+	bs := logic.NewBrowserSync(s.db)
+	created, err := bs.CreateFolder(r.Context(), userID, &folder)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, created)
+}
+
+// handleSyncUpdateFolder 更新文件夹
+func (s *server) handleSyncUpdateFolder(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
+		return
+	}
+
+	var folder logic.SyncFolder
+	if err := json.NewDecoder(r.Body).Decode(&folder); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	folder.ID = id
+
+	bs := logic.NewBrowserSync(s.db)
+	if err := bs.UpdateFolder(r.Context(), userID, &folder); err != nil {
+		respondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "updated"})
+}
+
+// handleSyncDeleteFolder 删除文件夹
+func (s *server) handleSyncDeleteFolder(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
+		return
+	}
+
+	bs := logic.NewBrowserSync(s.db)
+	if err := bs.DeleteFolder(r.Context(), userID, id); err != nil {
+		respondError(w, http.StatusNotFound, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "deleted"})
+}
+
+// handleSyncBatchOperation 批量操作
+func (s *server) handleSyncBatchOperation(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	var req logic.BatchOperationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	bs := logic.NewBrowserSync(s.db)
+	result, err := bs.BatchOperation(r.Context(), userID, &req)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// 对新创建的、favicon 为空的书签异步补抓图标
+	for _, b := range result.Created.Bookmarks {
+		if b.FaviconURL == nil || *b.FaviconURL == "" {
+			s.queueFaviconFetch(b.ID)
+		}
+	}
+
+	respondJSON(w, http.StatusOK, result)
 }
