@@ -138,10 +138,59 @@
     .reset-button:hover {
       background-color: #e0e0e0;
     }
+    .folder-select-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 14px;
+      color: #333;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .radio-option input[type="radio"] {
+      margin: 0;
+      cursor: pointer;
+    }
+    .folder-select {
+      flex: 1;
+      min-width: 160px;
+    }
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: #666;
+      margin-top: 4px;
+    }
     .button-group {
       margin-top: 30px;
       display: flex;
-      justify-content: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .open-window-button {
+      padding: 12px 24px;
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .open-window-button:hover {
+      background-color: #1976D2;
+    }
+    .open-window-button:active {
+      background-color: #1565C0;
     }
   </style>
 </head>
@@ -150,16 +199,27 @@
     <h1>【网址收藏夹】同步助手 - 选项</h1>
     
     <div class="section-title">服务器配置</div>
-    
+
     <div class="form-group">
       <label class="form-label" for="serverUrl">服务器地址</label>
-      <input 
-        type="text" 
-        id="serverUrl" 
-        class="form-input" 
+      <input
+        type="text"
+        id="serverUrl"
+        class="form-input"
         placeholder="http://localhost:8901"
       >
       <div class="form-note">请输入后端服务的完整地址，包括协议和端口</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="apiKey">API Key</label>
+      <input
+        type="text"
+        id="apiKey"
+        class="form-input"
+        placeholder="请输入 API Key"
+      >
+      <div class="form-note">在应用设置页面获取 API Key，用于浏览器扩展认证</div>
     </div>
     
     <div class="section-title">同步配置</div>
@@ -173,13 +233,43 @@
     </div>
     
     <div class="form-group">
-      <label class="form-label" for="syncScope">同步到哪里</label>
-      <select id="syncScope" class="form-select">
-        <option value="all">同步到根目录</option>
-        <option value="folder">同步到应用指定文件夹</option>
-        <option value="edge-to-app">从Edge指定目录同步到应用指定目录</option>
-      </select>
-      <div class="form-note">选择同步方式：全部同步到根目录、同步到应用指定文件夹、或从Edge指定目录同步到应用指定目录</div>
+      <label class="form-label">浏览器同步目录</label>
+      <div class="folder-select-row">
+        <label class="radio-option">
+          <input type="radio" name="edgeFolderMode" id="edgeFolderModeAll" value="all" checked>
+          全部
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="edgeFolderMode" id="edgeFolderModeSelect" value="select">
+          指定目录
+        </label>
+        <select id="edgeFolder" class="form-select folder-select" style="display:none;">
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <div class="form-note">选择浏览器中参与同步的书签目录，默认同步全部</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">应用同步目录</label>
+      <div class="folder-select-row">
+        <label class="radio-option">
+          <input type="radio" name="appFolderMode" id="appFolderModeAll" value="all" checked>
+          全部
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="appFolderMode" id="appFolderModeSelect" value="select">
+          指定目录
+        </label>
+        <select id="appFolder" class="form-select folder-select" style="display:none;">
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <div class="form-note">选择应用中参与同步的书签目录，默认同步全部</div>
+    </div>
+
+    <div class="form-group" id="refreshFolders" style="display: none;">
+      <button type="button" id="refreshFoldersBtn" class="reset-button">刷新文件夹列表</button>
     </div>
     
     <div class="form-group">
@@ -201,7 +291,7 @@
         max="1440" 
         value="5"
       >
-      <div>
+      <div class="range-labels">
         <span>1分钟</span>
         <span class="range-value" id="syncIntervalValue">5分钟</span>
         <span>1天</span>
@@ -209,31 +299,10 @@
       <div class="form-note">设置自动同步的时间间隔（1分钟到1天）</div>
     </div>
     
-    <div class="section-title" id="folderSyncSectionTitle" style="display: none;">文件夹同步配置</div>
-    
-    <div class="form-group" id="edgeFolderConfig" style="display: none;">
-      <label class="form-label" for="edgeFolder">Edge文件夹</label>
-      <select id="edgeFolder" class="form-select">
-        <option value="">选择Edge文件夹...</option>
-      </select>
-      <div class="form-note">选择Edge浏览器中要同步的文件夹</div>
-    </div>
-    
-    <div class="form-group" id="folderSyncConfig" style="display: none;">
-      <label class="form-label" for="appFolder">应用文件夹</label>
-      <select id="appFolder" class="form-select">
-        <option value="">选择应用文件夹...</option>
-      </select>
-      <div class="form-note">选择应用中要同步的文件夹</div>
-    </div>
-    
-    <div class="form-group" id="refreshFolders" style="display: none;">
-      <button type="button" id="refreshFoldersBtn" class="reset-button">刷新文件夹列表</button>
-    </div>
-    
     <div class="button-group">
-      <button id="saveButton" class="save-button">保存配置</button>
+      <button id="openSyncWindowBtn" class="open-window-button">🪟 打开同步窗口</button>
       <button id="resetButton" class="reset-button">恢复默认</button>
+      <button id="saveButton" class="save-button">保存配置</button>
     </div>
     
     <div id="statusMessage" class="status-message"></div>
