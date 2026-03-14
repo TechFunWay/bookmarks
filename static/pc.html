@@ -530,8 +530,22 @@
   </transition>
 
   <transition name="fade">
-    <div v-if="toast.visible" :class="['toast', toast.type]">
+    <div v-if="toast.visible && toast.type === 'error'" class="toast-overlay" @click="dismissToast"></div>
+  </transition>
+
+  <transition name="fade">
+    <div v-if="toast.visible && toast.type !== 'error'" :class="['toast', toast.type]">
       {{ toast.message }}
+    </div>
+  </transition>
+
+  <transition name="fade">
+    <div v-if="toast.visible && toast.type === 'error'" :class="['toast', 'error']">
+      <div class="toast-error-header">
+        <span class="toast-error-icon">⚠️</span>
+        <span class="toast-error-msg">{{ toast.message }}</span>
+      </div>
+      <button class="toast-error-close" @click="dismissToast">知道了</button>
     </div>
   </transition>
 
