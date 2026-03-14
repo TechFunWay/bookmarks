@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>【网址收藏夹】同步助手</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 100%;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background-color: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: white;
+      height: 100%;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      padding: 16px 24px;
+      background-color: #fafafa;
+      border-bottom: 1px solid #e0e0e0;
+      flex-shrink: 0;
+      justify-content: flex-end;
+    }
+
+    .toolbar button {
+      padding: 10px 24px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .toolbar button:hover {
+      background-color: #45a049;
+    }
+
+    .toolbar button:active {
+      background-color: #3d8b40;
+    }
+
+    .toolbar button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+
+    .toolbar button.config-btn {
+      background-color: #fff;
+      color: #4CAF50;
+      border: 2px solid #4CAF50;
+    }
+
+    .toolbar button.config-btn:hover {
+      background-color: #4CAF50;
+      color: white;
+    }
+
+    .main-content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    .sync-status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+
+    .sync-status.success {
+      background-color: #e8f5e8;
+      color: #2e7d32;
+    }
+
+    .sync-status.error {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+
+    .sync-status.syncing {
+      background-color: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .sync-status.ready {
+      background-color: #f5f5f5;
+      color: #666;
+    }
+
+    .status-icon {
+      margin-right: 10px;
+      font-size: 20px;
+    }
+
+    .config-section {
+      background-color: #fafafa;
+      border-radius: 6px;
+      padding: 16px;
+      border: 1px solid #e0e0e0;
+      margin-bottom: 16px;
+    }
+
+    .config-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin: 0 0 12px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .config-item {
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .config-label {
+      color: #666;
+      min-width: 80px;
+      flex-shrink: 0;
+    }
+
+    .config-value {
+      color: #333;
+      font-weight: 500;
+      word-break: break-all;
+    }
+
+    .last-sync {
+      font-size: 13px;
+      color: #999;
+      text-align: center;
+      margin-top: 16px;
+    }
+
+    /* 同步方向展示块 */
+    .sync-direction-section {
+      background-color: #fafafa;
+      border-radius: 6px;
+      padding: 16px;
+      border: 1px solid #e0e0e0;
+      margin-bottom: 16px;
+    }
+
+    .sync-direction-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin: 0 0 14px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .sync-direction-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .sync-dir-endpoint {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .sync-dir-label {
+      font-size: 12px;
+      color: #888;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+
+    .sync-dir-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      background: #fff;
+      border: 1.5px solid #d0d0d0;
+      border-radius: 6px;
+      padding: 6px 14px;
+      text-align: center;
+      word-break: break-all;
+      width: 100%;
+    }
+
+    .sync-dir-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+      color: #4CAF50;
+    }
+
+    .sync-dir-arrow-icon {
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .sync-dir-arrow-label {
+      font-size: 11px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 480px) {
+      .sync-direction-body {
+        gap: 8px;
+      }
+      .sync-dir-value {
+        padding: 5px 8px;
+        font-size: 13px;
+      }
+    }
+
+    /* 内嵌进度面板 */
+    .progress-section {
+      background-color: #fafafa;
+      border-radius: 6px;
+      padding: 16px;
+      border: 1px solid #e0e0e0;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .progress-section.visible {
+      display: block;
+    }
+
+    .progress-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin: 0 0 12px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .progress-bar-wrap {
+      width: 100%;
+      height: 10px;
+      background-color: #e0e0e0;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background-color: #4CAF50;
+      border-radius: 5px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-step {
+      font-size: 13px;
+      color: #555;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .progress-count {
+      font-size: 12px;
+      color: #999;
+      text-align: center;
+    }
+
+    @media (max-width: 700px) {
+      .toolbar {
+        padding: 12px 16px;
+      }
+
+      .main-content {
+        padding: 16px;
+      }
+
+      .config-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="toolbar">
+      <button id="syncButton">立即同步</button>
+      <button id="configButton" class="config-btn">⚙️ 设置</button>
+    </div>
+    <div class="main-content">
+      <div id="syncStatus" class="sync-status ready">
+        <span class="status-icon">📋</span>
+        <span id="statusMessage">就绪</span>
+      </div>
+
+      <div class="config-section">
+        <h2 class="config-title">配置信息</h2>
+        <div class="config-grid">
+          <div class="config-item">
+            <span class="config-label">服务器地址:</span>
+            <span id="serverUrl" class="config-value">加载中...</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">同步方式:</span>
+            <span id="syncMode" class="config-value">加载中...</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">同步间隔:</span>
+            <span id="syncInterval" class="config-value">加载中...</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">同步状态:</span>
+            <span id="syncStatusText" class="config-value">加载中...</span>
+          </div>
+          <div class="config-item" id="folderSyncStatus" style="display: none;">
+            <span class="config-label">同步文件夹:</span>
+            <span id="syncFolders" class="config-value">加载中...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 同步方向展示 -->
+      <div class="sync-direction-section">
+        <h2 class="sync-direction-title">同步方向</h2>
+        <div class="sync-direction-body">
+          <div class="sync-dir-endpoint">
+            <span class="sync-dir-label">浏览器目录</span>
+            <span id="dirEdge" class="sync-dir-value">加载中...</span>
+          </div>
+          <div class="sync-dir-arrow">
+            <span class="sync-dir-arrow-icon">→</span>
+            <span id="dirSyncMode" class="sync-dir-arrow-label">同步</span>
+          </div>
+          <div class="sync-dir-endpoint">
+            <span class="sync-dir-label">应用目录</span>
+            <span id="dirApp" class="sync-dir-value">加载中...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 内嵌进度面板，点击同步后展开 -->
+      <div id="progressSection" class="progress-section">
+        <h2 class="progress-title">同步进度</h2>
+        <div class="progress-bar-wrap">
+          <div id="progressBar" class="progress-fill"></div>
+        </div>
+        <div id="progressStep" class="progress-step">准备同步...</div>
+        <div id="progressCount" class="progress-count">0 / 0</div>
+      </div>
+
+      <div id="lastSync" class="last-sync">
+        最后同步: 从未
+      </div>
+    </div>
+  </div>
+
+  <script src="sync-window.js"></script>
+</body>
+</html>
