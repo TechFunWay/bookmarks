@@ -114,6 +114,10 @@
                 <span class="dropdown-icon">🔌</span>
                 <span>API Key</span>
               </button>
+              <button class="dropdown-item" @click="openExtensionModal">
+                <span class="dropdown-icon">🧩</span>
+                <span>下载插件</span>
+              </button>
               <hr class="dropdown-divider" />
               <button class="dropdown-item danger" @click="logout">
                 <span class="dropdown-icon">🚪</span>
@@ -1091,6 +1095,43 @@
           <button type="button" class="primary" @click="regeneratePluginAPIKey" :disabled="pluginAPIKeyModal.loading">
             {{ pluginAPIKeyModal.loading ? '生成中...' : '重新生成' }}
           </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- 插件下载弹窗 -->
+  <transition name="fade">
+    <div v-if="extensionModal.visible" class="modal-backdrop" @click="closeExtensionModal">
+      <div class="modal" style="max-width:480px;" @click.stop>
+        <h3 class="modal-title">🧩 下载浏览器插件</h3>
+        <div class="form-group">
+          <p style="margin:0 0 12px;color:var(--text-secondary);font-size:14px;">
+            安装插件后可将浏览器书签与本应用双向同步。
+          </p>
+          <div style="display:flex;gap:10px;margin-bottom:16px;">
+            <a
+              href="/downloads/edge-extension.zip"
+              download
+              class="primary"
+              style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:6px;text-decoration:none;font-size:14px;"
+            >
+              <span>⬇️</span><span>下载插件包（.zip）</span>
+            </a>
+          </div>
+          <div style="background:var(--bg-secondary,#f5f5f5);border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.8;color:var(--text-primary);">
+            <b>安装步骤：</b>
+            <ol style="margin:6px 0 0 16px;padding:0;">
+              <li>下载并解压 <code>edge-extension.zip</code></li>
+              <li>打开 Edge 浏览器，访问 <code>edge://extensions/</code></li>
+              <li>开启右上角 <b>「开发者模式」</b></li>
+              <li>点击 <b>「加载已解压的扩展」</b>，选择解压后的文件夹</li>
+              <li>插件安装完成后，点击图标 → <b>「⚙️ 选项设置」</b> 配置服务器地址和 API Key</li>
+            </ol>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" @click="closeExtensionModal">关闭</button>
         </div>
       </div>
     </div>
