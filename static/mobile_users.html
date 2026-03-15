@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>用户管理</title>
+  <link rel="icon" href="/favicon.ico" />
+  <script src="/js/md5.js"></script>
+  <script src="/vue.global.prod.js"></script>
+  <style>
+    /* ============ CSS Variables ============ */
+    :root {
+      --bg: #f3f3f3;
+      --surface: #ffffff;
+      --surface2: #f9f9f9;
+      --surface3: #efefef;
+      --border: #e0e0e0;
+      --text: #1a1a1a;
+      --text2: #444;
+      --text3: #888;
+      --primary: #0078d4;
+      --primary-light: #e8f3fc;
+      --primary-hover: #006cbd;
+      --danger: #d13438;
+      --danger-bg: #fde7e9;
+      --success: #107c10;
+      --success-bg: #dff0d8;
+      --warning: #ca5010;
+      --warning-bg: #fff4ce;
+      --shadow-sm: 0 1px 4px rgba(0,0,0,.08);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.12);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,.16);
+      --radius-sm: 6px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 20px;
+      --header-h: 56px;
+      --tabbar-h: 0px;
+    }
+    [data-theme="dark"] {
+      --bg: #1a1a1a;
+      --surface: #242424;
+      --surface2: #2c2c2c;
+      --surface3: #363636;
+      --border: #3a3a3a;
+      --text: #f3f3f3;
+      --text2: #ccc;
+      --text3: #777;
+      --primary: #2899f5;
+      --primary-light: #1c2f40;
+      --success-bg: #1a3a1a;
+      --warning-bg: #3a2a10;
+      --danger-bg: #3a1010;
+      --shadow-sm: 0 1px 4px rgba(0,0,0,.3);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.4);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,.5);
+    }
+
+    /* ============ Reset ============ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+    button { cursor: pointer; border: none; background: none; font-family: inherit; color: inherit; }
+    ul, li { list-style: none; }
+    [v-cloak] { display: none !important; }
+
+    /* ============ App Shell ============ */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ============ Header ============ */
+    .edge-header {
+      flex-shrink: 0;
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 10px;
+      z-index: 50;
+    }
+    .header-back {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+      font-size: 18px;
+      color: var(--text2);
+      transition: background .15s;
+      flex-shrink: 0;
+    }
+    .header-back:active { background: var(--surface3); }
+    .header-title {
+      flex: 1;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .header-action {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+      font-size: 18px;
+      color: var(--text2);
+      transition: background .15s;
+      flex-shrink: 0;
+    }
+    .header-action:active { background: var(--surface3); }
+
+    /* ============ Search Bar ============ */
+    .search-bar {
+      flex-shrink: 0;
+      padding: 10px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .search-input {
+      flex: 1;
+      height: 36px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      padding: 0 14px;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      font-family: inherit;
+      transition: border-color .2s;
+    }
+    .search-input:focus { border-color: var(--primary); }
+    .search-btn {
+      height: 36px;
+      padding: 0 16px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 18px;
+      font-size: 13px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .search-btn:active { opacity: .85; }
+
+    /* ============ Batch Toolbar ============ */
+    .batch-toolbar {
+      flex-shrink: 0;
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--primary);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .batch-count {
+      flex: 1;
+      font-size: 13px;
+      color: var(--primary);
+      font-weight: 500;
+    }
+    .batch-btn {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .batch-btn.activate { background: var(--success-bg); color: var(--success); }
+    .batch-btn.deactivate { background: var(--warning-bg); color: var(--warning); }
+    .batch-btn.delete { background: var(--danger-bg); color: var(--danger); }
+    .batch-btn:active { filter: brightness(.9); }
+
+    /* ============ Main Scroll ============ */
+    .edge-main {
+      flex: 1;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 8px 12px 24px;
+    }
+
+    /* ============ User Card ============ */
+    .user-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      box-shadow: var(--shadow-sm);
+      transition: background .15s;
+      position: relative;
+    }
+    .user-card:active { background: var(--surface2); }
+    .user-card.selected { border-color: var(--primary); background: var(--primary-light); }
+
+    .user-checkbox {
+      width: 20px; height: 20px;
+      flex-shrink: 0;
+      accent-color: var(--primary);
+    }
+
+    .user-avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--surface3);
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      overflow: hidden;
+    }
+    .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .user-info { flex: 1; min-width: 0; }
+    .user-name {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .user-sub {
+      font-size: 12px; color: var(--text3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .user-badges {
+      display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-admin { background: #fde7e9; color: var(--danger); }
+    .badge-active { background: var(--success-bg); color: var(--success); }
+    .badge-inactive { background: var(--surface3); color: var(--text3); }
+
+    .user-more {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; font-size: 18px; color: var(--text3);
+      flex-shrink: 0;
+    }
+    .user-more:active { background: var(--surface3); }
+
+    /* ============ Context Menu ============ */
+    .context-menu {
+      position: fixed;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      z-index: 300;
+      min-width: 200px;
+      overflow: hidden;
+    }
+    .ctx-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 16px;
+      font-size: 14px; color: var(--text);
+      border-bottom: 1px solid var(--border);
+      width: 100%;
+    }
+    .ctx-item:last-child { border-bottom: none; }
+    .ctx-item:active { background: var(--surface2); }
+    .ctx-item.danger { color: var(--danger); }
+    .ctx-icon { font-size: 16px; width: 20px; text-align: center; }
+
+    /* ============ Modal ============ */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 400;
+      background: rgba(0,0,0,.5);
+      display: flex; align-items: flex-end;
+    }
+    .modal-sheet {
+      width: 100%;
+      background: var(--surface);
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+      padding: 0 0 env(safe-area-inset-bottom);
+      max-height: 90vh;
+      display: flex; flex-direction: column;
+    }
+    .modal-handle {
+      width: 36px; height: 4px; background: var(--border);
+      border-radius: 2px; margin: 12px auto 8px;
+      flex-shrink: 0;
+    }
+    .modal-title {
+      font-size: 16px; font-weight: 600;
+      padding: 4px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .modal-footer {
+      flex-shrink: 0;
+      display: flex; gap: 10px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+    }
+    .modal-btn {
+      flex: 1; height: 44px;
+      border-radius: var(--radius-md);
+      font-size: 15px; font-weight: 500;
+    }
+    .modal-btn.primary { background: var(--primary); color: #fff; }
+    .modal-btn.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .modal-btn.danger { background: var(--danger-bg); color: var(--danger); }
+
+    /* ============ Form ============ */
+    .form-group { margin-bottom: 16px; }
+    .form-label { font-size: 13px; color: var(--text3); margin-bottom: 6px; display: block; }
+    .form-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      font-size: 14px; color: var(--text);
+      font-family: inherit;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .form-input:focus { border-color: var(--primary); }
+    .form-input:disabled { opacity: .5; }
+    .form-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+    .form-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+    /* ============ Toggle Row ============ */
+    .toggle-row {
+      display: flex; align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { flex: 1; font-size: 14px; }
+    .toggle-switch {
+      position: relative; display: inline-block;
+      width: 44px; height: 24px;
+    }
+    .toggle-switch input { display: none; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: var(--border); border-radius: 12px;
+      transition: background .2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 20px; height: 20px;
+      left: 2px; top: 2px;
+      background: #fff; border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      transition: transform .2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    /* ============ Confirm Sheet ============ */
+    .confirm-sheet {
+      width: 100%;
+      background: var(--surface);
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+      padding: 24px 20px env(safe-area-inset-bottom);
+    }
+    .confirm-icon { font-size: 40px; text-align: center; margin-bottom: 12px; }
+    .confirm-title { font-size: 17px; font-weight: 700; text-align: center; margin-bottom: 8px; }
+    .confirm-msg { font-size: 14px; color: var(--text2); text-align: center; line-height: 1.6; margin-bottom: 6px; }
+    .confirm-msg-danger { font-size: 12px; color: var(--danger); text-align: center; margin-bottom: 20px; }
+    .confirm-btns { display: flex; gap: 10px; }
+
+    /* ============ Empty / Loading ============ */
+    .empty-state {
+      text-align: center; padding: 60px 24px;
+      color: var(--text3);
+    }
+    .empty-icon { font-size: 52px; margin-bottom: 16px; }
+    .empty-title { font-size: 16px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+    .empty-desc { font-size: 13px; }
+
+    .loading-overlay {
+      position: fixed; inset: 0; z-index: 600;
+      background: rgba(0,0,0,.4);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ============ Toast ============ */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #333; color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      z-index: 500;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: var(--shadow-md);
+    }
+    .toast.success { background: var(--success); }
+    .toast.error {
+      background: var(--danger);
+      pointer-events: all;
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      max-width: 90vw;
+      white-space: normal;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .toast.error .toast-msg { flex: 1; line-height: 1.5; }
+    .toast.error .toast-close {
+      flex-shrink: 0;
+      font-size: 18px;
+      line-height: 1;
+      opacity: .8;
+      padding: 0 2px;
+      cursor: pointer;
+    }
+    .toast.warning { background: var(--warning); }
+
+    /* ============ Pagination ============ */
+    .pagination {
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px; padding: 16px 0 8px;
+    }
+    .page-btn {
+      width: 36px; height: 36px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; color: var(--text2);
+    }
+    .page-btn:disabled { opacity: .4; }
+    .page-btn:not(:disabled):active { background: var(--surface2); }
+    .page-info { font-size: 13px; color: var(--text3); }
+
+    /* ============ Transitions ============ */
+    .fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+    .slide-up-enter-active, .slide-up-leave-active { transition: transform .25s ease; }
+    .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+
+    /* ============ Stats Bar ============ */
+    .stats-bar {
+      flex-shrink: 0;
+      padding: 6px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text3);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .stats-bar span { display: flex; align-items: center; gap: 4px; }
+  </style>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- Loading -->
+  <transition name="fade">
+    <div v-if="loading" class="loading-overlay">
+      <div class="spinner"></div>
+    </div>
+  </transition>
+
+  <!-- Header -->
+  <div class="edge-header">
+    <button class="header-back" @click="goBack">&#8592;</button>
+    <span class="header-title">用户管理</span>
+    <button class="header-action" @click="toggleEditMode" :title="editMode ? '退出选择' : '多选'">
+      {{ editMode ? '✕' : '☑' }}
+    </button>
+  </div>
+
+  <!-- Search Bar -->
+  <div class="search-bar">
+    <input
+      class="search-input"
+      v-model="searchQuery"
+      placeholder="搜索用户名、昵称或邮箱..."
+      @keyup.enter="doSearch"
+    />
+    <button class="search-btn" @click="doSearch">搜索</button>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar" v-if="!loading">
+    <span>👥 共 {{ total }} 位用户</span>
+    <span v-if="editMode && selectedUsers.length > 0">✅ 已选 {{ selectedUsers.length }}</span>
+  </div>
+
+  <!-- Batch Toolbar -->
+  <transition name="fade">
+    <div v-if="editMode && selectedUsers.length > 0" class="batch-toolbar" @click.stop>
+      <span class="batch-count">已选 {{ selectedUsers.length }} 人</span>
+      <button class="batch-btn activate" @click="batchActivate">激活</button>
+      <button class="batch-btn deactivate" @click="batchDeactivate">停用</button>
+      <button class="batch-btn delete" @click="batchDelete">删除</button>
+    </div>
+  </transition>
+
+  <!-- Main -->
+  <div class="edge-main" ref="mainScroll">
+
+    <!-- Empty -->
+    <div v-if="!loading && users.length === 0" class="empty-state">
+      <div class="empty-icon">👥</div>
+      <div class="empty-title">暂无用户</div>
+      <div class="empty-desc">搜索用户名或昵称来查找用户</div>
+    </div>
+
+    <!-- User List -->
+    <div
+      v-for="user in users"
+      :key="user.id"
+      class="user-card"
+      :class="{ selected: selectedUsers.includes(user.id) }"
+      @click="editMode ? toggleSelect(user.id) : null"
+    >
+      <!-- Checkbox in edit mode -->
+      <input
+        v-if="editMode"
+        type="checkbox"
+        class="user-checkbox"
+        :checked="selectedUsers.includes(user.id)"
+        @click.stop="toggleSelect(user.id)"
+      />
+
+      <!-- Avatar -->
+      <div class="user-avatar">
+        <img v-if="user.avatar" :src="user.avatar" :alt="user.username" @error="e=>e.target.style.display='none'" />
+        <span v-else>{{ getInitial(user) }}</span>
+      </div>
+
+      <!-- Info -->
+      <div class="user-info">
+        <div class="user-name">{{ user.nickname || user.username }}</div>
+        <div class="user-sub">@{{ user.username }}{{ user.email ? ' · ' + user.email : '' }}</div>
+        <div class="user-badges">
+          <span v-if="user.is_admin" class="badge badge-admin">管理员</span>
+          <span v-if="user.is_active" class="badge badge-active">活跃</span>
+          <span v-else class="badge badge-inactive">停用</span>
+        </div>
+      </div>
+
+      <!-- More Button -->
+      <button class="user-more" @click.stop="showCtxMenu(user, $event)" v-if="!editMode">⋮</button>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" v-if="totalPages > 1">
+      <button class="page-btn" @click="prevPage" :disabled="currentPage === 1">‹</button>
+      <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+      <button class="page-btn" @click="nextPage" :disabled="currentPage === totalPages">›</button>
+    </div>
+
+  </div>
+
+  <!-- Context Menu -->
+  <transition name="fade">
+    <div
+      v-if="ctxMenu.visible"
+      class="context-menu"
+      :style="{ top: ctxMenu.y + 'px', left: ctxMenu.x + 'px' }"
+      @click.stop
+    >
+      <button class="ctx-item" @click="ctxEdit">
+        <span class="ctx-icon">✏️</span>编辑信息
+      </button>
+      <button class="ctx-item" @click="ctxResetPwd">
+        <span class="ctx-icon">🔑</span>重置密码
+      </button>
+      <button
+        class="ctx-item"
+        @click="ctxToggleActive"
+        v-if="ctxMenu.user && ctxMenu.user.id !== currentUserId"
+      >
+        <span class="ctx-icon">{{ ctxMenu.user && ctxMenu.user.is_active ? '🚫' : '✅' }}</span>
+        {{ ctxMenu.user && ctxMenu.user.is_active ? '停用账号' : '激活账号' }}
+      </button>
+      <button
+        class="ctx-item danger"
+        @click="ctxDelete"
+        v-if="ctxMenu.user && ctxMenu.user.id !== currentUserId"
+      >
+        <span class="ctx-icon">🗑️</span>删除用户
+      </button>
+    </div>
+  </transition>
+
+  <!-- Edit User Sheet -->
+  <transition name="fade">
+    <div v-if="editModal.visible" class="modal-backdrop" @click="editModal.visible=false">
+      <transition name="slide-up">
+        <div class="modal-sheet" @click.stop>
+          <div class="modal-handle"></div>
+          <div class="modal-title">✏️ 编辑用户</div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">用户名</label>
+              <input class="form-input" :value="editModal.user.username" disabled />
+            </div>
+            <div class="form-group">
+              <label class="form-label">昵称</label>
+              <input class="form-input" v-model="editModal.form.nickname" placeholder="请输入昵称" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">邮箱</label>
+              <input class="form-input" type="email" v-model="editModal.form.email" placeholder="请输入邮箱" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">头像 URL（可选）</label>
+              <input class="form-input" v-model="editModal.form.avatar" placeholder="留空则使用默认头像" />
+            </div>
+            <div class="form-error" v-if="editModal.error">{{ editModal.error }}</div>
+          </div>
+          <div class="modal-footer">
+            <button class="modal-btn secondary" @click="editModal.visible=false">取消</button>
+            <button class="modal-btn primary" :disabled="editModal.loading" @click="submitEdit">
+              {{ editModal.loading ? '保存中...' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </transition>
+    </div>
+  </transition>
+
+  <!-- Reset Password Sheet -->
+  <transition name="fade">
+    <div v-if="resetPwdModal.visible" class="modal-backdrop" @click="resetPwdModal.visible=false">
+      <transition name="slide-up">
+        <div class="modal-sheet" @click.stop>
+          <div class="modal-handle"></div>
+          <div class="modal-title">🔑 重置密码</div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">用户</label>
+              <input class="form-input" :value="resetPwdModal.user ? (resetPwdModal.user.nickname || resetPwdModal.user.username) : ''" disabled />
+            </div>
+            <div class="form-group">
+              <label class="form-label">新密码</label>
+              <input class="form-input" type="password" v-model="resetPwdModal.password" placeholder="至少 6 位" />
+              <div class="form-hint">管理员直接设置，无需原密码</div>
+            </div>
+            <div class="form-error" v-if="resetPwdModal.error">{{ resetPwdModal.error }}</div>
+          </div>
+          <div class="modal-footer">
+            <button class="modal-btn secondary" @click="resetPwdModal.visible=false">取消</button>
+            <button class="modal-btn primary" :disabled="resetPwdModal.loading" @click="submitResetPwd">
+              {{ resetPwdModal.loading ? '重置中...' : '确认重置' }}
+            </button>
+          </div>
+        </div>
+      </transition>
+    </div>
+  </transition>
+
+  <!-- Confirm Delete Sheet -->
+  <transition name="fade">
+    <div v-if="confirmDialog.visible" class="modal-backdrop">
+      <transition name="slide-up">
+        <div class="confirm-sheet" @click.stop>
+          <div class="confirm-icon">{{ confirmDialog.icon || '⚠️' }}</div>
+          <div class="confirm-title">{{ confirmDialog.title }}</div>
+          <div class="confirm-msg">{{ confirmDialog.message }}</div>
+          <div class="confirm-msg-danger" v-if="confirmDialog.danger">{{ confirmDialog.danger }}</div>
+          <div class="confirm-btns">
+            <button class="modal-btn secondary" @click="confirmCancel">取消</button>
+            <button class="modal-btn danger" @click="confirmOk">{{ confirmDialog.confirmText || '确认' }}</button>
+          </div>
+        </div>
+      </transition>
+    </div>
+  </transition>
+
+  <!-- Toast -->
+  <transition name="fade">
+    <div v-if="toast.visible" :class="['toast', toast.type]" @click="toast.type !== 'error' ? null : (toast.visible = false)">
+      <template v-if="toast.type === 'error'">
+        <span class="toast-msg">{{ toast.message }}</span>
+        <span class="toast-close" @click.stop="toast.visible = false">✕</span>
+      </template>
+      <template v-else>{{ toast.message }}</template>
+    </div>
+  </transition>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const app = Vue.createApp({
+    data() {
+      return {
+        token: localStorage.getItem('token') || null,
+        currentUserId: null,
+        // List
+        users: [],
+        total: 0,
+        currentPage: 1,
+        pageSize: 20,
+        totalPages: 0,
+        loading: false,
+        searchQuery: '',
+        // Edit mode
+        editMode: false,
+        selectedUsers: [],
+        // Context menu
+        ctxMenu: { visible: false, x: 0, y: 0, user: null },
+        // Edit modal
+        editModal: {
+          visible: false,
+          user: {},
+          form: { nickname: '', email: '', avatar: '' },
+          loading: false,
+          error: '',
+        },
+        // Reset password modal
+        resetPwdModal: {
+          visible: false,
+          user: null,
+          password: '',
+          loading: false,
+          error: '',
+        },
+        // Confirm dialog
+        confirmDialog: {
+          visible: false,
+          title: '', message: '', danger: '',
+          icon: '⚠️', confirmText: '确认',
+          callback: null,
+        },
+        // Toast
+        toast: { visible: false, message: '', type: 'success', timer: null },
+      };
+    },
+
+    mounted() {
+      if (!this.token) { window.location.href = 'login.html'; return; }
+      this.getCurrentUser();
+      this.loadUsers();
+      // document 级监听，点击菜单外任何地方都关闭上下文菜单
+      this._docClickHandler = (e) => {
+        if (this.ctxMenu.visible) {
+          const menu = document.querySelector('.context-menu');
+          if (menu && menu.contains(e.target)) return; // 点的是菜单本身，不关
+          this.hideCtx();
+        }
+      };
+      document.addEventListener('click', this._docClickHandler, true);
+      document.addEventListener('touchstart', this._docClickHandler, { passive: true });
+    },
+    beforeUnmount() {
+      document.removeEventListener('click', this._docClickHandler, true);
+      document.removeEventListener('touchstart', this._docClickHandler, { passive: true });
+    },
+
+    methods: {
+      // ============ Auth ============
+      async getCurrentUser() {
+        try {
+          const r = await fetch('/api/auth/me', { headers: { Authorization: this.token } });
+          if (r.ok) {
+            const d = await r.json();
+            this.currentUserId = d.id;
+            // 非管理员直接踢回
+            if (!d.is_admin) {
+              this.showToast('无权访问', 'error');
+              setTimeout(() => { window.location.href = 'mobile.html'; }, 1200);
+            }
+          } else {
+            const data = await r.json().catch(() => ({}));
+            const msg = data.error || '';
+            if (r.status === 403) {
+              this.showToast(msg || '账号已被禁用，请联系管理员', 'error');
+              setTimeout(() => {
+                localStorage.removeItem('token');
+                window.location.href = 'login.html';
+              }, 2000);
+            } else {
+              window.location.href = 'login.html';
+            }
+          }
+        } catch {
+          window.location.href = 'login.html';
+        }
+      },
+      goBack() {
+        window.history.length > 1 ? window.history.back() : window.location.href = 'mobile.html';
+      },
+
+      // ============ Load Users ============
+      async loadUsers() {
+        this.loading = true;
+        try {
+          const params = new URLSearchParams({ page: this.currentPage, limit: this.pageSize });
+          if (this.searchQuery.trim()) params.append('search', this.searchQuery.trim());
+          const r = await fetch(`/api/users?${params}`, { headers: { Authorization: this.token } });
+          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '加载失败');
+          const d = await r.json();
+          this.users = d.users || [];
+          this.total = d.total || 0;
+          this.totalPages = Math.ceil(this.total / this.pageSize);
+        } catch(e) {
+          this.showToast(e.message || '加载失败', 'error');
+          this.users = [];
+        } finally {
+          this.loading = false;
+        }
+      },
+      doSearch() {
+        this.currentPage = 1;
+        this.loadUsers();
+      },
+      prevPage() {
+        if (this.currentPage > 1) { this.currentPage--; this.loadUsers(); }
+      },
+      nextPage() {
+        if (this.currentPage < this.totalPages) { this.currentPage++; this.loadUsers(); }
+      },
+
+      // ============ Edit Mode ============
+      toggleEditMode() {
+        this.editMode = !this.editMode;
+        if (!this.editMode) this.selectedUsers = [];
+        this.hideCtx();
+      },
+      toggleSelect(id) {
+        const idx = this.selectedUsers.indexOf(id);
+        if (idx === -1) this.selectedUsers.push(id);
+        else this.selectedUsers.splice(idx, 1);
+      },
+
+      // ============ Context Menu ============
+      showCtxMenu(user, e) {
+        const menuW = 220, menuH = 240;
+        const sw = window.innerWidth, sh = window.innerHeight;
+        let x = e.clientX > sw - menuW - 8 ? sw - menuW - 8 : e.clientX;
+        let y = e.clientY > sh - menuH - 8 ? sh - menuH - 8 : e.clientY;
+        this.ctxMenu = { visible: true, x, y, user };
+      },
+      hideCtx() {
+        this.ctxMenu.visible = false;
+      },
+      ctxEdit() {
+        const user = this.ctxMenu.user; this.hideCtx();
+        this.editModal = {
+          visible: true, user,
+          form: { nickname: user.nickname || '', email: user.email || '', avatar: user.avatar || '' },
+          loading: false, error: '',
+        };
+      },
+      ctxResetPwd() {
+        const user = this.ctxMenu.user; this.hideCtx();
+        this.resetPwdModal = { visible: true, user, password: '', loading: false, error: '' };
+      },
+      async ctxToggleActive() {
+        const user = this.ctxMenu.user; this.hideCtx();
+        const action = user.is_active ? 'deactivate' : 'activate';
+        const label = user.is_active ? '停用' : '激活';
+        const ok = await this.customConfirm(
+          `${label}账号`,
+          `确定要${label}用户「${user.nickname || user.username}」吗？`,
+          '', '⚠️', label
+        );
+        if (!ok) return;
+        try {
+          const r = await fetch('/api/users/batch', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            body: JSON.stringify({ action, user_ids: [user.id] })
+          });
+          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '操作失败');
+          this.showToast(`${label}成功`, 'success');
+          this.loadUsers();
+        } catch(e) {
+          this.showToast(e.message || '操作失败', 'error');
+        }
+      },
+      async ctxDelete() {
+        const user = this.ctxMenu.user; this.hideCtx();
+        const ok = await this.customConfirm(
+          '删除用户',
+          `确定要删除用户「${user.nickname || user.username}」吗？`,
+          '此操作将同时删除该用户的所有书签数据，且无法恢复！',
+          '🗑️', '删除'
+        );
+        if (!ok) return;
+        try {
+          const r = await fetch(`/api/users/${user.id}`, { method: 'DELETE', headers: { Authorization: this.token } });
+          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '删除失败');
+          this.showToast('删除成功', 'success');
+          this.loadUsers();
+        } catch(e) {
+          this.showToast(e.message || '删除失败', 'error');
+        }
+      },
+
+      // ============ Edit User ============
+      async submitEdit() {
+        this.editModal.loading = true; this.editModal.error = '';
+        try {
+          const r = await fetch(`/api/users/${this.editModal.user.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            body: JSON.stringify(this.editModal.form)
+          });
+          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '保存失败');
+          this.editModal.visible = false;
+          this.showToast('保存成功', 'success');
+          this.loadUsers();
+        } catch(e) {
+          this.editModal.error = e.message || '保存失败';
+        } finally {
+          this.editModal.loading = false;
+        }
+      },
+
+      // ============ Reset Password ============
+      async submitResetPwd() {
+        if (this.resetPwdModal.password.length < 6) {
+          this.resetPwdModal.error = '密码至少 6 位'; return;
+        }
+        this.resetPwdModal.loading = true; this.resetPwdModal.error = '';
+        try {
+          // 前端 MD5 加密（第一次），后端再做第二次（双重 MD5）
+          const hashed = MD5(this.resetPwdModal.password);
+          const r = await fetch(`/api/users/${this.resetPwdModal.user.id}/reset-password`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            body: JSON.stringify({ new_password: hashed })
+          });
+          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '重置失败');
+          this.resetPwdModal.visible = false;
+          this.showToast('密码重置成功', 'success');
+        } catch(e) {
+          this.resetPwdModal.error = e.message || '重置失败';
+        } finally {
+          this.resetPwdModal.loading = false;
+        }
+      },
+
+      // ============ Batch ============
+      async batchActivate() {
+        await this.doBatch('activate', '激活', '确定要激活选中的用户吗？');
+      },
+      async batchDeactivate() {
+        await this.doBatch('deactivate', '停用', '确定要停用选中的用户吗？');
+      },
+      async batchDelete() {
+        const ok = await this.customConfirm(
+          '批量删除',
+          `确定要删除选中的 ${this.selectedUsers.length} 个用户吗？`,
+          '此操作将同时删除这些用户的所有书签数据，且无法恢复！',
+          '🗑️', '删除'
+        );
+        if (!ok) return;
+        try {
+          const r = await fetch('/api/users/batch', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            body: JSON.stringify({ action: 'delete', user_ids: this.selectedUsers })
+          });
+          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '操作失败');
+          this.showToast('删除成功', 'success');
+          this.selectedUsers = [];
+          this.editMode = false;
+          this.loadUsers();
+        } catch(e) {
+          this.showToast(e.message || '操作失败', 'error');
+        }
+      },
+      async doBatch(action, label, message) {
+        const ok = await this.customConfirm(label, message, '', '⚠️', label);
+        if (!ok) return;
+        try {
+          const r = await fetch('/api/users/batch', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            body: JSON.stringify({ action, user_ids: this.selectedUsers })
+          });
+          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '操作失败');
+          this.showToast(`${label}成功`, 'success');
+          this.selectedUsers = [];
+          this.loadUsers();
+        } catch(e) {
+          this.showToast(e.message || '操作失败', 'error');
+        }
+      },
+
+      // ============ Confirm ============
+      customConfirm(title, message, danger='', icon='⚠️', confirmText='确认') {
+        return new Promise(resolve => {
+          this.confirmDialog = { visible: true, title, message, danger, icon, confirmText, callback: resolve };
+        });
+      },
+      confirmOk() {
+        const cb = this.confirmDialog.callback;
+        this.confirmDialog.visible = false;
+        if (cb) cb(true);
+      },
+      confirmCancel() {
+        const cb = this.confirmDialog.callback;
+        this.confirmDialog.visible = false;
+        if (cb) cb(false);
+      },
+
+      // ============ Toast ============
+      showToast(message, type='success') {
+        if (this.toast.timer) clearTimeout(this.toast.timer);
+        const delay = type === 'error' ? 8000 : 2500;
+        const timer = setTimeout(() => { this.toast.visible = false; }, delay);
+        this.toast = { visible: true, message, type, timer };
+      },
+
+      // ============ Helpers ============
+      getInitial(user) {
+        const name = user.nickname || user.username || '?';
+        return name.charAt(0).toUpperCase();
+      },
+    }
+  });
+
+  app.mount('#app');
+});
+</script>
+</body>
+</html>

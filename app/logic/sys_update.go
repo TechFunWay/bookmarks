@@ -339,6 +339,7 @@ func (u *Upgrade) executeSQLForV1_9_0() error {
 	sqlStatements := []string{
 		"ALTER TABLE users ADD COLUMN api_key TEXT;",
 		"CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key);",
+		"ALTER TABLE nodes ADD COLUMN remark TEXT NOT NULL DEFAULT '';",
 	}
 
 	for i, stmt := range sqlStatements {
