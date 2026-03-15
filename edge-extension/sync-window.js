@@ -87,35 +87,29 @@ async function loadConfig() {
           : `手动同步，${getSyncModeText(config.syncMode)}`;
 
       // ---- 应用→浏览器（A→E）----
-      // 只要配置了浏览器目标目录就显示区块和手动同步按钮，enableAppToEdgeSync 仅控制自动同步
       if (config.appToEdgeTargetFolderId) {
-        elements.a2eDirectionSection.style.display = 'block';
-        elements.syncFromAppButton.style.display = 'inline-block';
-        elements.a2eSyncStatusItem.style.display = 'flex';
-
         const srcMode = config.appToEdgeSourceFolderMode || 'all';
         const srcPart = srcMode === 'select' ? (config.appToEdgeSourceFolderName || '未选择') : '全部书签';
         const tgtPart = config.appToEdgeTargetFolderName || '未选择目标目录';
 
-        // A→E 方向展示块
         elements.dirA2ESource.textContent   = srcPart;
         elements.dirA2ETarget.textContent   = tgtPart;
         elements.dirA2ESyncMode.textContent = getSyncModeText(config.appToEdgeSyncMode);
 
-        // A→E 标题：是否开启自动同步由 enableAppToEdgeSync 决定
         const a2eAutoText = config.enableAppToEdgeSync
           ? `自动同步 · 每 ${formatSyncInterval(config.appToEdgeSyncInterval || 5)}`
           : '手动同步';
         elements.a2eDirectionTitle.textContent = `应用 → 浏览器（${a2eAutoText}）`;
 
-        // A→E 配置信息行
         elements.a2eSyncStatusText.textContent = config.enableAppToEdgeSync
           ? `自动同步，每 ${formatSyncInterval(config.appToEdgeSyncInterval || 5)}，${getSyncModeText(config.appToEdgeSyncMode)}`
           : `手动同步，${getSyncModeText(config.appToEdgeSyncMode)}`;
       } else {
-        elements.a2eDirectionSection.style.display = 'none';
-        elements.syncFromAppButton.style.display = 'none';
-        elements.a2eSyncStatusItem.style.display = 'none';
+        // 未配置时显示提示文案
+        elements.dirA2ESource.textContent   = '全部书签';
+        elements.dirA2ETarget.textContent   = '未配置（请先去设置页选择目标目录）';
+        elements.dirA2ESyncMode.textContent = '手动同步';
+        elements.a2eSyncStatusText.textContent = '未配置';
       }
 
       if (config.syncResult) {

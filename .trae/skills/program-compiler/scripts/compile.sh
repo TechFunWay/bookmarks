@@ -10,6 +10,31 @@ fi
 
 echo "使用版本号: $VERSION"
 
+# ---- 打包浏览器插件 ----
+echo "\n打包浏览器插件..."
+mkdir -p static/downloads
+# 删除旧的压缩包（如果存在）
+rm -f static/downloads/edge-extension.zip
+# 进入edge-extension目录进行打包，避免路径层级问题
+cd edge-extension
+zip -r ../static/downloads/edge-extension.zip \
+    manifest.json \
+    background.js \
+    popup.html \
+    popup.js \
+    options.html \
+    options.js \
+    sync-window.html \
+    sync-window.js \
+    icons/
+cd ..
+if [ $? -ne 0 ]; then
+    echo "Error: 插件打包失败"
+    exit 1
+fi
+echo "插件打包完成: static/downloads/edge-extension.zip"
+# ---- end 打包浏览器插件 ----
+
 # 创建 release 目录
 mkdir -p release
 

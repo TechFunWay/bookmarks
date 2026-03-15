@@ -349,7 +349,7 @@
   <div class="container">
     <div class="toolbar">
       <button id="syncButton">立即同步（浏览器→应用）</button>
-      <button id="syncFromAppButton" class="app-to-edge-btn" style="display:none;">立即同步（应用→浏览器）</button>
+      <button id="syncFromAppButton" class="app-to-edge-btn">立即同步（应用→浏览器）</button>
       <button id="configButton" class="config-btn">⚙️ 设置</button>
     </div>
     <div class="main-content">
@@ -369,7 +369,7 @@
             <span class="config-label">浏览器→应用:</span>
             <span id="e2aSyncStatusText" class="config-value">加载中...</span>
           </div>
-          <div class="config-item" id="a2eSyncStatusItem" style="display:none;">
+          <div class="config-item" id="a2eSyncStatusItem">
             <span class="config-label">应用→浏览器:</span>
             <span id="a2eSyncStatusText" class="config-value">加载中...</span>
           </div>
@@ -396,7 +396,7 @@
       </div>
 
       <!-- 应用→浏览器同步方向展示（有配置时显示） -->
-      <div id="a2eDirectionSection" class="a2e-direction-section" style="display:none;">
+      <div id="a2eDirectionSection" class="a2e-direction-section">
         <h2 id="a2eDirectionTitle" class="a2e-direction-title">应用 → 浏览器</h2>
         <div class="sync-direction-body">
           <div class="sync-dir-endpoint">

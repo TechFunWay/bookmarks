@@ -18,6 +18,7 @@
 data.db
 .trae/documents
 /static/icons
+/static/downloads
 .vscode
 release
 /logs

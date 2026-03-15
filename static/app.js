@@ -325,6 +325,10 @@ const app = createApp({
           loading: false,
           error: ''
         },
+        // 插件下载弹窗状态
+        extensionModal: {
+          visible: false
+        },
         // 每行显示数量设置
         itemsPerRow: 1,
         // 配置相关
@@ -524,6 +528,13 @@ const app = createApp({
       this.pluginAPIKeyModal.apiKey = '';
       this.pluginAPIKeyModal.error = '';
       this.pluginAPIKeyModal.loading = false;
+    },
+    openExtensionModal() {
+      this.userDropdownVisible = false;
+      this.extensionModal.visible = true;
+    },
+    closeExtensionModal() {
+      this.extensionModal.visible = false;
     },
     async regeneratePluginAPIKey() {
       this.pluginAPIKeyModal.error = '';
