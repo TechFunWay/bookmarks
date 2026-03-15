@@ -524,6 +524,7 @@
       box-shadow: var(--shadow-md);
     }
     .toast.success { background: #107c10; }
+    .toast.info { background: #0078d4; }
     .toast.error {
       background: var(--danger);
       pointer-events: all;
@@ -1086,7 +1087,7 @@
 
   <!-- Folder Picker -->
   <transition name="fade">
-    <div v-if="showFolderPickerFor" class="modal-backdrop" @click="showFolderPickerFor=null">
+    <div v-if="showFolderPickerFor" class="modal-backdrop" style="z-index:480" @click="showFolderPickerFor=null">
       <transition name="slide-up">
         <div class="modal-sheet" @click.stop>
           <div class="modal-handle"></div>
@@ -2189,72 +2190,143 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       closeImportDialog() { this.importDialog.visible = false; },
       triggerFileInput() {
-        this.importDialog.visible = false;
-        if (this.importDialog.type === 'json') {
+        // 先快照当前参数，再关弹窗（关弹窗会触发 Vue 响应式更新，手机端需在此之前 click）
+        const type      = this.importDialog.type;
+        const mode      = this.importDialog.mode;
+        const parentId  = this.importDialog.parentId;
+        // 保存到独立字段，供 onChange 回调使用
+        this._pendingImport = { type, mode, parentId };
+        // 立即触发 file input（在用户 gesture 同步链内）
+        if (type === 'json') {
           this.$refs.jsonFileInput.click();
         } else {
           this.$refs.edgeFileInput.click();
         }
+        // 关闭弹窗放到 nextTick，不影响 gesture
+        this.$nextTick(() => { this.importDialog.visible = false; });
       },
       async onJSONFileChange(e) {
         const file = e.target.files[0]; if (!file) return;
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('mode', this.importDialog.mode);
-        if (this.importDialog.parentId) formData.append('parent_id', this.importDialog.parentId);
-        try {
-          const r = await fetch('/api/import', { method: 'POST', headers: { Authorization: this.token }, body: formData });
-          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '导入失败');
-          await this.loadTree();
-          this.showToast('导入成功', 'success');
-        } catch(e) {
-          this.showToast(e.message || '导入失败', 'error');
-        }
+        const { mode, parentId } = this._pendingImport || this.importDialog;
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result);
+            this.showToast('正在导入...', 'info');
+            const r = await fetch('/api/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              body: JSON.stringify({ bookmarks: data, mode: mode || 'merge', parent_id: parentId || null })
+            });
+            if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '导入失败');
+            await this.loadTree();
+            this.showToast('导入成功', 'success');
+          } catch(err) {
+            this.showToast(err.message || '导入失败，请检查文件格式', 'error');
+          }
+          this._pendingImport = null;
+        };
+        reader.readAsText(file);
         e.target.value = '';
       },
       async onEdgeFileChange(e) {
         const file = e.target.files[0]; if (!file) return;
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('mode', this.importDialog.mode);
-        if (this.importDialog.parentId) formData.append('parent_id', this.importDialog.parentId);
-        try {
-          const r = await fetch('/api/import/edge', { method: 'POST', headers: { Authorization: this.token }, body: formData });
-          if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '导入失败');
-          await this.loadTree();
-          this.showToast('导入成功', 'success');
-        } catch(e) {
-          this.showToast(e.message || '导入失败', 'error');
-        }
+        const { mode, parentId } = this._pendingImport || this.importDialog;
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          try {
+            const html = ev.target.result;
+            this.showToast('正在导入...', 'info');
+            const r = await fetch('/api/import-edge', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              body: JSON.stringify({ html, mode: mode || 'merge', parent_id: parentId || null })
+            });
+            if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '导入失败');
+            await this.loadTree();
+            this.showToast('导入成功', 'success');
+          } catch(err) {
+            this.showToast(err.message || '导入失败，请检查文件格式', 'error');
+          }
+          this._pendingImport = null;
+        };
+        reader.readAsText(file);
         e.target.value = '';
+      },
+      // 将单个图片 URL 转为 base64（手机端不用 Worker，直接 fetch+canvas）
+      async _imageToBase64(url) {
+        try {
+          const resp = await fetch(url, { mode: 'cors' });
+          if (!resp.ok) return url;
+          const ab = await resp.arrayBuffer();
+          const type = resp.headers.get('content-type') || 'image/png';
+          const bytes = new Uint8Array(ab);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+          return `data:${type};base64,${btoa(binary)}`;
+        } catch {
+          return url; // 转换失败保留原 URL
+        }
+      },
+      // 将导出数据中所有书签图标转为 base64
+      async _convertIcons(nodes) {
+        for (const n of nodes) {
+          if (n.type === 'bookmark' && n.favicon_url && !n.favicon_url.startsWith('data:')) {
+            n.favicon_url = await this._imageToBase64(n.favicon_url);
+          } else if (n.type === 'folder' && n.children && n.children.length) {
+            await this._convertIcons(n.children);
+          }
+        }
       },
       async doExportJSON() {
         try {
-          const r = await fetch('/api/export', { headers: { Authorization: this.token } });
-          if (!r.ok) throw new Error('导出失败');
-          const blob = await r.blob();
+          this.showToast('正在导出，转换图标中...', 'info');
+          const exportData = JSON.parse(JSON.stringify(this.tree));
+          await this._convertIcons(exportData);
+          const json = JSON.stringify(exportData, null, 2);
+          const blob = new Blob([json], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = 'bookmarks.json'; a.click();
-          URL.revokeObjectURL(url);
-          this.showToast('导出成功', 'success');
+          // 手机端 Safari 不支持 <a>.click() 下载，改用 window.open
+          window.open(url, '_blank');
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          this.showToast('导出成功，请在新页面保存文件', 'success');
         } catch(e) {
           this.showToast(e.message || '导出失败', 'error');
         }
       },
       async doExportEdge() {
         try {
-          const r = await fetch('/api/export/edge', { headers: { Authorization: this.token } });
-          if (!r.ok) throw new Error('导出失败');
-          const blob = await r.blob();
+          this.showToast('正在导出，转换图标中...', 'info');
+          const exportData = JSON.parse(JSON.stringify(this.tree));
+          await this._convertIcons(exportData);
+          const html = this._generateEdgeHTML(exportData);
+          const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = 'bookmarks.html'; a.click();
-          URL.revokeObjectURL(url);
-          this.showToast('导出成功', 'success');
+          window.open(url, '_blank');
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          this.showToast('导出成功，请在新页面保存文件', 'success');
         } catch(e) {
           this.showToast(e.message || '导出失败', 'error');
         }
+      },
+      _generateEdgeHTML(nodes) {
+        const now = Math.floor(Date.now() / 1000);
+        const recurse = (list, depth) => {
+          let s = '';
+          const indent = '  '.repeat(depth);
+          for (const n of list) {
+            if (n.type === 'folder') {
+              s += `\n${indent}<DT><H3 ADD_DATE="${now}" LAST_MODIFIED="0">${n.title || ''}</H3>\n${indent}<DL><p>`;
+              if (n.children && n.children.length) s += recurse(n.children, depth + 1);
+              s += `\n${indent}</DL><p>`;
+            } else if (n.type === 'bookmark') {
+              const iconAttr = n.favicon_url ? ` ICON="${n.favicon_url}"` : '';
+              s += `\n${indent}<DT><A HREF="${n.url || ''}" ADD_DATE="${now}"${iconAttr}>${n.title || ''}</A>`;
+            }
+          }
+          return s;
+        };
+        return `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file.\n     It will be read and overwritten.\n     DO NOT EDIT! -->\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>${recurse(nodes, 1)}\n</DL><p>`;
       },
 
       // ============ Confirm Dialog ============
