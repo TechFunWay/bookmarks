@@ -11,7 +11,7 @@
   <script defer src="/app.js"></script>
 </head>
 <body style="background: url(/img/background.jpg); background-size: cover;">
-<div id="app" @click="handleRootClick">
+<div id="app" @click="handleRootClick" v-cloak>
   <!-- 加载提示 -->
   <transition name="fade">
     <div v-if="loading" class="loading-overlay">
@@ -355,6 +355,10 @@
         <span class="action-icon">✏️</span>
         <span class="action-text">编辑</span>
       </button>
+      <button type="button" v-if="contextNode.type === 'bookmark'" @click="showRemarkPopup(contextNode, $event); hideContextMenu()">
+        <span class="action-icon">📝</span>
+        <span class="action-text">{{ contextNode.remark ? '查看/编辑备注' : '添加备注' }}</span>
+      </button>
       <button type="button" class="danger" @click="contextDelete">
         <span class="action-icon">🗑️</span>
         <span class="action-text">删除</span>
@@ -483,6 +487,15 @@
                     type="text"
                     placeholder="自动获取或手动输入（支持网址、base64、本地路径）"
             />
+          </div>
+          <div class="form-group">
+            <label>备注</label>
+            <textarea
+                    v-model="modal.form.remark"
+                    rows="3"
+                    placeholder="可输入账号密码或其他备忘信息（仅自己可见）"
+                    style="width:100%;padding:8px;border:1px solid var(--border-color, #ddd);border-radius:4px;font-size:13px;resize:vertical;background:var(--input-bg,#fff);color:var(--text-color,#333);"
+            ></textarea>
           </div>
           <div class="modal-actions">
             <button type="submit" class="primary">确认</button>
@@ -1082,6 +1095,27 @@
       </div>
     </div>
   </transition>
+  <!-- 备注查看/编辑浮窗 -->
+  <transition name="fade">
+    <div v-if="remarkPopup.visible" class="modal-backdrop" @click="closeRemarkPopup">
+      <div class="modal" style="max-width:460px;" @click.stop>
+        <h3 class="modal-title">📝 备注 — {{ remarkPopup.title }}</h3>
+        <div class="form-group">
+          <textarea
+            v-model="remarkPopup.remark"
+            rows="6"
+            placeholder="暂无备注，可直接编辑..."
+            style="width:100%;padding:8px;border:1px solid var(--border-color,#ddd);border-radius:4px;font-size:13px;resize:vertical;background:var(--input-bg,#fff);color:var(--text-color,#333);"
+          ></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" @click="closeRemarkPopup">取消</button>
+          <button type="button" class="primary" @click="saveRemark">保存备注</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
 </div>
 </body>
 </html>
