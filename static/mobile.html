@@ -269,6 +269,7 @@
     .bm-favicon-placeholder { font-size: 18px; }
     .bm-info { flex: 1; min-width: 0; }
     .bm-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bm-title.full-title { white-space: normal; overflow: visible; text-overflow: unset; word-break: break-word; }
     .bm-url { font-size: 11px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
     .bm-remark-hint { font-size: 11px; color: var(--primary); margin-top: 1px; }
     .bm-more {
@@ -793,9 +794,11 @@
               <span v-else class="bm-favicon-placeholder">🔖</span>
             </div>
             <div class="bm-info">
-              <div class="bm-title">{{ item.title }}</div>
-              <div class="bm-url">{{ item.url }}</div>
+              <div class="bm-title" :class="{ 'full-title': config.showFullTitle }">{{ item.title }}</div>
+              <div class="bm-url" v-if="config.showUrlInList">{{ item.url }}</div>
               <div class="bm-remark-hint" v-if="item.remark">📝 {{ item.remark }}</div>
+              <div class="bm-url" v-if="config.showFolderPath && item.path" style="color: var(--text3); font-size: 10px;">📁 {{ item.path }}</div>
+              <div class="bm-url" v-if="config.showUpdatedAt && item.updated_at" style="color: var(--text3); font-size: 10px;">🕐 {{ new Date(item.updated_at).toLocaleString() }}</div>
             </div>
             <button class="bm-more" @click.stop="showBookmarkCtx(item.raw || item, $event)" v-if="!editMode">⋮</button>
           </div>
@@ -854,10 +857,11 @@
             <span v-else class="bm-favicon-placeholder">🔖</span>
           </div>
           <div class="bm-info">
-            <div class="bm-title">{{ item.title }}</div>
-            <div class="bm-url">{{ item.url }}</div>
+            <div class="bm-title" :class="{ 'full-title': config.showFullTitle }">{{ item.title }}</div>
+            <div class="bm-url" v-if="config.showUrlInList">{{ item.url }}</div>
             <div class="bm-remark-hint" v-if="item.remark">📝 {{ item.remark }}</div>
-            <div class="bm-url" v-if="item.path" style="color: var(--text3); font-size: 10px;">📁 {{ item.path }}</div>
+            <div class="bm-url" v-if="config.showFolderPath && item.path" style="color: var(--text3); font-size: 10px;">📁 {{ item.path }}</div>
+            <div class="bm-url" v-if="config.showUpdatedAt && item.updated_at" style="color: var(--text3); font-size: 10px;">🕐 {{ new Date(item.updated_at).toLocaleString() }}</div>
           </div>
           <button class="bm-more" @click.stop="showBookmarkCtx(item.raw || item, $event)" v-if="!editMode">⋮</button>
         </div>
@@ -925,6 +929,14 @@
       </div>
     </div>
   </transition>
+
+  <!-- Context Menu Backdrop -->
+  <div
+    v-if="ctxMenu.visible"
+    style="position:fixed;inset:0;z-index:199;"
+    @click="hideCtx"
+    @touchstart.passive="hideCtx"
+  ></div>
 
   <!-- Context Menu -->
   <transition name="fade">
@@ -1204,6 +1216,27 @@
           <div class="modal-body" style="padding:8px 12px">
             <div class="settings-list">
               <div class="settings-item">
+                <span class="settings-item-label">显示URL地址</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="config.showUrlInList" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-item">
+                <span class="settings-item-label">显示文件夹路径</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="config.showFolderPath" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-item">
+                <span class="settings-item-label">完整显示标题</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="config.showFullTitle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-item">
                 <span class="settings-item-label">显示更新时间</span>
                 <label class="toggle-switch">
                   <input type="checkbox" v-model="config.showUpdatedAt" />
@@ -1441,7 +1474,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Toast
         toast: { visible: false, message: '', type: 'success', timer: null },
         // Config
-        config: { showUpdatedAt: false, allowRegister: true },
+        config: { showUrlInList: true, showFolderPath: true, showFullTitle: false, showUpdatedAt: false, allowRegister: true },
         // Change password
         pwdModal: { visible: false, old: '', new1: '', new2: '', error: '', loading: false },
         // API Key
@@ -1474,17 +1507,18 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       // Bookmarks directly in current folder
       currentFolderBookmarks() {
+        const trail = this.breadcrumb.map(b => b.title);
         if (this.currentPath.length === 0) {
           // root: bookmarks directly under root
           return this.tree
             .filter(n => n.type === 'bookmark')
-            .map(n => this.normalizeBookmark(n));
+            .map(n => this.normalizeBookmark(n, trail));
         }
         const parent = this.findNodeById(this.currentPath[this.currentPath.length - 1], this.tree);
         if (!parent || !parent.children) return [];
         return parent.children
           .filter(n => n.type === 'bookmark')
-          .map(n => this.normalizeBookmark(n));
+          .map(n => this.normalizeBookmark(n, trail));
       },
       // All bookmarks for "all" tab
       displayBookmarks() {
@@ -2048,7 +2082,10 @@ document.addEventListener('DOMContentLoaded', () => {
           const r = await fetch('/api/config', { headers: { Authorization: this.token } });
           if (r.ok) {
             const d = await r.json();
-            this.config.showUpdatedAt = d.show_updated_at === 'true';
+            this.config.showUpdatedAt  = d.show_updated_at  === 'true';
+            this.config.showUrlInList  = d.show_url_in_list  !== undefined ? d.show_url_in_list  === 'true' : true;
+            this.config.showFolderPath = d.show_folder_path !== undefined ? d.show_folder_path === 'true' : true;
+            this.config.showFullTitle  = d.show_full_title  === 'true';
           }
         } catch {}
         try {
@@ -2061,10 +2098,18 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       async saveConfig() {
         try {
-          await fetch('/api/config', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
-            body: JSON.stringify({ key: 'show_updated_at', value: this.config.showUpdatedAt.toString() })
-          });
+          const configs = [
+            { key: 'show_url_in_list',  value: this.config.showUrlInList.toString()  },
+            { key: 'show_folder_path',  value: this.config.showFolderPath.toString()  },
+            { key: 'show_full_title',   value: this.config.showFullTitle.toString()   },
+            { key: 'show_updated_at',   value: this.config.showUpdatedAt.toString()   },
+          ];
+          for (const cfg of configs) {
+            await fetch('/api/config', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              body: JSON.stringify(cfg)
+            });
+          }
           if (this.currentUser?.is_admin) {
             await fetch('/api/config', {
               method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
