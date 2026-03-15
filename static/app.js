@@ -209,7 +209,14 @@ const app = createApp({
             title: "",
             url: "",
             favicon_url: "",
+            remark: "",
           },
+        },
+        remarkPopup: {
+          visible: false,
+          title: "",
+          remark: "",
+          nodeId: null,
         },
         metadataLoading: false,
         metadataError: "",
@@ -1580,6 +1587,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.modal.form.title = "";
       this.modal.form.url = "";
       this.modal.form.favicon_url = "";
+      this.modal.form.remark = "";
       this.metadataError = "";
     },
     openAddBookmark(parent = null) {
@@ -1591,6 +1599,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.modal.form.title = "";
       this.modal.form.url = "";
       this.modal.form.favicon_url = "";
+      this.modal.form.remark = "";
       this.metadataError = "";
       // 从列表顶部按钮调用时，确保不强制设置parentId
       // 这样用户可以先选择文件夹，再填写信息
@@ -1604,6 +1613,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.modal.form.title = node.title;
       this.modal.form.url = node.url || "";
       this.modal.form.favicon_url = node.favicon_url || "";
+      this.modal.form.remark = node.remark || "";
       this.metadataError = "";
     },
     async lookupMetadata() {
@@ -1695,6 +1705,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         title: this.modal.form.title.trim(),
         parent_id: this.modal.parentId,
         favicon_url: this.modal.form.favicon_url.trim() || undefined,
+        remark: this.modal.form.remark.trim(),
       };
       const res = await fetch("/api/bookmarks", {
         method: "POST",
@@ -1714,6 +1725,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async updateFolder() {
       const payload = {
         title: this.modal.form.title.trim(),
+        remark: this.modal.form.remark.trim(),
       };
       const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
         method: "PUT",
@@ -1738,6 +1750,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         title: this.modal.form.title.trim(),
         url: this.modal.form.url.trim(),
         parent_id: this.modal.parentId,
+        remark: this.modal.form.remark.trim(),
       };
       const favicon = this.modal.form.favicon_url.trim();
       if (favicon) {
@@ -1754,6 +1767,46 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "更新网址失败");
+      }
+    },
+    // 备注弹窗方法
+    showRemarkPopup(node, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      this.remarkPopup.visible = true;
+      this.remarkPopup.title = node.title || "";
+      this.remarkPopup.remark = node.remark || "";
+      this.remarkPopup.nodeId = node.id;
+    },
+    closeRemarkPopup() {
+      this.remarkPopup.visible = false;
+      this.remarkPopup.title = "";
+      this.remarkPopup.remark = "";
+      this.remarkPopup.nodeId = null;
+    },
+    async saveRemark() {
+      if (!this.remarkPopup.nodeId) return;
+      try {
+        const payload = { remark: this.remarkPopup.remark };
+        const res = await fetch(`/api/nodes/${this.remarkPopup.nodeId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": this.token,
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "保存备注失败");
+        }
+        await this.loadTree();
+        this.showToast("备注已保存", "success");
+        this.closeRemarkPopup();
+      } catch (error) {
+        this.showToast(error.message || "保存失败", "error");
       }
     },
     // 自定义确认对话框方法
@@ -2118,6 +2171,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             title: node.title,
             url: node.url,
             favicon_url: node.favicon_url,
+            remark: node.remark || "",
             path: trail.length > 0 ? trail.join(" / ") : "",
             updated_at: node.updated_at,
             raw: node,
