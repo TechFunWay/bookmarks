@@ -85,6 +85,7 @@ type node struct {
 	Title         string  `json:"title"`
 	URL           *string `json:"url,omitempty"`
 	FaviconURL    *string `json:"favicon_url,omitempty"`
+	Remark        string  `json:"remark,omitempty"`
 	Position      int     `json:"position"`
 	Children      []*node `json:"children,omitempty"`
 	BookmarkCount int     `json:"bookmark_count,omitempty"`
@@ -361,6 +362,7 @@ func initializeDB(db *sql.DB) error {
     title TEXT NOT NULL,
     url TEXT,
     favicon_url TEXT,
+    remark TEXT NOT NULL DEFAULT '',
     position INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -479,7 +481,7 @@ func (s *server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, errors.New("title is required"))
 		return
 	}
-	newNode, err := s.insertNode(r.Context(), userID, nodeTypeFolder, req.Title, req.ParentID, nil, nil)
+	newNode, err := s.insertNode(r.Context(), userID, nodeTypeFolder, req.Title, req.ParentID, nil, nil, "")
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) {
 			respondError(w, http.StatusBadRequest, err)
@@ -496,6 +498,7 @@ type createBookmarkRequest struct {
 	Title      *string `json:"title"`
 	ParentID   *int64  `json:"parent_id"`
 	FaviconURL *string `json:"favicon_url"`
+	Remark     string  `json:"remark"`
 }
 
 func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
@@ -548,7 +551,7 @@ func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
 		tmp := favicon
 		faviconPtr = &tmp
 	}
-	newNode, err := s.insertNode(r.Context(), userID, nodeTypeBookmark, title, req.ParentID, &urlCopy, faviconPtr)
+	newNode, err := s.insertNode(r.Context(), userID, nodeTypeBookmark, title, req.ParentID, &urlCopy, faviconPtr, req.Remark)
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) || errors.Is(err, ErrDuplicateBookmark) {
 			respondError(w, http.StatusBadRequest, err)
@@ -565,6 +568,7 @@ type updateNodeRequest struct {
 	URL        *string `json:"url"`
 	ParentID   *int64  `json:"parent_id"`
 	FaviconURL *string `json:"favicon_url"`
+	Remark     *string `json:"remark"`
 }
 
 func (s *server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
@@ -820,12 +824,15 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// remarkMap 仅在 replace 模式下有值，用于删除前保存 url→remark
+	var remarkMap map[string]string
+
 	if req.Mode == "replace" {
 		if req.ParentID != nil {
 			var folderTitle string
 			var folderPosition int
 			var folderParentID *int64
-			err := tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID).Scan(&folderTitle, &folderPosition, &folderParentID)
+			err = tx.QueryRowContext(r.Context(), "SELECT title, position, parent_id FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID).Scan(&folderTitle, &folderPosition, &folderParentID)
 			if err != nil {
 				respondError(w, http.StatusInternalServerError, err)
 				return
@@ -833,12 +840,16 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 
 			Debug("Replace模式：删除文件夹 ID=%d, 标题=%s", *req.ParentID, folderTitle)
 
+			// 删除前保存该子树下所有书签的 url→remark 映射
+			remarkMap = loadRemarkMapForSubtree(tx, r.Context(), *req.ParentID, userID)
+
 			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID); err != nil {
 				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
 
-			res, err := tx.ExecContext(r.Context(), `
+			var res sql.Result
+			res, err = tx.ExecContext(r.Context(), `
 				INSERT INTO nodes (parent_id, type, title, position, user_id)
 				VALUES (?, ?, ?, ?, ?)
 			`, folderParentID, nodeTypeFolder, folderTitle, folderPosition, userID)
@@ -847,16 +858,19 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			newFolderID, err := res.LastInsertId()
-			if err != nil {
+			newFolderID, err2 := res.LastInsertId()
+			if err2 != nil {
+				err = err2
 				respondError(w, http.StatusInternalServerError, err)
 				return
 			}
 
 			Debug("Replace模式：重新创建文件夹，新ID=%d", newFolderID)
-
 			req.ParentID = &newFolderID
 		} else {
+			// 全量替换：保存所有用户书签的 remark
+			remarkMap = loadRemarkMapForUser(tx, r.Context(), userID)
+
 			Debug("执行replace模式，删除所有数据")
 			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE user_id = ?", userID); err != nil {
 				respondError(w, http.StatusInternalServerError, err)
@@ -868,7 +882,7 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 	Debug("开始导入节点，parentID=%v, mode=%s", req.ParentID, req.Mode)
 	stats := &importStats{}
 	faviconQueue := []int64{}
-	if err = s.importNodes(tx, r.Context(), userID, req.Bookmarks, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
+	if err = s.importNodes(tx, r.Context(), userID, req.Bookmarks, req.ParentID, req.Mode, stats, true, &faviconQueue, remarkMap); err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -936,6 +950,9 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// remarkMap 仅在 replace 模式下有值
+	var remarkMap map[string]string
+
 	if req.Mode == "replace" {
 		if req.ParentID != nil {
 			var folderTitle string
@@ -949,6 +966,9 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 			}
 
 			Debug("Replace模式：删除文件夹 ID=%d, 标题=%s", *req.ParentID, folderTitle)
+
+			// 删除前保存该子树下所有书签的 url→remark 映射
+			remarkMap = loadRemarkMapForSubtree(tx, r.Context(), *req.ParentID, userID)
 
 			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID); err != nil {
 				Error("删除数据失败: %v", err)
@@ -977,6 +997,9 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 
 			req.ParentID = &newFolderID
 		} else {
+			// 全量替换：保存所有用户书签的 remark
+			remarkMap = loadRemarkMapForUser(tx, r.Context(), userID)
+
 			Debug("执行replace模式，删除所有数据")
 			if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE user_id = ?", userID); err != nil {
 				Error("删除数据失败: %v", err)
@@ -989,7 +1012,7 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 	stats := &importStats{}
 	Debug("开始导入节点，共%d个根节点，父文件夹ID=%v", len(nodes), req.ParentID)
 	faviconQueue := []int64{}
-	if err = s.importNodes(tx, r.Context(), userID, nodes, req.ParentID, req.Mode, stats, true, &faviconQueue); err != nil {
+	if err = s.importNodes(tx, r.Context(), userID, nodes, req.ParentID, req.Mode, stats, true, &faviconQueue, remarkMap); err != nil {
 		Error("导入节点失败: %v", err)
 		respondError(w, http.StatusInternalServerError, err)
 		return
@@ -1217,7 +1240,54 @@ func extractText(n *html.Node) string {
 	return strings.TrimSpace(text.String())
 }
 
-func (s *server) importNodes(tx *sql.Tx, ctx context.Context, userID int64, nodes []*node, parentID *int64, mode string, stats *importStats, fetchMetadata bool, faviconQueue *[]int64) error {
+// loadRemarkMapForUser 查询指定用户所有书签的 url→remark 映射（全量替换前调用）
+func loadRemarkMapForUser(tx *sql.Tx, ctx context.Context, userID int64) map[string]string {
+	m := make(map[string]string)
+	rows, err := tx.QueryContext(ctx,
+		"SELECT url, remark FROM nodes WHERE user_id = ? AND type = 'bookmark' AND remark != ''",
+		userID)
+	if err != nil {
+		return m
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var url, remark string
+		if rows.Scan(&url, &remark) == nil && url != "" {
+			m[url] = remark
+		}
+	}
+	return m
+}
+
+// loadRemarkMapForSubtree 递归查询指定子树下所有书签的 url→remark 映射（指定文件夹替换前调用）
+// SQLite 支持 WITH RECURSIVE，使用 CTE 递归遍历整棵子树
+func loadRemarkMapForSubtree(tx *sql.Tx, ctx context.Context, rootID int64, userID int64) map[string]string {
+	m := make(map[string]string)
+	rows, err := tx.QueryContext(ctx, `
+		WITH RECURSIVE subtree(id) AS (
+			SELECT id FROM nodes WHERE id = ? AND user_id = ?
+			UNION ALL
+			SELECT n.id FROM nodes n INNER JOIN subtree s ON n.parent_id = s.id WHERE n.user_id = ?
+		)
+		SELECT n.url, n.remark
+		FROM nodes n
+		INNER JOIN subtree s ON n.id = s.id
+		WHERE n.type = 'bookmark' AND n.remark != '' AND n.url IS NOT NULL
+	`, rootID, userID, userID)
+	if err != nil {
+		return m
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var url, remark string
+		if rows.Scan(&url, &remark) == nil && url != "" {
+			m[url] = remark
+		}
+	}
+	return m
+}
+
+func (s *server) importNodes(tx *sql.Tx, ctx context.Context, userID int64, nodes []*node, parentID *int64, mode string, stats *importStats, fetchMetadata bool, faviconQueue *[]int64, remarkMap map[string]string) error {
 	if parentID != nil {
 		var count int
 		var err error
@@ -1289,7 +1359,7 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, userID int64, node
 			}
 
 			if len(node.Children) > 0 {
-				if err = s.importNodes(tx, ctx, userID, node.Children, &newID, mode, stats, fetchMetadata, faviconQueue); err != nil {
+				if err = s.importNodes(tx, ctx, userID, node.Children, &newID, mode, stats, fetchMetadata, faviconQueue, remarkMap); err != nil {
 					return err
 				}
 			}
@@ -1324,10 +1394,18 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, userID int64, node
 					favicon = &tmp
 				}
 
+				// 从 remarkMap 里按 url 取回已有备注（replace 模式删除前保存）
+				remark := ""
+				if remarkMap != nil && node.URL != nil {
+					if r, ok := remarkMap[*node.URL]; ok {
+						remark = r
+					}
+				}
+
 				res, err := tx.ExecContext(ctx, `
-					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position, user_id)
-					VALUES (?, ?, ?, ?, ?, ?, ?)
-				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, pos, userID)
+					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position, user_id, remark)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, pos, userID, remark)
 				if err != nil {
 					return err
 				}
@@ -1356,7 +1434,7 @@ var (
 
 func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, parent_id, type, title, url, favicon_url, position, created_at, updated_at
+		SELECT id, parent_id, type, title, url, favicon_url, remark, position, created_at, updated_at
 		FROM nodes
 		WHERE user_id = ?
 		ORDER BY parent_id IS NOT NULL, parent_id, position, id
@@ -1373,6 +1451,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 		title      string
 		url        sql.NullString
 		faviconURL sql.NullString
+		remark     string
 		position   int
 		createdAt  string
 		updatedAt  string
@@ -1381,7 +1460,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	var rawNodes []rawNode
 	for rows.Next() {
 		var rn rawNode
-		if err := rows.Scan(&rn.id, &rn.parentID, &rn.nodeType, &rn.title, &rn.url, &rn.faviconURL, &rn.position, &rn.createdAt, &rn.updatedAt); err != nil {
+		if err := rows.Scan(&rn.id, &rn.parentID, &rn.nodeType, &rn.title, &rn.url, &rn.faviconURL, &rn.remark, &rn.position, &rn.createdAt, &rn.updatedAt); err != nil {
 			return nil, err
 		}
 		rawNodes = append(rawNodes, rn)
@@ -1399,6 +1478,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 			ID:        rn.id,
 			Type:      rn.nodeType,
 			Title:     rn.title,
+			Remark:    rn.remark,
 			Position:  rn.position,
 			CreatedAt: rn.createdAt,
 			UpdatedAt: rn.updatedAt,
@@ -1494,7 +1574,7 @@ func sortNodes(nodes []*node) {
 	}
 }
 
-func (s *server) insertNode(ctx context.Context, userID int64, nType, title string, parentID *int64, url, favicon *string) (*node, error) {
+func (s *server) insertNode(ctx context.Context, userID int64, nType, title string, parentID *int64, url, favicon *string, remark string) (*node, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -1545,9 +1625,9 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 	}
 
 	res, execErr := tx.ExecContext(ctx, `
-		INSERT INTO nodes (parent_id, type, title, url, favicon_url, position, user_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, parentID, nType, title, url, favicon, nextPos, userID)
+		INSERT INTO nodes (parent_id, type, title, url, favicon_url, remark, position, user_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, parentID, nType, title, url, favicon, remark, nextPos, userID)
 	if execErr != nil {
 		err = execErr
 		return nil, err
@@ -1567,6 +1647,7 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 		ID:       newID,
 		Type:     nType,
 		Title:    title,
+		Remark:   remark,
 		Position: nextPos,
 	}
 	if parentID != nil {
@@ -1601,9 +1682,10 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		Title    string
 		URL      sql.NullString
 		Favicon  sql.NullString
+		Remark   string
 	}
-	err = tx.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
-		&current.Type, &current.ParentID, &current.Title, &current.URL, &current.Favicon,
+	err = tx.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url, remark FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
+		&current.Type, &current.ParentID, &current.Title, &current.URL, &current.Favicon, &current.Remark,
 	)
 	if err != nil {
 		return err
@@ -1658,6 +1740,9 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		targetFavicon = current.Favicon.String
 	}
 	faviconSet := false
+
+	targetRemark := current.Remark
+	remarkSet := false
 
 	parentSet := false
 
@@ -1714,6 +1799,11 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		faviconSet = true
 	}
 
+	if req.Remark != nil {
+		targetRemark = *req.Remark
+		remarkSet = true
+	}
+
 	if req.ParentID != nil {
 		newParent := *req.ParentID
 		parentIDValue = newParent
@@ -1721,7 +1811,7 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		parentSet = true
 	}
 
-	if !titleSet && !urlSet && !faviconSet && !parentSet {
+	if !titleSet && !urlSet && !faviconSet && !parentSet && !remarkSet {
 		return ErrInvalidUpdate
 	}
 
@@ -1774,6 +1864,11 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		} else {
 			args = append(args, nil)
 		}
+	}
+
+	if remarkSet {
+		fields = append(fields, "remark = ?")
+		args = append(args, targetRemark)
 	}
 
 	args = append(args, id)
@@ -1910,9 +2005,9 @@ func (s *server) getNode(ctx context.Context, userID int64, id int64) (*node, er
 	var urlVal sql.NullString
 	var icon sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, parent_id, type, title, url, favicon_url, position, created_at, updated_at
+		SELECT id, parent_id, type, title, url, favicon_url, remark, position, created_at, updated_at
 		FROM nodes WHERE id = ? AND user_id = ?
-	`, id, userID).Scan(&n.ID, &parent, &n.Type, &n.Title, &urlVal, &icon, &n.Position, &n.CreatedAt, &n.UpdatedAt)
+	`, id, userID).Scan(&n.ID, &parent, &n.Type, &n.Title, &urlVal, &icon, &n.Remark, &n.Position, &n.CreatedAt, &n.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -3034,14 +3129,22 @@ func (s *server) tokenAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// 先查用户是否存在（不管 is_active 状态）
 		var userID int64
-		err := s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
+		var isActive int
+		err := s.db.QueryRow("SELECT id, is_active FROM users WHERE token = ?", token).Scan(&userID, &isActive)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				respondError(w, http.StatusUnauthorized, errors.New("无效的token"))
+				// token 对应的用户根本不存在（已被删除）
+				respondError(w, http.StatusUnauthorized, errors.New("账号不存在，请重新登录"))
 				return
 			}
 			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if isActive == 0 {
+			// 用户存在但被禁用
+			respondError(w, http.StatusForbidden, errors.New("账号已被禁用，请联系管理员"))
 			return
 		}
 

@@ -87,7 +87,8 @@ async function loadConfig() {
           : `手动同步，${getSyncModeText(config.syncMode)}`;
 
       // ---- 应用→浏览器（A→E）----
-      if (config.enableAppToEdgeSync) {
+      // 只要配置了浏览器目标目录就显示区块和手动同步按钮，enableAppToEdgeSync 仅控制自动同步
+      if (config.appToEdgeTargetFolderId) {
         elements.a2eDirectionSection.style.display = 'block';
         elements.syncFromAppButton.style.display = 'inline-block';
         elements.a2eSyncStatusItem.style.display = 'flex';
@@ -97,24 +98,20 @@ async function loadConfig() {
         const tgtPart = config.appToEdgeTargetFolderName || '未选择目标目录';
 
         // A→E 方向展示块
-        elements.dirA2ESource.textContent  = srcPart;
-        elements.dirA2ETarget.textContent  = tgtPart;
+        elements.dirA2ESource.textContent   = srcPart;
+        elements.dirA2ETarget.textContent   = tgtPart;
         elements.dirA2ESyncMode.textContent = getSyncModeText(config.appToEdgeSyncMode);
 
-        // A→E 标题：「应用 → 浏览器（自动同步 · 每 5 分钟）」或「（手动同步）」
+        // A→E 标题：是否开启自动同步由 enableAppToEdgeSync 决定
         const a2eAutoText = config.enableAppToEdgeSync
-          ? (config.appToEdgeSyncInterval
-              ? `自动同步 · 每 ${formatSyncInterval(config.appToEdgeSyncInterval)}`
-              : '自动同步')
+          ? `自动同步 · 每 ${formatSyncInterval(config.appToEdgeSyncInterval || 5)}`
           : '手动同步';
         elements.a2eDirectionTitle.textContent = `应用 → 浏览器（${a2eAutoText}）`;
 
         // A→E 配置信息行
-        const a2eIntervalText = config.appToEdgeSyncInterval
-          ? `每 ${formatSyncInterval(config.appToEdgeSyncInterval)}，`
-          : '';
-        elements.a2eSyncStatusText.textContent =
-          `自动同步，${a2eIntervalText}${getSyncModeText(config.appToEdgeSyncMode)}`;
+        elements.a2eSyncStatusText.textContent = config.enableAppToEdgeSync
+          ? `自动同步，每 ${formatSyncInterval(config.appToEdgeSyncInterval || 5)}，${getSyncModeText(config.appToEdgeSyncMode)}`
+          : `手动同步，${getSyncModeText(config.appToEdgeSyncMode)}`;
       } else {
         elements.a2eDirectionSection.style.display = 'none';
         elements.syncFromAppButton.style.display = 'none';
