@@ -119,7 +119,7 @@ compile_platform() {
 
     # 创建目标目录
     TARGET_DIR="release/bookmarks-v${VERSION}-${PLATFORM}"
-    mkdir -p "$TARGET_DIR/static"
+    mkdir -p "$TARGET_DIR"
 
     # 编译可执行文件
     echo "   📝 执行编译..."
@@ -138,50 +138,7 @@ compile_platform() {
         return 1
     fi
 
-    # 复制静态资源（不复制 icons 目录）
-    if [ -d "static" ]; then
-        echo "   📁 复制静态资源..."
-
-        # 创建临时文件列表
-        TMP_FILE=$(mktemp)
-
-        # 找到所有需要复制的文件（排除 icons 目录）
-        find static -type f -not -path "*/icons/*" -not -name ".*" > "$TMP_FILE"
-
-        # 复制文件
-        while IFS= read -r file; do
-            if [ -f "$file" ]; then
-                REL_PATH="${file#static/}"
-                DEST_FILE="$TARGET_DIR/static/$REL_PATH"
-                DEST_DIR=$(dirname "$DEST_FILE")
-                mkdir -p "$DEST_DIR"
-                cp "$file" "$DEST_FILE"
-            fi
-        done < "$TMP_FILE"
-
-        # 清理临时文件
-        rm -f "$TMP_FILE"
-    fi
-
-    # 复制 LICENSE 文件
-    if [ -f "LICENSE" ]; then
-        cp LICENSE "$TARGET_DIR/"
-    fi
-
-    # 复制 README 文件
-    if [ -f "README.md" ]; then
-        cp README.md "$TARGET_DIR/"
-    fi
-
-    # 复制 docker-compose.yaml
-    if [ -f "docker-compose.yaml" ]; then
-        cp docker-compose.yaml "$TARGET_DIR/"
-    fi
-
-    # 复制 Dockerfile
-    if [ -f "Dockerfile" ]; then
-        cp Dockerfile "$TARGET_DIR/"
-    fi
+    # 注意：静态资源已通过 embed 嵌入到程序中，无需复制
 
     # 编译密码重置工具
     echo "   📝 编译密码重置工具..."
