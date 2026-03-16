@@ -23,6 +23,36 @@ VERSION=${VERSION#v}
 echo "📦 版本号: $VERSION"
 echo ""
 
+# 打包浏览器插件
+if [ -d "edge-extension" ]; then
+    echo "========================================="
+    echo "  打包浏览器插件"
+    echo "========================================="
+    mkdir -p static/downloads
+    rm -f static/downloads/edge-extension.zip
+
+    cd edge-extension
+    zip -r ../static/downloads/edge-extension.zip \
+        manifest.json \
+        background.js \
+        popup.html \
+        popup.js \
+        options.html \
+        options.js \
+        sync-window.html \
+        sync-window.js \
+        icons/
+    cd ..
+
+    if [ $? -eq 0 ]; then
+        echo "✅ 插件打包完成: static/downloads/edge-extension.zip"
+    else
+        echo "❌ 插件打包失败"
+        exit 1
+    fi
+    echo ""
+fi
+
 # 定义平台列表（默认编译所有平台）
 ALL_PLATFORMS=(
     "linux-amd64"
@@ -158,6 +188,31 @@ compile_platform() {
     echo "   📂 输出目录: $TARGET_DIR"
     ((SUCCESS_COUNT++))
 }
+
+# 创建压缩包
+echo "========================================="
+echo "  创建压缩包"
+echo "========================================="
+echo ""
+
+cd release
+for PLATFORM in "${PLATFORMS[@]}"; do
+    TAR_NAME="bookmarks-v${VERSION}-${PLATFORM}.tar.gz"
+    DIR_NAME="bookmarks-v${VERSION}-${PLATFORM}"
+
+    if [ -d "$DIR_NAME" ]; then
+        echo "📦 创建压缩包: $TAR_NAME"
+        tar -czf "$TAR_NAME" "$DIR_NAME"
+        if [ $? -eq 0 ]; then
+            echo "   ✅ 压缩包创建成功"
+        else
+            echo "   ❌ 压缩包创建失败"
+        fi
+    fi
+done
+cd ..
+
+echo ""
 
 # 编译每个平台
 for PLATFORM in "${PLATFORMS[@]}"; do
