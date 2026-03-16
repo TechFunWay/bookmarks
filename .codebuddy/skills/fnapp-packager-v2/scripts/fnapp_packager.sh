@@ -25,7 +25,7 @@ echo "📦 版本号: $VERSION"
 echo ""
 
 # 定义平台列表
-ALL_PLATFORMS=("amd64" "arm64")
+ALL_PLATFORMS=("arm64" "amd64")
 
 # 解析命令行参数
 NON_INTERACTIVE=false
@@ -142,6 +142,16 @@ package_platform() {
     echo "📝 复制可执行文件..."
     cp "$PLATFORM_DIR/bookmarks" "$TARGET_DIR/"
     chmod +x "$TARGET_DIR/bookmarks"
+
+    # 复制密码重置工具（如果存在）
+    if [ -f "$PLATFORM_DIR/reset-password" ]; then
+        echo "📝 复制密码重置工具..."
+        cp "$PLATFORM_DIR/reset-password" "$TARGET_DIR/"
+        chmod +x "$TARGET_DIR/reset-password"
+        echo "   ✅ 密码重置工具已包含"
+    else
+        echo "⚠️  密码重置工具不存在（可选）"
+    fi
 
     # 检查 manifest 文件
     MANIFEST_FILE="techfunway.bookmarks/manifest"

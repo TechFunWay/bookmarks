@@ -123,7 +123,14 @@ compile_platform() {
 
     # 编译可执行文件
     echo "   📝 执行编译..."
-    if CGO_ENABLED=1 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/$OUTPUT_NAME" main.go; then
+    # Linux 平台使用静态编译，macOS 和 Windows 使用 CGO
+    if [[ "$GOOS" == "linux" ]]; then
+        CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/$OUTPUT_NAME" main.go
+    else
+        CGO_ENABLED=1 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/$OUTPUT_NAME" main.go
+    fi
+
+    if [ $? -eq 0 ]; then
         echo "   ✅ 编译成功"
     else
         echo "   ❌ 编译失败"
@@ -174,6 +181,20 @@ compile_platform() {
     # 复制 Dockerfile
     if [ -f "Dockerfile" ]; then
         cp Dockerfile "$TARGET_DIR/"
+    fi
+
+    # 编译密码重置工具
+    echo "   📝 编译密码重置工具..."
+    if [[ "$GOOS" == "linux" ]]; then
+        CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/reset-password$EXT" cmd/reset-password.go
+    else
+        CGO_ENABLED=1 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/reset-password$EXT" cmd/reset-password.go
+    fi
+
+    if [ $? -eq 0 ]; then
+        echo "   ✅ 密码重置工具编译成功"
+    else
+        echo "   ⚠️  密码重置工具编译失败（可选）"
     fi
 
     echo "   ✅ 资源复制完成"

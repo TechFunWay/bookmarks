@@ -3,7 +3,9 @@ FROM scratch
 WORKDIR /app
 
 ARG TARGETARCH
-COPY release/bookmarks-v1.9.0-linux-${TARGETARCH}/bookmarks /app/bookmarks
+ARG VERSION
+COPY release/bookmarks-${VERSION}-linux-${TARGETARCH}/bookmarks /app/bookmarks
+COPY release/bookmarks-${VERSION}-linux-${TARGETARCH}/reset-password /app/reset-password
 
 EXPOSE 8901
 
