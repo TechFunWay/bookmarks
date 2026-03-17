@@ -288,6 +288,7 @@ func main() {
 		r.Post("/bookmarks", s.tokenAuthMiddleware(s.handleCreateBookmark))
 		r.Put("/nodes/{id}", s.tokenAuthMiddleware(s.handleUpdateNode))
 		r.Delete("/nodes/{id}", s.tokenAuthMiddleware(s.handleDeleteNode))
+		r.Delete("/bookmarks/{id}", s.tokenAuthMiddleware(s.handleDeleteNode))
 		r.Post("/nodes/batch-delete", s.tokenAuthMiddleware(s.handleBatchDeleteNodes))
 		r.Post("/nodes/reorder", s.tokenAuthMiddleware(s.handleReorderNodes))
 		r.Post("/import", s.tokenAuthMiddleware(s.handleImport))
@@ -295,6 +296,7 @@ func main() {
 		r.Get("/config/system", s.handleGetSystemConfig)
 		r.Get("/config", s.tokenAuthMiddleware(s.handleGetConfig))
 		r.Post("/config", s.tokenAuthMiddleware(s.handleUpdateConfig))
+		r.Get("/check-duplicates", s.tokenAuthMiddleware(s.handleCheckDuplicates))
 	})
 
 	// 浏览器书签同步接口（使用 API Key 认证）
@@ -687,6 +689,7 @@ func (s *server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
 		"status":    "deleted",
 		"folders":   folders,
 		"bookmarks": bookmarks,
@@ -2466,6 +2469,120 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"version": appVersion})
 }
+
+// handleCheckDuplicates 检查重复书签
+func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	// 查询所有书签
+	rows, err := s.db.Query(`
+		SELECT b.id, b.title, b.url, b.parent_id, b.position
+		FROM nodes b
+		WHERE b.user_id = ? AND b.type = 'bookmark'
+		ORDER BY b.url, b.id
+	`, userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+
+	type bookmarkInfo struct {
+		ID       int64  `json:"id"`
+		Title    string `json:"title"`
+		URL      string `json:"url"`
+		ParentID int64  `json:"parent_id"`
+		Position int    `json:"position"`
+		Path     string `json:"path"`
+	}
+
+	// 按URL分组
+	urlBookmarks := make(map[string][]bookmarkInfo)
+	for rows.Next() {
+		var b bookmarkInfo
+		if err := rows.Scan(&b.ID, &b.Title, &b.URL, &b.ParentID, &b.Position); err != nil {
+			continue
+		}
+		urlBookmarks[b.URL] = append(urlBookmarks[b.URL], b)
+	}
+
+	// 查找重复的URL（数量大于1）
+	var duplicates []struct {
+		URL       string         `json:"url"`
+		Bookmarks []bookmarkInfo `json:"bookmarks"`
+	}
+
+	totalBookmarks := 0
+	duplicateBookmarksCount := 0
+
+	for url, bookmarks := range urlBookmarks {
+		totalBookmarks += len(bookmarks)
+
+		if len(bookmarks) > 1 {
+			// 为每个书签构建路径
+			for i := range bookmarks {
+				path, err := s.buildBookmarkPath(bookmarks[i].ParentID, userID)
+				if err != nil {
+					path = ""
+				}
+				bookmarks[i].Path = path
+			}
+
+			duplicates = append(duplicates, struct {
+				URL       string         `json:"url"`
+				Bookmarks []bookmarkInfo `json:"bookmarks"`
+			}{
+				URL:       url,
+				Bookmarks: bookmarks,
+			})
+			duplicateBookmarksCount += len(bookmarks)
+		}
+	}
+
+	// 按重复个数从大到小排序
+	sort.Slice(duplicates, func(i, j int) bool {
+		return len(duplicates[i].Bookmarks) > len(duplicates[j].Bookmarks)
+	})
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"duplicates":            duplicates,
+			"totalBookmarks":        totalBookmarks,
+			"duplicateCount":        len(duplicates),
+			"duplicateBookmarksCount": duplicateBookmarksCount,
+		},
+	})
+}
+
+// buildBookmarkPath 构建书签路径
+func (s *server) buildBookmarkPath(parentID int64, userID int64) (string, error) {
+	if parentID == 0 {
+		return "/", nil
+	}
+
+	var pathParts []string
+	currentID := parentID
+
+	for currentID != 0 {
+		var name string
+		var pid int64
+		err := s.db.QueryRow("SELECT title, parent_id FROM nodes WHERE id = ? AND user_id = ?", currentID, userID).Scan(&name, &pid)
+		if err != nil {
+			break
+		}
+
+		pathParts = append([]string{name}, pathParts...)
+		currentID = pid
+	}
+
+	if len(pathParts) == 0 {
+		return "/", nil
+	}
+
+	return "/" + strings.Join(pathParts, "/"), nil
+}
+
 
 type userListResponse struct {
 	Users []user `json:"users"`

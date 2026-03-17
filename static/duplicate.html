@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>去重复 - 网址收藏夹</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/js/md5.js"></script>
+  <script src="/vue.global.prod.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body style="background: url(/img/background.jpg); background-size: cover;">
+<div id="app" v-cloak>
+  <!-- 加载提示 -->
+  <transition name="fade">
+    <div v-if="loading" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">正在加载数据...</div>
+    </div>
+  </transition>
+
+  <header class="app-header">
+    <h1>去重复<span class="subtitle-artistic">每天都很哇塞</span></h1>
+    <div class="header-actions">
+      <button class="primary" @click="startDuplicateCheck" :disabled="checking">
+        <span v-if="!checking">🔍</span>
+        <span v-else>⏳</span>
+        <span>{{ checking ? '检查中...' : '开始检查' }}</span>
+      </button>
+      <button class="tertiary" @click="goBack">
+        <span>🔙</span>
+        <span>返回</span>
+      </button>
+      <div class="theme-toggle">
+        <span class="theme-toggle-icon moon-icon">🌙</span>
+        <div class="theme-toggle-btn" @click="toggleTheme"></div>
+        <span class="theme-toggle-icon sun-icon">☀️</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="duplicate-container">
+      <!-- 统计信息 -->
+      <div class="duplicate-stats" v-if="duplicates.length > 0 || checkCompleted">
+        <div class="stat-item">
+          <div class="stat-label">总书签数</div>
+          <div class="stat-value">{{ totalBookmarks }}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">重复网址数</div>
+          <div class="stat-value highlight">{{ duplicateCount }}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">重复书签数</div>
+          <div class="stat-value highlight">{{ duplicateBookmarksCount }}</div>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div class="empty-state" v-if="!checking && !checkCompleted">
+        <div class="empty-icon">🔍</div>
+        <h3>开始检查重复书签</h3>
+        <p>点击上方"开始检查"按钮，系统将根据网址查找重复的书签</p>
+      </div>
+
+      <!-- 无重复 -->
+      <div class="empty-state" v-if="!checking && checkCompleted && duplicates.length === 0">
+        <div class="empty-icon">✅</div>
+        <h3>没有发现重复书签</h3>
+        <p>您的书签库很干净，没有重复的网址</p>
+      </div>
+
+      <!-- 重复列表 -->
+      <div class="duplicate-list" v-if="duplicates.length > 0">
+        <div class="duplicate-item" v-for="(group, index) in duplicates" :key="index">
+          <div class="duplicate-header">
+            <div class="duplicate-url">
+              <span class="url-label">网址:</span>
+              <a :href="group.url" target="_blank" class="url-link">{{ group.url }}</a>
+            </div>
+            <div class="duplicate-count">
+              <span class="count-badge">{{ group.bookmarks.length }}个重复</span>
+            </div>
+          </div>
+          <div class="duplicate-bookmarks">
+            <div class="bookmark-row" v-for="(bookmark, bIndex) in group.bookmarks" :key="bookmark.id">
+              <div class="bookmark-info">
+                <div class="bookmark-title">{{ bookmark.title }}</div>
+                <div class="bookmark-meta">
+                  <span class="meta-item">📁 {{ bookmark.path }}</span>
+                  <span class="meta-item">🆔 {{ bookmark.id }}</span>
+                </div>
+              </div>
+              <button class="danger small" @click="deleteBookmark(bookmark.id, index, bIndex)" :disabled="bookmark.deleting">
+                <span v-if="!bookmark.deleting">🗑️</span>
+                <span v-else>⏳</span>
+                <span>{{ bookmark.deleting ? '删除中' : '删除' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 确认删除对话框 -->
+  <transition name="fade">
+    <div v-if="showDeleteConfirm" class="modal-overlay" @click="closeDeleteConfirm">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <h3>确认删除</h3>
+          <button class="modal-close" @click="closeDeleteConfirm">✕</button>
+        </div>
+        <div class="modal-body">
+          <p>确定要删除这个书签吗？</p>
+          <p class="bookmark-preview">标题: {{ deletingBookmark?.title }}</p>
+          <p class="bookmark-preview">网址: {{ deletingBookmark?.url }}</p>
+          <p class="bookmark-preview">路径: {{ deletingBookmark?.path }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="tertiary" @click="closeDeleteConfirm">取消</button>
+          <button class="danger" @click="confirmDelete">确认删除</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Toast 提示 -->
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type === 'error'" class="toast-overlay" @click="dismissToast"></div>
+  </transition>
+
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type !== 'error'" :class="['toast', toast.type]" @click="dismissToast">
+      {{ toast.message }}
+    </div>
+  </transition>
+
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type === 'error'" :class="['toast', 'error']" @click="dismissToast">
+      <div class="toast-error-header">
+        <span class="toast-error-icon">⚠️</span>
+        <span class="toast-error-msg">{{ toast.message }}</span>
+      </div>
+      <button class="toast-error-close" @click.stop="dismissToast">知道了</button>
+    </div>
+  </transition>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      token: localStorage.getItem('token') || null,
+      loading: false,
+      checking: false,
+      checkCompleted: false,
+      duplicates: [],
+      totalBookmarks: 0,
+      duplicateCount: 0,
+      duplicateBookmarksCount: 0,
+      showDeleteConfirm: false,
+      deletingBookmark: null,
+      deleteCallback: null,
+      toast: {
+        visible: false,
+        message: "",
+        type: "success",
+        timer: null,
+      }
+    };
+  },
+  methods: {
+    checkAuth() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/login.html';
+        return false;
+      }
+      this.token = token;
+      return true;
+    },
+    goBack() {
+      window.location.href = '/';
+    },
+
+    toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    },
+
+    async startDuplicateCheck() {
+      this.checking = true;
+      this.checkCompleted = false;
+      this.duplicates = [];
+
+      try {
+        const response = await fetch('/api/check-duplicates', {
+          headers: {
+            'Authorization': this.token
+          }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          this.duplicates = data.data.duplicates;
+          this.totalBookmarks = data.data.totalBookmarks;
+          this.duplicateCount = data.data.duplicateCount;
+          this.duplicateBookmarksCount = data.data.duplicateBookmarksCount;
+          this.checkCompleted = true;
+          if (this.duplicates.length > 0) {
+            this.showToast(`发现 ${this.duplicateCount} 个重复网址`, 'warning');
+          } else {
+            this.showToast('没有发现重复书签', 'success');
+          }
+        } else {
+          this.showToast('检查失败: ' + (data.message || '未知错误'), 'error');
+        }
+      } catch (error) {
+        console.error('检查重复失败:', error);
+        this.showToast('检查失败，请重试', 'error');
+      } finally {
+        this.checking = false;
+      }
+    },
+
+    deleteBookmark(id, groupIndex, bookmarkIndex) {
+      const bookmark = this.duplicates[groupIndex].bookmarks[bookmarkIndex];
+      this.deletingBookmark = bookmark;
+      this.showDeleteConfirm = true;
+      this.deleteCallback = async () => {
+        try {
+          bookmark.deleting = true;
+          const response = await fetch(`/api/bookmarks/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': this.token
+            }
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            // 从列表中移除
+            this.duplicates[groupIndex].bookmarks.splice(bookmarkIndex, 1);
+
+            // 如果该组没有书签了，移除整个组
+            if (this.duplicates[groupIndex].bookmarks.length <= 1) {
+              this.duplicates.splice(groupIndex, 1);
+              this.duplicateCount--;
+            }
+
+            this.duplicateBookmarksCount--;
+            this.totalBookmarks--;
+            this.showToast('删除成功', 'success');
+          } else {
+            this.showToast('删除失败: ' + (data.message || '未知错误'), 'error');
+            bookmark.deleting = false;
+          }
+        } catch (error) {
+          console.error('删除书签失败:', error);
+          this.showToast('删除失败，请重试', 'error');
+          bookmark.deleting = false;
+        }
+      };
+    },
+
+    closeDeleteConfirm() {
+      this.showDeleteConfirm = false;
+      this.deletingBookmark = null;
+      this.deleteCallback = null;
+    },
+
+    confirmDelete() {
+      if (this.deleteCallback) {
+        this.deleteCallback();
+        this.closeDeleteConfirm();
+      }
+    },
+
+    showToast(message, type = 'success') {
+      if (this.toast.timer) {
+        clearTimeout(this.toast.timer);
+        this.toast.timer = null;
+      }
+
+      this.toast.visible = true;
+      this.toast.message = message;
+      this.toast.type = type;
+
+      if (type === 'error') return;
+
+      const duration = type === 'warning' ? 3500 : 2200;
+      this.toast.timer = setTimeout(() => {
+        this.toast.visible = false;
+        this.toast.timer = null;
+      }, duration);
+    },
+
+    dismissToast() {
+      if (this.toast.timer) {
+        clearTimeout(this.toast.timer);
+        this.toast.timer = null;
+      }
+      this.toast.visible = false;
+    }
+  },
+  mounted() {
+    // 检查认证
+    this.checkAuth();
+
+    // 恢复主题
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+  }
+}).mount('#app');
+</script>
+
+<style>
+.duplicate-container {
+  width: 100%;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.app-main {
+  width: 100%;
+  max-width: 100%;
+  display: block !important;
+  grid-template-columns: 1fr !important;
+  gap: 0 !important;
+  height: auto !important;
+}
+
+.duplicate-item {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.duplicate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.duplicate-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-item {
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1.5rem;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #333;
+}
+
+.stat-value.highlight {
+  color: #ff4757;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.empty-state p {
+  color: #666;
+}
+
+.duplicate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.duplicate-item {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.duplicate-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.duplicate-url {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.url-label {
+  font-weight: bold;
+  color: #666;
+  white-space: nowrap;
+}
+
+.url-link {
+  color: #2196f3;
+  text-decoration: none;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.url-link:hover {
+  text-decoration: underline;
+}
+
+.count-badge {
+  background: #ff4757;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.duplicate-bookmarks {
+  display: flex;
+  flex-direction: column;
+}
+
+.bookmark-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.bookmark-row:last-child {
+  border-bottom: none;
+}
+
+.bookmark-info {
+  flex: 1;
+  min-width: 0;
+  padding-right: 1rem;
+}
+
+.bookmark-title {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 0.5rem;
+  word-break: break-all;
+}
+
+.bookmark-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  max-width: 380px;
+  width: auto;
+  min-width: 320px;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid #e9ecef;
+  flex-shrink: 0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+
+.modal-close:hover {
+  background: #f0f0f0;
+}
+
+.modal-body {
+  padding: 1rem;
+  overflow: visible;
+}
+
+.bookmark-preview {
+  margin: 0.4rem 0;
+  padding: 0.6rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #333;
+  word-break: break-all;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-top: 1px solid #e9ecef;
+  flex-shrink: 0;
+}
+
+/* 深色主题 */
+[data-theme="dark"] .stat-item,
+[data-theme="dark"] .duplicate-item,
+[data-theme="dark"] .modal {
+  background: rgba(40, 40, 40, 0.95);
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .stat-label,
+[data-theme="dark"] .empty-state p,
+[data-theme="dark"] .bookmark-meta {
+  color: #aaa;
+}
+
+[data-theme="dark"] .stat-value {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .empty-state h3,
+[data-theme="dark"] .bookmark-title {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .duplicate-header {
+  background: #2d2d2d;
+  border-bottom-color: #404040;
+}
+
+[data-theme="dark"] .url-label {
+  color: #aaa;
+}
+
+[data-theme="dark"] .bookmark-row {
+  border-bottom-color: #404040;
+}
+
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer {
+  border-color: #404040;
+}
+
+[data-theme="dark"] .bookmark-preview {
+  background: #2d2d2d;
+}
+
+/* 滚动条样式 */
+.duplicate-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.duplicate-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.duplicate-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.duplicate-list::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+[data-theme="dark"] .duplicate-list::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+[data-theme="dark"] .duplicate-list::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+}
+
+[data-theme="dark"] .duplicate-list::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+
+@media (max-width: 768px) {
+  .duplicate-container {
+    padding: 1rem;
+  }
+
+  .duplicate-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .duplicate-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .bookmark-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .bookmark-info {
+    padding-right: 0;
+    width: 100%;
+  }
+}
+
+/* Toast 提示 - 使用与pc.html统一的样式 */
+.toast {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px var(--shadow-lg), 0 0 30px var(--glow);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  z-index: 2000;
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  min-width: 300px;
+  max-width: 400px;
+  word-wrap: break-word;
+  cursor: pointer;
+}
+
+.toast.success {
+  background: linear-gradient(45deg, #10b981, #34d399);
+  box-shadow: 0 16px 40px rgba(16, 185, 129, 0.4);
+  animation: pulse 2s infinite;
+}
+
+.toast.warning {
+  background: linear-gradient(45deg, #f59e0b, #fbbf24);
+  box-shadow: 0 16px 40px rgba(245, 158, 11, 0.4);
+  animation: pulse 1.5s infinite;
+}
+
+.toast.error {
+  background: linear-gradient(135deg, #c0392b, #e74c3c);
+  box-shadow: 0 24px 60px rgba(192, 57, 43, 0.55);
+  border-color: rgba(255, 255, 255, 0.25);
+  animation: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px 28px 20px;
+  min-width: 320px;
+  max-width: 480px;
+}
+
+.toast .toast-icon {
+  font-size: 20px;
+}
+
+.toast .toast-message {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.toast .toast-close {
+  display: none;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Toast 遮罩层 - 仅 error 类型使用 */
+.toast-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1999;
+}
+
+.toast .toast-error-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.toast .toast-error-icon {
+  font-size: 22px;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.toast .toast-error-msg {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.toast .toast-error-close {
+  display: block;
+  width: 100%;
+  padding: 9px 0;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s;
+  letter-spacing: 0.5px;
+}
+
+.toast .toast-error-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+}
+
+/* 深色主题下的 Toast 不需要修改，因为使用了渐变背景 */
+
+
+[data-theme="dark"] .toast-close:hover {
+  color: #e0e0e0;
+}
+</style>
+</body>
+</html>
