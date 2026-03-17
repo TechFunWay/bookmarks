@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>去重复 - 网址收藏夹</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/vue.global.prod.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+    }
+
+    [data-theme="dark"] body {
+      background: #1a1a1a;
+    }
+
+    .mobile-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mobile-header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .header-bg-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      font-size: 1.25rem;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .header-bg-btn:active {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .mobile-content {
+      padding: 1rem;
+      min-height: calc(100vh - 120px);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .stat-box {
+      background: white;
+      border-radius: 12px;
+      padding: 1rem 0.5rem;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    [data-theme="dark"] .stat-box {
+      background: #2d2d2d;
+      color: #e0e0e0;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: #666;
+      margin-bottom: 0.25rem;
+    }
+
+    [data-theme="dark"] .stat-label {
+      color: #aaa;
+    }
+
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: #333;
+    }
+
+    [data-theme="dark"] .stat-value {
+      color: #e0e0e0;
+    }
+
+    .stat-value.highlight {
+      color: #ff4757;
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 0.75rem;
+    }
+
+    .action-btn.primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .action-btn.primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .action-btn.secondary {
+      background: white;
+      color: #333;
+      border: 2px solid #e0e0e0;
+    }
+
+    [data-theme="dark"] .action-btn.secondary {
+      background: #2d2d2d;
+      color: #e0e0e0;
+      border-color: #404040;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #666;
+    }
+
+    [data-theme="dark"] .empty-state {
+      color: #aaa;
+    }
+
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+    }
+
+    .empty-state h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.25rem;
+      color: #333;
+    }
+
+    [data-theme="dark"] .empty-state h3 {
+      color: #e0e0e0;
+    }
+
+    .duplicate-card {
+      background: white;
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    [data-theme="dark"] .duplicate-card {
+      background: #2d2d2d;
+    }
+
+    .card-header {
+      background: #f8f9fa;
+      padding: 0.875rem;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    [data-theme="dark"] .card-header {
+      background: #3d3d3d;
+      border-bottom-color: #404040;
+    }
+
+    .url-display {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .url-link {
+      color: #2196f3;
+      text-decoration: none;
+      word-break: break-all;
+      font-size: 0.9rem;
+    }
+
+    .count-badge {
+      background: #ff4757;
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .duplicate-list {
+      max-height: calc(100vh - 320px);
+      overflow-y: auto;
+      padding-bottom: 1rem;
+      min-height: 200px;
+    }
+
+    .bookmark-item {
+      padding: 0.875rem;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    [data-theme="dark"] .bookmark-item {
+      border-bottom-color: #404040;
+    }
+
+    .bookmark-item:last-child {
+      border-bottom: none;
+    }
+
+    .bookmark-title {
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 0.5rem;
+      word-break: break-all;
+      line-height: 1.3;
+      font-size: 0.95rem;
+    }
+
+    [data-theme="dark"] .bookmark-title {
+      color: #e0e0e0;
+    }
+
+    .bookmark-path {
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 0.625rem;
+      word-break: break-all;
+      line-height: 1.3;
+    }
+
+    [data-theme="dark"] .bookmark-path {
+      color: #aaa;
+    }
+
+    .delete-btn {
+      width: 100%;
+      padding: 0.45rem;
+      background: #ff4757;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .delete-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1rem;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      max-width: 400px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    [data-theme="dark"] .modal {
+      background: #2d2d2d;
+    }
+
+    .modal-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #e9ecef;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    [data-theme="dark"] .modal-header {
+      border-bottom-color: #404040;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      color: #333;
+    }
+
+    [data-theme="dark"] .modal-header h3 {
+      color: #e0e0e0;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      color: #666;
+    }
+
+    .modal-body {
+      padding: 1rem 1.5rem;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .modal-body p {
+      margin: 0.5rem 0;
+      word-break: break-all;
+    }
+
+    [data-theme="dark"] .modal-body {
+      color: #e0e0e0;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 0.75rem;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid #e9ecef;
+    }
+
+    [data-theme="dark"] .modal-footer {
+      border-top-color: #404040;
+    }
+
+    .modal-btn {
+      flex: 1;
+      padding: 0.65rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .modal-btn.cancel {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    [data-theme="dark"] .modal-btn.cancel {
+      background: #3d3d3d;
+      color: #e0e0e0;
+    }
+
+    .modal-btn.confirm {
+      background: #ff4757;
+      color: white;
+    }
+
+    /* Toast 提示 */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 14px 20px;
+      border-radius: 12px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 500;
+      z-index: 2000;
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      min-width: 280px;
+      max-width: 90%;
+      word-wrap: break-word;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .toast.success {
+      background: linear-gradient(45deg, #10b981, #34d399);
+      animation: pulse 2s infinite;
+    }
+
+    .toast.warning {
+      background: linear-gradient(45deg, #f59e0b, #fbbf24);
+      animation: pulse 1.5s infinite;
+    }
+
+    .toast.error {
+      background: linear-gradient(135deg, #c0392b, #e74c3c);
+      padding: 20px;
+      min-width: 300px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .toast .toast-error-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      text-align: left;
+    }
+
+    .toast .toast-error-icon {
+      font-size: 22px;
+      line-height: 1.3;
+      flex-shrink: 0;
+    }
+
+    .toast .toast-error-msg {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .toast .toast-error-close {
+      display: block;
+      width: 100%;
+      padding: 9px 0;
+      background: rgba(255, 255, 255, 0.18);
+      border: 1.5px solid rgba(255, 255, 255, 0.35);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s;
+      letter-spacing: 0.5px;
+    }
+
+    .toast .toast-error-close:hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    /* Toast 遮罩层 */
+    .toast-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 1999;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: translateX(-50%) scale(1);
+      }
+      50% {
+        transform: translateX(-50%) scale(1.05);
+      }
+      100% {
+        transform: translateX(-50%) scale(1);
+      }
+    }
+
+    .toast-fade-enter-active,
+    .toast-fade-leave-active {
+      transition: opacity 0.3s ease;
+    }
+
+    .toast-fade-enter-from,
+    .toast-fade-leave-to {
+      opacity: 0;
+    }
+
+    /* 滚动条样式 */
+    .duplicate-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .duplicate-list::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 2px;
+    }
+
+    .duplicate-list::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 2px;
+    }
+
+    [data-theme="dark"] .duplicate-list::-webkit-scrollbar-track {
+      background: #2d2d2d;
+    }
+
+    [data-theme="dark"] .duplicate-list::-webkit-scrollbar-thumb {
+      background: #4a4a4a;
+    }
+
+    /* Background Settings */
+    .background-type-selector {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .type-option {
+      flex: 1;
+      text-align: center;
+      padding: 10px 8px;
+      background: #f0f0f0;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #333;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .type-option.active {
+      background: #e8f3fc;
+      border-color: #0078d4;
+      color: #0078d4;
+      font-weight: 600;
+    }
+    [data-theme="dark"] .type-option {
+      background: #3d3d3d;
+      border-color: #505050;
+      color: #e0e0e0;
+    }
+    [data-theme="dark"] .type-option.active {
+      background: #1c2f40;
+      border-color: #2899f5;
+      color: #2899f5;
+    }
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    .color-option {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 2px solid #e0e0e0;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .color-option.active {
+      border-color: #0078d4;
+      transform: scale(1.15);
+    }
+    [data-theme="dark"] .color-option {
+      border-color: #505050;
+    }
+    [data-theme="dark"] .color-option.active {
+      border-color: #2899f5;
+    }
+    .upload-btn {
+      width: 100%;
+      padding: 12px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .upload-btn:active {
+      opacity: 0.8;
+    }
+    .image-preview {
+      margin-top: 12px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e0e0e0;
+    }
+    [data-theme="dark"] .image-preview {
+      border-color: #505050;
+    }
+    .image-preview img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .opacity-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      outline: none;
+    }
+    [data-theme="dark"] .opacity-slider {
+      background: #505050;
+    }
+    .opacity-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #667eea;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="mobile-header">
+    <h1>去重复</h1>
+    <button class="header-bg-btn" @click="openBackgroundModal">🎨</button>
+  </div>
+
+  <div class="mobile-content">
+    <!-- 统计信息 -->
+    <div class="stats-grid" v-if="duplicates.length > 0 || checkCompleted">
+      <div class="stat-box">
+        <div class="stat-label">总书签</div>
+        <div class="stat-value">{{ totalBookmarks }}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">重复网址</div>
+        <div class="stat-value highlight">{{ duplicateCount }}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">重复书签</div>
+        <div class="stat-value highlight">{{ duplicateBookmarksCount }}</div>
+      </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <button class="action-btn primary" @click="startDuplicateCheck" :disabled="checking">
+      {{ checking ? '⏳ 检查中...' : '🔍 开始检查' }}
+    </button>
+    <button class="action-btn secondary" @click="goBack">
+      🔙 返回主页
+    </button>
+
+    <!-- 空状态 -->
+    <div class="empty-state" v-if="!checking && !checkCompleted">
+      <div class="empty-icon">🔍</div>
+      <h3>开始检查重复书签</h3>
+      <p>点击上方"开始检查"按钮，系统将根据网址查找重复的书签</p>
+    </div>
+
+    <!-- 无重复 -->
+    <div class="empty-state" v-if="!checking && checkCompleted && duplicates.length === 0">
+      <div class="empty-icon">✅</div>
+      <h3>没有发现重复书签</h3>
+      <p>您的书签库很干净，没有重复的网址</p>
+    </div>
+
+    <!-- 重复列表 -->
+    <div class="duplicate-list" v-if="duplicates.length > 0">
+      <div class="duplicate-card" v-for="(group, index) in duplicates" :key="index">
+        <div class="card-header">
+          <div class="url-display">
+            <a :href="group.url" target="_blank" class="url-link">{{ group.url }}</a>
+          </div>
+          <div>
+            <span class="count-badge">{{ group.bookmarks.length }}个重复</span>
+          </div>
+        </div>
+        <div class="bookmark-item" v-for="(bookmark, bIndex) in group.bookmarks" :key="bookmark.id">
+          <div class="bookmark-title">{{ bookmark.title }}</div>
+          <div class="bookmark-path">📁 {{ bookmark.path }}</div>
+          <button class="delete-btn" @click="showDeleteConfirm(bookmark, index, bIndex)" :disabled="bookmark.deleting">
+            {{ bookmark.deleting ? '⏳ 删除中...' : '🗑️ 删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 加载中 -->
+  <div class="loading-overlay" v-if="checking">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <!-- 确认删除对话框 -->
+  <div class="modal-overlay" v-if="deleteConfirmVisible" @click="closeDeleteConfirm">
+    <div class="modal" @click.stop>
+      <div class="modal-header">
+        <h3>确认删除</h3>
+        <button class="modal-close" @click="closeDeleteConfirm">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>确定要删除这个书签吗？</p>
+        <p style="margin: 0.5rem 0; font-size: 0.9rem;">标题: {{ deletingBookmark?.title }}</p>
+        <p style="margin: 0.5rem 0; font-size: 0.9rem;">路径: {{ deletingBookmark?.path }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn cancel" @click="closeDeleteConfirm">取消</button>
+        <button class="modal-btn confirm" @click="confirmDelete">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div v-if="toast.visible && toast.type === 'error'" class="toast-overlay" @click="dismissToast"></div>
+
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type !== 'error'" :class="['toast', toast.type]" @click="dismissToast">
+      {{ toast.message }}
+    </div>
+  </transition>
+
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type === 'error'" :class="['toast', 'error']" @click="dismissToast">
+      <div class="toast-error-header">
+        <span class="toast-error-icon">⚠️</span>
+        <span class="toast-error-msg">{{ toast.message }}</span>
+      </div>
+      <button class="toast-error-close" @click.stop="dismissToast">知道了</button>
+    </div>
+  </transition>
+
+  <!-- Background Settings Modal -->
+  <div class="modal-overlay" v-if="backgroundModal.visible" @click="closeBackgroundModal">
+    <div class="modal" @click.stop>
+      <div class="modal-header">
+        <h3>背景设置</h3>
+        <button class="modal-close" @click="closeBackgroundModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>背景类型</label>
+          <div class="background-type-selector">
+            <div class="type-option" :class="{active: backgroundSettings.type === 'default'}" @click="backgroundSettings.type='default'">默认</div>
+            <div class="type-option" :class="{active: backgroundSettings.type === 'color'}" @click="backgroundSettings.type='color'">纯色</div>
+            <div class="type-option" :class="{active: backgroundSettings.type === 'image'}" @click="backgroundSettings.type='image'">图片</div>
+          </div>
+        </div>
+
+        <div class="form-group" v-if="backgroundSettings.type === 'color'">
+          <label>选择颜色</label>
+          <div class="color-grid">
+            <div
+              v-for="color in presetColors"
+              :key="color"
+              class="color-option"
+              :class="{active: backgroundSettings.color === color}"
+              :style="{background: color}"
+              @click="selectColor(color)"
+            ></div>
+          </div>
+        </div>
+
+        <div class="form-group" v-if="backgroundSettings.type === 'image'">
+          <label>上传背景图片</label>
+          <input 
+            type="file" 
+            accept="image/*" 
+            @change="handleImageUpload" 
+            style="display:none" 
+            ref="backgroundImageInput"
+          />
+          <button class="upload-btn" @click="$refs.backgroundImageInput.click()">📁 选择图片</button>
+          <div class="image-preview" v-if="backgroundSettings.image">
+            <img :src="backgroundSettings.image" alt="背景预览" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>面板透明度: {{ backgroundSettings.panelOpacity }}%</label>
+          <input 
+            type="range" 
+            min="0" 
+            max="100" 
+            v-model.number="backgroundSettings.panelOpacity" 
+            class="opacity-slider"
+          />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn cancel" @click="resetBackground">重置</button>
+        <button class="modal-btn cancel" @click="cancelBackgroundSettings">取消</button>
+        <button class="modal-btn confirm" @click="saveBackgroundSettingsAndClose">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      token: localStorage.getItem('token') || null,
+      checking: false,
+      checkCompleted: false,
+      duplicates: [],
+      totalBookmarks: 0,
+      duplicateCount: 0,
+      duplicateBookmarksCount: 0,
+      deleteConfirmVisible: false,
+      deletingBookmark: null,
+      deleteCallback: null,
+      toast: {
+        visible: false,
+        message: '',
+        type: 'success',
+        timer: null
+      },
+      // Background settings
+      backgroundModal: { visible: false },
+      backgroundSettings: { color: '', image: '', type: 'default', panelOpacity: 90 },
+      originalBackgroundSettings: null,
+      presetColors: ['#0c0c0c', '#1a1a2e', '#16213e', '#0f3460', '#533483', '#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8'],
+    };
+  },
+  methods: {
+    checkAuth() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/login.html';
+        return false;
+      }
+      this.token = token;
+      return true;
+    },
+    goBack() {
+      window.location.href = '/mobile.html';
+    },
+
+    async startDuplicateCheck() {
+      this.checking = true;
+      this.checkCompleted = false;
+      this.duplicates = [];
+
+      try {
+        const response = await fetch('/api/check-duplicates', {
+          headers: {
+            'Authorization': this.token
+          }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          this.duplicates = data.data.duplicates;
+          this.totalBookmarks = data.data.totalBookmarks;
+          this.duplicateCount = data.data.duplicateCount;
+          this.duplicateBookmarksCount = data.data.duplicateBookmarksCount;
+          this.checkCompleted = true;
+          if (this.duplicates.length > 0) {
+            this.showToast(`发现 ${this.duplicateCount} 个重复网址`, 'warning');
+          } else {
+            this.showToast('没有发现重复书签', 'success');
+          }
+        } else {
+          this.showToast('检查失败: ' + (data.message || '未知错误'), 'error');
+        }
+      } catch (error) {
+        console.error('检查重复失败:', error);
+        this.showToast('检查失败，请重试', 'error');
+      } finally {
+        this.checking = false;
+      }
+    },
+
+    showDeleteConfirm(bookmark, groupIndex, bookmarkIndex) {
+      this.deletingBookmark = bookmark;
+      this.groupIndex = groupIndex;
+      this.bookmarkIndex = bookmarkIndex;
+      this.deleteConfirmVisible = true;
+    },
+
+    closeDeleteConfirm() {
+      this.deleteConfirmVisible = false;
+      this.deletingBookmark = null;
+      this.groupIndex = null;
+      this.bookmarkIndex = null;
+    },
+
+    async confirmDelete() {
+      const bookmark = this.deletingBookmark;
+      const groupIndex = this.groupIndex;
+      const bookmarkIndex = this.bookmarkIndex;
+
+      try {
+        bookmark.deleting = true;
+        const response = await fetch(`/api/bookmarks/${bookmark.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': this.token
+          }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          this.duplicates[groupIndex].bookmarks.splice(bookmarkIndex, 1);
+
+          if (this.duplicates[groupIndex].bookmarks.length <= 1) {
+            this.duplicates.splice(groupIndex, 1);
+            this.duplicateCount--;
+          }
+
+            this.duplicateBookmarksCount--;
+            this.totalBookmarks--;
+            this.showToast('删除成功', 'success');
+          } else {
+            this.showToast('删除失败: ' + (data.message || '未知错误'), 'error');
+            bookmark.deleting = false;
+          }
+        } catch (error) {
+          console.error('删除书签失败:', error);
+          this.showToast('删除失败，请重试', 'error');
+          bookmark.deleting = false;
+        } finally {
+        this.closeDeleteConfirm();
+      }
+    },
+
+    showToast(message, type = 'success') {
+      if (this.toast.timer) {
+        clearTimeout(this.toast.timer);
+        this.toast.timer = null;
+      }
+
+      this.toast.visible = true;
+      this.toast.message = message;
+      this.toast.type = type;
+
+      if (type === 'error') return;
+
+      const duration = type === 'warning' ? 3500 : 2200;
+      this.toast.timer = setTimeout(() => {
+        this.toast.visible = false;
+        this.toast.timer = null;
+      }, duration);
+    },
+
+    dismissToast() {
+      if (this.toast.timer) {
+        clearTimeout(this.toast.timer);
+        this.toast.timer = null;
+      }
+      this.toast.visible = false;
+    },
+
+    // ============ Background Settings ============
+    async loadBackgroundSettings() {
+      const saved = localStorage.getItem('bookmark-manager-background');
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved);
+          this.backgroundSettings = settings;
+          this.applyBackgroundSettings(settings);
+        } catch {}
+      } else {
+        this.applyBackgroundSettings(this.backgroundSettings);
+      }
+    },
+    async saveBackgroundSettings() {
+      localStorage.setItem('bookmark-manager-background', JSON.stringify(this.backgroundSettings));
+    },
+    applyBackgroundSettings(settings) {
+      const body = document.body;
+      switch (settings.type) {
+        case 'color':
+          body.style.background = settings.color;
+          body.style.backgroundImage = 'none';
+          body.style.backgroundSize = 'auto';
+          body.style.backgroundRepeat = 'repeat';
+          body.style.backgroundPosition = '0 0';
+          body.style.backgroundAttachment = 'scroll';
+          break;
+        case 'image':
+          body.style.background = `url('${settings.image}') center center / cover no-repeat fixed`;
+          break;
+        default:
+          body.style.background = `url('/img/background.jpg') center center / cover no-repeat fixed`;
+          break;
+      }
+    },
+    openBackgroundModal() {
+      this.originalBackgroundSettings = JSON.parse(JSON.stringify(this.backgroundSettings));
+      this.backgroundModal.visible = true;
+    },
+    closeBackgroundModal() {
+      this.backgroundModal.visible = false;
+    },
+    saveBackgroundSettingsAndClose() {
+      this.applyBackgroundSettings(this.backgroundSettings);
+      this.saveBackgroundSettings();
+      this.backgroundModal.visible = false;
+    },
+    cancelBackgroundSettings() {
+      if (this.originalBackgroundSettings) {
+        this.backgroundSettings = JSON.parse(JSON.stringify(this.originalBackgroundSettings));
+        this.applyBackgroundSettings(this.backgroundSettings);
+      }
+      this.backgroundModal.visible = false;
+    },
+    handleImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target.result;
+        this.backgroundSettings = {
+          type: 'image',
+          color: '',
+          image: imageUrl
+        };
+        this.applyBackgroundSettings(this.backgroundSettings);
+      };
+      reader.readAsDataURL(file);
+      event.target.value = '';
+    },
+    selectColor(color) {
+      this.backgroundSettings.color = color;
+      this.applyBackgroundSettings(this.backgroundSettings);
+    },
+    resetBackground() {
+      this.backgroundSettings = {
+        type: 'default',
+        color: '',
+        image: ''
+      };
+      this.applyBackgroundSettings(this.backgroundSettings);
+      this.saveBackgroundSettings();
+    },
+  },
+  mounted() {
+    // 检查认证
+    this.checkAuth();
+    // 加载背景设置
+    this.loadBackgroundSettings();
+
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
