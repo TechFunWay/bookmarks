@@ -547,6 +547,87 @@
     }
     .toast.warning { background: #ca5010; }
 
+    /* ============ Background Settings ============ */
+    .background-type-selector {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .type-option {
+      flex: 1;
+      text-align: center;
+      padding: 10px 8px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      color: var(--text);
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .type-option.active {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    .color-option {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .color-option.active {
+      border-color: var(--primary);
+      transform: scale(1.15);
+    }
+    .upload-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .upload-btn:active { opacity: .8; }
+    .image-preview {
+      margin-top: 12px;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .image-preview img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .opacity-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      outline: none;
+    }
+    .opacity-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: var(--primary);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
     /* ============ Loading ============ */
     .loading-overlay {
       position: fixed; inset: 0; z-index: 600;
@@ -1143,6 +1224,11 @@
           <div class="modal-title">{{ currentUser ? (currentUser.nickname || currentUser.username) : '账号' }}</div>
           <div class="modal-body" style="padding:8px 12px">
             <div class="settings-list" v-if="currentUser">
+              <div class="settings-item" @click="openDuplicateCheck">
+                <span class="settings-item-icon">🔍</span>
+                <span class="settings-item-label">去重复</span>
+                <span class="settings-item-value">›</span>
+              </div>
               <div class="settings-item" v-if="currentUser.is_admin" @click="openUserManagement">
                 <span class="settings-item-icon">👥</span>
                 <span class="settings-item-label">用户管理</span>
@@ -1194,6 +1280,11 @@
                   <input type="checkbox" :checked="isDark" @change="toggleTheme" />
                   <span class="toggle-slider"></span>
                 </label>
+              </div>
+              <div class="settings-item" @click="openBackgroundModal">
+                <span class="settings-item-icon">🎨</span>
+                <span class="settings-item-label">背景设置</span>
+                <span class="settings-item-value">›</span>
               </div>
               <div class="settings-item" @click="showSettingsSheet=false; showImportExport=true">
                 <span class="settings-item-icon">📦</span>
@@ -1401,6 +1492,81 @@
     </div>
   </transition>
 
+  <!-- Background Settings Modal -->
+  <transition name="fade">
+    <div v-if="backgroundModal.visible" class="modal-backdrop" @click="closeBackgroundModal">
+      <transition name="slide-up">
+        <div class="modal-sheet" @click.stop>
+          <div class="modal-handle"></div>
+          <div class="modal-title">背景设置</div>
+          <div class="modal-body" style="padding:12px 16px">
+            <div class="form-group">
+              <label class="form-label">背景类型</label>
+              <div class="background-type-selector">
+                <div class="type-option" :class="{active: backgroundSettings.type === 'default'}" @click="backgroundSettings.type='default'">
+                  默认
+                </div>
+                <div class="type-option" :class="{active: backgroundSettings.type === 'color'}" @click="backgroundSettings.type='color'">
+                  纯色
+                </div>
+                <div class="type-option" :class="{active: backgroundSettings.type === 'image'}" @click="backgroundSettings.type='image'">
+                  图片
+                </div>
+              </div>
+            </div>
+            
+            <div class="form-group" v-if="backgroundSettings.type === 'color'">
+              <label class="form-label">选择颜色</label>
+              <div class="color-grid">
+                <div
+                  v-for="color in presetColors"
+                  :key="color"
+                  class="color-option"
+                  :class="{active: backgroundSettings.color === color}"
+                  :style="{background: color}"
+                  @click="selectColor(color)"
+                ></div>
+              </div>
+            </div>
+
+            <div class="form-group" v-if="backgroundSettings.type === 'image'">
+              <label class="form-label">上传背景图片</label>
+              <input 
+                type="file" 
+                accept="image/*" 
+                @change="handleImageUpload" 
+                style="display:none" 
+                ref="backgroundImageInput"
+              />
+              <button class="upload-btn" @click="$refs.backgroundImageInput.click()">
+                📁 选择图片
+              </button>
+              <div class="image-preview" v-if="backgroundSettings.image">
+                <img :src="backgroundSettings.image" alt="背景预览" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">面板透明度: {{ backgroundSettings.panelOpacity }}%</label>
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                v-model.number="backgroundSettings.panelOpacity" 
+                class="opacity-slider"
+              />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="modal-btn secondary" @click="resetBackground">重置</button>
+            <button class="modal-btn secondary" @click="cancelBackgroundSettings">取消</button>
+            <button class="modal-btn primary" @click="saveBackgroundSettingsAndClose">保存</button>
+          </div>
+        </div>
+      </transition>
+    </div>
+  </transition>
+
   <!-- Toast -->
   <transition name="fade">
     <div v-if="toast.visible" :class="['toast', toast.type]" @click="toast.type !== 'error' ? null : (toast.visible = false)">
@@ -1480,6 +1646,11 @@ document.addEventListener('DOMContentLoaded', () => {
         pwdModal: { visible: false, old: '', new1: '', new2: '', error: '', loading: false },
         // API Key
         apiKeyModal: { visible: false, key: '', loading: false, error: '' },
+        // Background settings
+        backgroundModal: { visible: false },
+        backgroundSettings: { color: '', image: '', type: 'default', panelOpacity: 90 },
+        originalBackgroundSettings: null,
+        presetColors: ['#0c0c0c', '#1a1a2e', '#16213e', '#0f3460', '#533483', '#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8'],
       };
     },
 
@@ -1543,6 +1714,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     mounted() {
       this.loadTheme();
+      this.loadBackgroundSettings();
       this.checkAuth();
       this.loadTree();
       this.loadConfig();
@@ -1557,6 +1729,10 @@ document.addEventListener('DOMContentLoaded', () => {
       checkAuth() {
         if (!this.token) { window.location.href = 'login.html'; return; }
         this.loadCurrentUser();
+      },
+      openDuplicateCheck() {
+        this.showAccountSheet = false;
+        window.location.href = '/mobile_duplicate.html';
       },
       openUserManagement() {
         this.showAccountSheet = false;
@@ -2359,6 +2535,91 @@ document.addEventListener('DOMContentLoaded', () => {
       handleRootClick() {
         this.hideCtx();
         this.fabMenuVisible = false;
+      },
+
+      // ============ Background Settings ============
+      async loadBackgroundSettings() {
+        const saved = localStorage.getItem('bookmark-manager-background');
+        if (saved) {
+          try {
+            const settings = JSON.parse(saved);
+            this.backgroundSettings = settings;
+            this.applyBackgroundSettings(settings);
+          } catch {}
+        } else {
+          this.applyBackgroundSettings(this.backgroundSettings);
+        }
+      },
+      async saveBackgroundSettings() {
+        localStorage.setItem('bookmark-manager-background', JSON.stringify(this.backgroundSettings));
+      },
+      applyBackgroundSettings(settings) {
+        const body = document.body;
+        switch (settings.type) {
+          case 'color':
+            body.style.background = settings.color;
+            body.style.backgroundImage = 'none';
+            body.style.backgroundSize = 'auto';
+            body.style.backgroundRepeat = 'repeat';
+            body.style.backgroundPosition = '0 0';
+            body.style.backgroundAttachment = 'scroll';
+            break;
+          case 'image':
+            body.style.background = `url('${settings.image}') center center / cover no-repeat fixed`;
+            break;
+          default:
+            body.style.background = `url('/img/background.jpg') center center / cover no-repeat fixed`;
+            break;
+        }
+      },
+      openBackgroundModal() {
+        this.originalBackgroundSettings = JSON.parse(JSON.stringify(this.backgroundSettings));
+        this.backgroundModal.visible = true;
+        this.showSettingsSheet = false;
+      },
+      closeBackgroundModal() {
+        this.backgroundModal.visible = false;
+      },
+      saveBackgroundSettingsAndClose() {
+        this.applyBackgroundSettings(this.backgroundSettings);
+        this.saveBackgroundSettings();
+        this.backgroundModal.visible = false;
+      },
+      cancelBackgroundSettings() {
+        if (this.originalBackgroundSettings) {
+          this.backgroundSettings = JSON.parse(JSON.stringify(this.originalBackgroundSettings));
+          this.applyBackgroundSettings(this.backgroundSettings);
+        }
+        this.backgroundModal.visible = false;
+      },
+      handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const imageUrl = e.target.result;
+          this.backgroundSettings = {
+            type: 'image',
+            color: '',
+            image: imageUrl
+          };
+          this.applyBackgroundSettings(this.backgroundSettings);
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+      },
+      selectColor(color) {
+        this.backgroundSettings.color = color;
+        this.applyBackgroundSettings(this.backgroundSettings);
+      },
+      resetBackground() {
+        this.backgroundSettings = {
+          type: 'default',
+          color: '',
+          image: ''
+        };
+        this.applyBackgroundSettings(this.backgroundSettings);
+        this.saveBackgroundSettings();
       },
     }
   });

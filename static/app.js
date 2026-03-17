@@ -576,6 +576,9 @@ const app = createApp({
         this.showToast('复制失败，请手动复制', 'error');
       }
     },
+    openDuplicateCheck() {
+      window.location.href = '/duplicate.html';
+    },
     openUserManagement() {
       this.userDropdownVisible = false;
       window.location.href = '/users.html';
