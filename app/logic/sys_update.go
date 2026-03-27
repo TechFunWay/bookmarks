@@ -211,7 +211,7 @@ func CompareVersions(v1, v2 string) (int, error) {
 // GetAvailableVersions 获取可用的升级版本列表
 func (u *Upgrade) GetAvailableVersions(fromVersion string) ([]string, error) {
 	// 硬编码所有可用版本
-	allVersions := []string{"v1.7.0", "v1.8.0", "v1.9.0"}
+	allVersions := []string{"v1.7.0", "v1.8.0", "v1.9.0", "v2.0.0"}
 
 	versions := []string{}
 	for _, version := range allVersions {
@@ -285,6 +285,8 @@ func (u *Upgrade) executeSQLForVersion(version string) error {
 		return u.executeSQLForV1_8_0()
 	case "v1.9.0":
 		return u.executeSQLForV1_9_0()
+	case "v2.0.0":
+		return u.executeSQLForV2_0_0()
 	default:
 		return fmt.Errorf("未找到版本 %s 的SQL语句", version)
 	}
@@ -353,6 +355,35 @@ func (u *Upgrade) executeSQLForV1_9_0() error {
 	return nil
 }
 
+// executeSQLForV2_0_0 执行v2.0.0版本的SQL语句
+func (u *Upgrade) executeSQLForV2_0_0() error {
+	sqlStatements := []string{
+		`CREATE TABLE IF NOT EXISTS security_questions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			question1 TEXT NOT NULL,
+			answer1 TEXT NOT NULL,
+			question2 TEXT NOT NULL,
+			answer2 TEXT NOT NULL,
+			question3 TEXT NOT NULL,
+			answer3 TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+	}
+
+	for i, stmt := range sqlStatements {
+		u.LogUpgrade("执行SQL语句 #%d/%d: %s", i+1, len(sqlStatements), truncateString(stmt, 100))
+		_, err := u.db.Exec(stmt)
+		if err != nil {
+			u.LogUpgrade("执行SQL语句失败: %v, 语句: %s", err, truncateString(stmt, 100))
+		}
+	}
+
+	return nil
+}
+
 // executeDataProcessingLogic 执行特定版本的数据处理业务逻辑
 func (u *Upgrade) executeDataProcessingLogic(version string) error {
 	// 这里可以添加特定版本的数据处理业务逻辑
@@ -363,6 +394,8 @@ func (u *Upgrade) executeDataProcessingLogic(version string) error {
 		return u.processDataForV1_8_0()
 	case "v1.9.0":
 		return u.processDataForV1_9_0()
+	case "v2.0.0":
+		return u.processDataForV2_0_0()
 	default:
 		// 对于未特殊处理的版本，可以执行通用数据处理逻辑
 		u.LogUpgrade("执行版本 %s 的通用数据处理逻辑", version)
@@ -405,7 +438,7 @@ func (u *Upgrade) processDataForV1_9_0() error {
 
 	// 为所有现有用户生成 api_key (32 位)
 	_, err := u.db.Exec(`
-		UPDATE users 
+		UPDATE users
 		SET api_key = lower(replace(hex(randomblob(16)), '-', ''))
 		WHERE api_key IS NULL OR api_key = ''
 	`)
@@ -461,6 +494,12 @@ func (u *Upgrade) processDataForV1_9_0() error {
 	}
 
 	u.LogUpgrade("用户密码重置完成，共处理 %d 个用户", len(users))
+	return nil
+}
+
+// processDataForV2_0_0 版本 2.0.0 的数据处理业务逻辑
+func (u *Upgrade) processDataForV2_0_0() error {
+	u.LogUpgrade("执行版本 v2.0.0 的数据处理业务逻辑")
 	return nil
 }
 

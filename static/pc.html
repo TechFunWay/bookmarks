@@ -114,6 +114,10 @@
                 <span class="dropdown-icon">🔑</span>
                 <span>修改密码</span>
               </button>
+              <button class="dropdown-item" @click="openSecurityQuestionsModal">
+                <span class="dropdown-icon">❓</span>
+                <span>安全问题</span>
+              </button>
               <button class="dropdown-item" @click="openPluginAPIKeyModal">
                 <span class="dropdown-icon">🔌</span>
                 <span>API Key</span>
@@ -574,7 +578,7 @@
     <div v-if="confirmDialog.visible" class="modal-backdrop">
       <div class="modal confirm-dialog">
         <div class="confirm-icon" :class="confirmDialog.type">
-          {{ confirmDialog.type === 'warning' ? '⚠️' : '❓' }}
+          {{ confirmDialog.type === 'warning' ? '⚠️' : (confirmDialog.type === 'info' ? '💡' : '❓') }}
         </div>
         <h3 class="modal-title">{{ confirmDialog.title }}</h3>
         <div class="confirm-content">
@@ -584,7 +588,7 @@
           <button type="button" class="secondary" @click="handleConfirmCancel">
             取消
           </button>
-          <button type="button" class="primary danger" @click="handleConfirmOk">
+          <button type="button" :class="confirmDialog.type === 'warning' ? 'primary danger' : 'primary'" @click="handleConfirmOk">
             {{ confirmDialog.confirmText || '确认' }}
           </button>
         </div>
@@ -1066,6 +1070,84 @@
             <button type="button" class="secondary" @click="closeChangePasswordModal">取消</button>
             <button type="submit" class="primary" :disabled="changePasswordModal.loading">
               {{ changePasswordModal.loading ? '修改中...' : '确认修改' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </transition>
+
+  <!-- 安全问题模态框 -->
+  <transition name="fade">
+    <div v-if="securityQuestionsModal.visible" class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">安全问题</h3>
+        <p v-if="!securityQuestionsModal.hasQuestions" style="color: #666; margin-bottom: 15px; font-size: 14px;">
+          设置安全问题后，如果您忘记密码，可以通过安全问题重置密码。请妥善保管您的答案。
+        </p>
+        <p v-if="securityQuestionsModal.hasQuestions" style="color: #667eea; margin-bottom: 15px; font-size: 14px;">
+          您已设置过安全问题，可以修改或重新设置。
+        </p>
+        <form @submit.prevent="saveSecurityQuestions">
+          <div class="form-group">
+            <label>安全问题 1</label>
+            <input
+              v-model="securityQuestionsModal.question1"
+              type="text"
+              required
+              placeholder="例如：您的出生城市是？"
+            />
+          </div>
+          <div class="form-group">
+            <label>答案 1</label>
+            <input
+              v-model="securityQuestionsModal.answer1"
+              type="text"
+              required
+              :placeholder="securityQuestionsModal.hasQuestions && securityQuestionsModal.savedQuestions.answerLength1 > 0 ? '原答案：' + '*'.repeat(securityQuestionsModal.savedQuestions.answerLength1) : '请输入答案'"
+            />
+          </div>
+          <div class="form-group">
+            <label>安全问题 2</label>
+            <input
+              v-model="securityQuestionsModal.question2"
+              type="text"
+              required
+              placeholder="例如：您小学的校名是？"
+            />
+          </div>
+          <div class="form-group">
+            <label>答案 2</label>
+            <input
+              v-model="securityQuestionsModal.answer2"
+              type="text"
+              required
+              :placeholder="securityQuestionsModal.hasQuestions && securityQuestionsModal.savedQuestions.answerLength2 > 0 ? '原答案：' + '*'.repeat(securityQuestionsModal.savedQuestions.answerLength2) : '请输入答案'"
+            />
+          </div>
+          <div class="form-group">
+            <label>安全问题 3</label>
+            <input
+              v-model="securityQuestionsModal.question3"
+              type="text"
+              required
+              placeholder="例如：您最喜欢的食物是？"
+            />
+          </div>
+          <div class="form-group">
+            <label>答案 3</label>
+            <input
+              v-model="securityQuestionsModal.answer3"
+              type="text"
+              required
+              :placeholder="securityQuestionsModal.hasQuestions && securityQuestionsModal.savedQuestions.answerLength3 > 0 ? '原答案：' + '*'.repeat(securityQuestionsModal.savedQuestions.answerLength3) : '请输入答案'"
+            />
+          </div>
+          <p v-if="securityQuestionsModal.error" class="form-error">{{ securityQuestionsModal.error }}</p>
+          <div class="modal-actions">
+            <button type="button" class="secondary" @click="closeSecurityQuestionsModal">取消</button>
+            <button type="submit" class="primary" :disabled="securityQuestionsModal.loading">
+              {{ securityQuestionsModal.loading ? '保存中...' : '保存' }}
             </button>
           </div>
         </form>

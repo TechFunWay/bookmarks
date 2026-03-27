@@ -46,7 +46,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v1.9.0"
+	appVersion = "v2.0.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -55,10 +55,11 @@ const (
 )
 
 type server struct {
-	db          *sql.DB
-	httpClient  *http.Client
-	faviconChan chan int64 // 图标获取任务队列
-	iconPath    string     // 图标存储路径
+	db                 *sql.DB
+	httpClient         *http.Client
+	faviconChan        chan int64 // 图标获取任务队列
+	iconPath           string     // 图标存储路径
+	securityQuestions  *logic.SecurityQuestions
 }
 
 // 全局配置
@@ -94,15 +95,16 @@ type node struct {
 }
 
 type user struct {
-	ID        int64   `json:"id"`
-	Username  string  `json:"username"`
-	Nickname  string  `json:"nickname"`
-	Email     string  `json:"email"`
-	Avatar    *string `json:"avatar"`
-	IsActive  bool    `json:"is_active"`
-	IsAdmin   bool    `json:"is_admin"`
-	APIKey    *string `json:"api_key,omitempty"`
-	CreatedAt string  `json:"created_at"`
+	ID                   int64   `json:"id"`
+	Username             string  `json:"username"`
+	Nickname             string  `json:"nickname"`
+	Email                string  `json:"email"`
+	Avatar               *string `json:"avatar"`
+	IsActive             bool    `json:"is_active"`
+	IsAdmin              bool    `json:"is_admin"`
+	APIKey               *string `json:"api_key,omitempty"`
+	CreatedAt            string  `json:"created_at"`
+	HasSecurityQuestions bool    `json:"has_security_questions"`
 }
 
 type authRequest struct {
@@ -242,8 +244,9 @@ func main() {
 				return nil
 			},
 		},
-		faviconChan: make(chan int64, 100), // 缓冲队列，最多100个待处理任务
-		iconPath:    iconPath,              // 设置图标路径
+		faviconChan:       make(chan int64, 100), // 缓冲队列，最多100个待处理任务
+		iconPath:          iconPath,              // 设置图标路径
+		securityQuestions: logic.NewSecurityQuestions(db),
 	}
 
 	// 启动图标获取协程
@@ -272,6 +275,11 @@ func main() {
 			r.Post("/regenerate-api-key", s.tokenAuthMiddleware(s.handleRegenerateAPIKey))
 			r.Get("/me", s.tokenAuthMiddleware(s.handleGetCurrentUser))
 			r.Get("/check", s.handleCheckAuth)
+			// 安全问题相关接口
+			r.Post("/security-questions", s.tokenAuthMiddleware(s.handleSetSecurityQuestions))
+			r.Get("/security-questions", s.tokenAuthMiddleware(s.handleGetSecurityQuestions))
+			r.Get("/security-questions/reset", s.handleGetSecurityQuestionsForReset)
+			r.Post("/verify-and-reset", s.handleVerifyAndResetPassword)
 		})
 		r.Route("/users", func(r chi.Router) {
 			r.Get("/", s.tokenAuthMiddleware(s.adminMiddleware(s.handleGetUsers)))
@@ -368,7 +376,7 @@ func initializeDB(db *sql.DB) error {
     position INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);`); err != nil {
+	);`); err != nil {
 			log.Println("创建nodes表失败: %w", err)
 		}
 
@@ -3623,14 +3631,23 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 检查是否设置了安全问题
+	var hasSecurityQuestions bool
+	err = s.db.QueryRow("SELECT COUNT(*) > 0 FROM security_questions WHERE user_id = ?", userID).Scan(&hasSecurityQuestions)
+	if err != nil {
+		// 查询失败时不影响用户信息返回
+		hasSecurityQuestions = false
+	}
+
 	user := &user{
-		ID:        dbUser.ID,
-		Username:  dbUser.Username,
-		Nickname:  dbUser.Nickname,
-		Email:     dbUser.Email,
-		IsActive:  dbUser.IsActive == 1,
-		IsAdmin:   dbUser.IsAdmin == 1,
-		CreatedAt: dbUser.CreatedAt,
+		ID:                    dbUser.ID,
+		Username:              dbUser.Username,
+		Nickname:              dbUser.Nickname,
+		Email:                 dbUser.Email,
+		IsActive:              dbUser.IsActive == 1,
+		IsAdmin:               dbUser.IsAdmin == 1,
+		CreatedAt:             dbUser.CreatedAt,
+		HasSecurityQuestions:  hasSecurityQuestions,
 	}
 	if dbUser.Avatar.Valid {
 		user.Avatar = &dbUser.Avatar.String
@@ -3729,6 +3746,95 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "密码修改成功"})
+}
+
+// handleSetSecurityQuestions 设置安全问题
+func (s *server) handleSetSecurityQuestions(w http.ResponseWriter, r *http.Request) {
+	var req logic.SecurityQuestionsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	userID := getUserID(r)
+
+	if err := s.securityQuestions.SetSecurityQuestions(userID, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "安全问题设置成功"})
+}
+
+// handleGetSecurityQuestions 获取安全问题（仅返回问题，不返回答案）
+func (s *server) handleGetSecurityQuestions(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+
+	response, err := s.securityQuestions.GetSecurityQuestions(userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, response)
+}
+
+// handleGetSecurityQuestionsForReset 获取用户的安全问题（用于重置密码，需要用户名）
+func (s *server) handleGetSecurityQuestionsForReset(w http.ResponseWriter, r *http.Request) {
+	username := strings.TrimSpace(r.URL.Query().Get("username"))
+	if username == "" {
+		respondError(w, http.StatusBadRequest, errors.New("用户名不能为空"))
+		return
+	}
+
+	questions, err := s.securityQuestions.GetSecurityQuestionsForReset(username)
+	if err != nil {
+		if err.Error() == "用户不存在" {
+			respondError(w, http.StatusNotFound, err)
+		} else if err.Error() == "该用户未设置安全问题，无法通过此方式重置密码" {
+			respondError(w, http.StatusForbidden, err)
+		} else {
+			respondError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"username":  username,
+		"questions": *questions,
+	})
+}
+
+// handleVerifyAndResetPassword 验证安全问题并重置密码
+func (s *server) handleVerifyAndResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req logic.VerifySecurityQuestionsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	// 验证安全问题
+	if err := s.securityQuestions.VerifyAndResetPassword(&req); err != nil {
+		if err.Error() == "用户不存在" {
+			respondError(w, http.StatusNotFound, err)
+		} else if err.Error() == "安全问题答案错误" || err.Error() == "用户名和新密码不能为空" || err.Error() == "新密码长度不能少于6位" {
+			respondError(w, http.StatusBadRequest, err)
+		} else if err.Error() == "安全问题答案错误" {
+			respondError(w, http.StatusUnauthorized, err)
+		} else {
+			respondError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	// 验证通过，重置密码
+	doubleHashedNewPassword := utils.MD5Hash(req.NewPassword, "bookmarks")
+	if err := s.securityQuestions.UpdatePassword(req.Username, doubleHashedNewPassword); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "密码重置成功，请使用新密码登录"})
 }
 
 // handleRegenerateAPIKey 重新生成 api_key
