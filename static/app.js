@@ -318,6 +318,20 @@ const app = createApp({
           loading: false,
           error: ''
         },
+        // 安全问题模态框状态
+        securityQuestionsModal: {
+          visible: false,
+          question1: '',
+          answer1: '',
+          question2: '',
+          answer2: '',
+          question3: '',
+          answer3: '',
+          loading: false,
+          error: '',
+          hasQuestions: false,
+          savedQuestions: {}
+        },
         // Plugin API Key模态框状态
         pluginAPIKeyModal: {
           visible: false,
@@ -475,6 +489,12 @@ const app = createApp({
         if (response.ok) {
           const user = await response.json();
           this.currentUser = user;
+          // 检查是否设置了安全问题，如果没有则提示
+          if (!user.has_security_questions) {
+            setTimeout(() => {
+              this.checkSecurityQuestionsReminder();
+            }, 2000); // 延迟2秒显示提示
+          }
         } else {
           localStorage.removeItem('token');
           localStorage.removeItem('currentUser');
@@ -648,6 +668,121 @@ const app = createApp({
         this.changePasswordModal.error = '网络错误，请稍后重试';
       } finally {
         this.changePasswordModal.loading = false;
+      }
+    },
+    async openSecurityQuestionsModal() {
+      this.userDropdownVisible = false;
+      this.securityQuestionsModal.visible = true;
+      await this.loadSecurityQuestions();
+      // 如果没有设置过问题，设置默认问题
+      if (!this.securityQuestionsModal.hasQuestions) {
+        this.setDefaultSecurityQuestions();
+      }
+    },
+    setDefaultSecurityQuestions() {
+      // 设置默认的安全问题
+      this.securityQuestionsModal.question1 = '你最喜欢的颜色是什么？';
+      this.securityQuestionsModal.question2 = '你的出生城市是哪里？';
+      this.securityQuestionsModal.question3 = '你小学的名字是什么？';
+    },
+    async loadSecurityQuestions() {
+      try {
+        const response = await fetch('/api/auth/security-questions', {
+          headers: { 'Authorization': this.token }
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+          this.securityQuestionsModal.hasQuestions = data.has_security_questions;
+          // 保存问题和答案长度
+          this.securityQuestionsModal.savedQuestions = {
+            question1: data.questions?.question1 || '',
+            question2: data.questions?.question2 || '',
+            question3: data.questions?.question3 || '',
+            answerLength1: data.answer_lengths?.answer1 || 0,
+            answerLength2: data.answer_lengths?.answer2 || 0,
+            answerLength3: data.answer_lengths?.answer3 || 0,
+          };
+          // 只有当用户已经设置过问题时，才加载已设置的问题
+          // 否则保持默认问题（在 openSecurityQuestionsModal 中设置）
+          if (data.has_security_questions && data.questions) {
+            this.securityQuestionsModal.question1 = data.questions.question1 || '';
+            this.securityQuestionsModal.answer1 = '';
+            this.securityQuestionsModal.question2 = data.questions.question2 || '';
+            this.securityQuestionsModal.answer2 = '';
+            this.securityQuestionsModal.question3 = data.questions.question3 || '';
+            this.securityQuestionsModal.answer3 = '';
+          }
+        }
+      } catch (error) {
+        console.error('加载安全问题失败:', error);
+      }
+    },
+    closeSecurityQuestionsModal() {
+      this.securityQuestionsModal.visible = false;
+      this.securityQuestionsModal.question1 = '';
+      this.securityQuestionsModal.answer1 = '';
+      this.securityQuestionsModal.question2 = '';
+      this.securityQuestionsModal.answer2 = '';
+      this.securityQuestionsModal.question3 = '';
+      this.securityQuestionsModal.answer3 = '';
+      this.securityQuestionsModal.error = '';
+    },
+    checkSecurityQuestionsReminder() {
+      // 显示确认对话框
+      this.confirmDialog.visible = true;
+      this.confirmDialog.title = '设置安全问题';
+      this.confirmDialog.message = '为了账号安全，建议您设置安全问题。设置后，如果忘记密码可以通过安全问题重置密码。是否现在设置？';
+      this.confirmDialog.type = 'info';
+      this.confirmDialog.confirmText = '立即设置';
+      this.confirmDialog.callback = (confirmed) => {
+        if (confirmed) {
+          // 用户点击了"立即设置"，打开安全问题设置窗口
+          this.openSecurityQuestionsModal();
+        }
+        // 无论用户点击"立即设置"还是"取消"，不做任何记录
+        // 下次登录时，如果数据库中还是没有安全问题记录，会再次提示
+      };
+    },
+    async saveSecurityQuestions() {
+      this.securityQuestionsModal.error = '';
+
+      const { question1, answer1, question2, answer2, question3, answer3 } = this.securityQuestionsModal;
+
+      if (!question1 || !answer1 || !question2 || !answer2 || !question3 || !answer3) {
+        this.securityQuestionsModal.error = '请填写所有问题和答案';
+        return;
+      }
+
+      this.securityQuestionsModal.loading = true;
+
+      try {
+        const response = await fetch('/api/auth/security-questions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': this.token
+          },
+          body: JSON.stringify({
+            question1, answer1, question2, answer2, question3, answer3
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          this.showToast('安全问题设置成功', 'success');
+          this.closeSecurityQuestionsModal();
+          // 保存成功后，重新加载用户信息，更新 has_security_questions 状态
+          await this.loadCurrentUser();
+        } else {
+          this.securityQuestionsModal.error = data.error || '设置失败';
+        }
+      } catch (error) {
+        console.error('设置安全问题失败:', error);
+        this.securityQuestionsModal.error = '网络错误，请稍后重试';
+      } finally {
+        this.securityQuestionsModal.loading = false;
       }
     },
     showFolderSelector() {
