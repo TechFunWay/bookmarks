@@ -44,6 +44,115 @@ go build -o reset-password cmd/reset-password.go
 ./reset-password -username admin -password 123456
 ```
 
+### 4. Docker容器中使用
+
+```bash
+# 方式1: 在运行中的容器内执行
+docker exec <容器名或ID> /app/reset-password -username admin -password 123456
+
+# 方式2: 使用容器名（推荐）
+docker exec bookmarks /app/reset-password -username admin -password 123456
+
+# 方式3: 指定数据库路径（如果数据卷挂载位置不同）
+docker exec <容器名或ID> /app/reset-password -db /app/data/db/database.db -username admin -password 123456
+```
+
+## Docker 镜像使用说明
+
+### 镜像信息
+
+Docker镜像已包含重置密码工具：
+- **镜像名称**: `techfunways/bookmarks:v2.0.0` 或 `techfunways/bookmarks:latest`
+- **工具路径**: `/app/reset-password`
+- **数据库路径**: `/app/data/db/database.db`
+- **支持架构**: amd64, arm64
+
+### 使用示例
+
+#### 1. 重置运行中容器的密码
+
+```bash
+# 查看容器名
+docker ps | grep bookmarks
+
+# 重置密码
+docker exec bookmarks /app/reset-password -username admin -password newpassword123
+```
+
+#### 2. 通过容器ID重置
+
+```bash
+# 获取容器ID
+docker ps
+
+# 使用容器ID（可以是完整ID或前几位）
+docker exec a1b2c3d4e5f6 /app/reset-password -username admin -password newpassword123
+```
+
+#### 3. 使用docker-compose
+
+```bash
+# 如果使用docker-compose部署
+docker-compose exec bookmarks /app/reset-password -username admin -password newpassword123
+```
+
+### Docker Compose 配置示例
+
+```yaml
+version: '3.8'
+services:
+  bookmarks:
+    image: techfunways/bookmarks:v2.0.0
+    container_name: bookmarks
+    ports:
+      - "8901:8901"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+```
+
+### 重置密码完整流程
+
+```bash
+# 1. 确认容器正在运行
+docker ps | grep bookmarks
+
+# 2. 重置管理员密码
+docker exec bookmarks /app/reset-password -username admin -password newpassword123
+
+# 3. 查看执行结果
+# 输出: 密码重置成功！
+
+# 4. 使用新密码登录
+# 访问: http://localhost:8901
+# 用户名: admin
+# 密码: newpassword123
+```
+
+### 注意事项
+
+1. **数据卷挂载**: 确保数据目录已正确挂载，否则重置的密码不会持久化
+2. **容器状态**: 容器必须处于运行状态才能执行重置命令
+3. **密码复杂度**: 建议使用强密码，至少6位字符
+4. **权限问题**: 容器内以root用户运行，通常不会有权限问题
+
+### 常见问题
+
+#### Q1: 容器名不确定
+**A**: 使用 `docker ps` 查看容器名或ID：
+```bash
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+```
+
+#### Q2: 提示"用户不存在"
+**A**: 检查用户名是否正确，默认管理员用户名是 `admin`
+
+#### Q3: 数据库路径问题
+**A**: 默认路径是 `/app/data/db/database.db`，如果挂载位置不同，需要指定：
+```bash
+docker exec bookmarks /app/reset-password -db /your/custom/path/database.db -username admin -password newpassword
+```
+
 ## 注意事项
 
 1. **安全性**：
