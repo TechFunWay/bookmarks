@@ -93,7 +93,7 @@ package_platform() {
         "amd64")
             PLATFORM_DIR="release/bookmarks-v${VERSION}-linux-amd64"
             MANIFEST_PLATFORM="x86"
-            OUTPUT_ARCH="amd64"
+            OUTPUT_ARCH="x86"
             ;;
         "arm64")
             PLATFORM_DIR="release/bookmarks-v${VERSION}-linux-arm64"

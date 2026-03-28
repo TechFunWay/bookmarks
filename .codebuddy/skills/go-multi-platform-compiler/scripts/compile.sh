@@ -189,6 +189,12 @@ compile_platform() {
     ((SUCCESS_COUNT++))
 }
 
+# 编译每个平台
+for PLATFORM in "${PLATFORMS[@]}"; do
+    compile_platform "$PLATFORM"
+    echo ""
+done
+
 # 创建压缩包
 echo "========================================="
 echo "  创建压缩包"
@@ -213,12 +219,6 @@ done
 cd ..
 
 echo ""
-
-# 编译每个平台
-for PLATFORM in "${PLATFORMS[@]}"; do
-    compile_platform "$PLATFORM"
-    echo ""
-done
 
 # 汇总结果
 echo "========================================="
