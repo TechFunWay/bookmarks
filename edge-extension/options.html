@@ -11,7 +11,7 @@
       font-family: Arial, sans-serif;
       background-color: #f0f2f5;
       margin: 0;
-      padding: 20px;
+      padding: 24px 20px 20px;
     }
 
     .container {
@@ -19,7 +19,7 @@
       margin: 0 auto;
       background-color: white;
       border-radius: 10px;
-      padding: 28px 40px;
+      padding: 32px 40px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     }
 
@@ -28,106 +28,208 @@
       margin: 0 0 24px;
       color: #222;
       text-align: center;
+      line-height: 1.4;
     }
 
-    /* ---- 基本配置区 ---- */
-    .basic-section {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px 24px;
-    }
-
-    /* ---- 分割线 ---- */
-    .divider {
-      border: none;
-      border-top: 2px solid #e8e8e8;
-      margin: 24px 0;
-      position: relative;
-    }
-    .divider-label {
-      position: absolute;
-      top: -11px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: white;
-      padding: 0 12px;
-      color: #888;
-      font-size: 13px;
-      white-space: nowrap;
-    }
-
-    /* ---- 双列同步区 ---- */
-    .sync-columns {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0 20px;
-    }
-
-    .sync-col {
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 18px 20px;
-    }
-
-    .sync-col.e2a {
-      border-top: 3px solid #4CAF50;
-    }
-
-    .sync-col.a2e {
-      border-top: 3px solid #2196F3;
-    }
-
-    .sync-col-title {
+    .section-title {
       font-size: 15px;
       font-weight: 700;
-      margin: 0 0 16px;
+      color: #333;
+      margin-bottom: 14px;
+    }
+
+    .device-list {
       display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .sync-col.e2a .sync-col-title { color: #2e7d32; }
-    .sync-col.a2e .sync-col-title { color: #1565C0; }
-
-    .col-badge {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 10px;
-      margin-left: auto;
-    }
-    .e2a .col-badge { background: #e8f5e9; color: #2e7d32; }
-    .a2e .col-badge { background: #e3f2fd; color: #1565C0; }
-
-    /* ---- 通用表单元素 ---- */
-    .form-group {
+      flex-direction: column;
+      gap: 12px;
       margin-bottom: 16px;
     }
 
-    .form-label {
+    .device-card {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .device-card.disabled-device {
+      opacity: 0.55;
+    }
+
+    .device-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .device-name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .device-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .device-badge {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .device-badge.disabled-badge {
+      background: #f5f5f5;
+      color: #999;
+    }
+
+    .device-badge.e2a-badge {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .device-badge.a2e-badge {
+      background: #e3f2fd;
+      color: #1565C0;
+    }
+
+    .device-detail {
+      font-size: 13px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .device-sync-summary {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .device-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .device-actions button {
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid #ddd;
+      background: #fff;
+      color: #555;
+      transition: all 0.15s;
+    }
+
+    .device-actions button:hover {
+      background: #f0f0f0;
+    }
+
+    .device-actions button.btn-edit {
+      color: #1976D2;
+      border-color: #1976D2;
+    }
+
+    .device-actions button.btn-edit:hover {
+      background: #e3f2fd;
+    }
+
+    .device-actions button.btn-delete {
+      color: #c62828;
+      border-color: #c62828;
+    }
+
+    .device-actions button.btn-delete:hover {
+      background: #ffebee;
+    }
+
+    .add-device-btn {
+      width: 100%;
+      padding: 10px;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      background: #fafafa;
+      color: #888;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .add-device-btn:hover {
+      border-color: #4CAF50;
+      color: #4CAF50;
+      background: #f9fdf9;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 1000;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 30px;
+      overflow-y: auto;
+    }
+
+    .modal-overlay.visible {
+      display: flex;
+    }
+
+    .modal-box {
+      background: white;
+      border-radius: 10px;
+      padding: 24px 28px;
+      width: 520px;
+      max-width: 95vw;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+      margin-bottom: 30px;
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #333;
+      margin: 0 0 20px;
+    }
+
+    .modal-form .form-group {
+      margin-bottom: 14px;
+    }
+
+    .modal-form .form-label {
       display: block;
       font-size: 13px;
       font-weight: 600;
       color: #444;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
 
-    .form-input {
+    .modal-form .form-input {
       width: 100%;
-      padding: 9px 10px;
+      padding: 8px 10px;
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 14px;
     }
 
-    .form-input:focus {
+    .modal-form .form-input:focus {
       outline: none;
       border-color: #4CAF50;
       box-shadow: 0 0 0 2px rgba(76,175,80,0.2);
     }
 
-    .form-select {
+    .modal-form .form-select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid #ddd;
@@ -136,43 +238,39 @@
       background-color: white;
     }
 
-    .form-note {
-      font-size: 11px;
-      color: #999;
-      margin-top: 4px;
-    }
-
-    /* ---- 开关行 ---- */
-    .toggle-row {
+    .modal-form .toggle-row {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 12px;
-      background: #f8f8f8;
-      border-radius: 6px;
-      margin-bottom: 16px;
+      padding: 6px 0;
     }
 
-    .toggle-row input[type="checkbox"] {
+    .modal-form .toggle-row input[type="checkbox"] {
       width: 16px;
       height: 16px;
       cursor: pointer;
       accent-color: #4CAF50;
-      margin: 0;
     }
 
-    .a2e .toggle-row input[type="checkbox"] {
-      accent-color: #2196F3;
-    }
-
-    .toggle-label {
+    .modal-form .toggle-label {
       font-size: 14px;
       font-weight: 600;
       color: #333;
       cursor: pointer;
     }
 
-    /* ---- 同步间隔 ---- */
+    .form-note {
+      font-size: 11px;
+      color: #999;
+      margin-top: 3px;
+    }
+
+    .required-tag {
+      font-size: 11px;
+      color: #c62828;
+      margin-left: 4px;
+    }
+
     .range-wrap {
       display: flex;
       align-items: center;
@@ -185,10 +283,6 @@
       accent-color: #4CAF50;
     }
 
-    .a2e .form-range {
-      accent-color: #2196F3;
-    }
-
     .range-value {
       font-size: 13px;
       color: #555;
@@ -197,7 +291,6 @@
       text-align: right;
     }
 
-    /* ---- radio 行 ---- */
     .radio-row {
       display: flex;
       align-items: center;
@@ -220,12 +313,11 @@
       cursor: pointer;
     }
 
-    /* ---- 文件夹 select + 刷新按钮 ---- */
     .folder-row {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-top: 8px;
+      margin-top: 6px;
     }
 
     .folder-row .form-select {
@@ -233,7 +325,7 @@
     }
 
     .refresh-btn {
-      padding: 7px 12px;
+      padding: 6px 10px;
       background: #f5f5f5;
       border: 1px solid #ddd;
       border-radius: 4px;
@@ -245,26 +337,69 @@
 
     .refresh-btn:hover { background: #e8e8e8; }
 
-    /* ---- 必选标签 ---- */
-    .required-tag {
-      font-size: 11px;
-      color: #c62828;
-      margin-left: 4px;
+    .section-divider {
+      border: none;
+      border-top: 1px solid #e0e0e0;
+      margin: 16px 0;
     }
 
-    /* ---- 折叠区域（开关关闭时收起） ---- */
-    .collapsible {
+    .section-header {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-header.e2a { color: #2e7d32; }
+    .section-header.a2e { color: #1565C0; }
+
+    .collapsible-content {
       overflow: hidden;
-      transition: opacity 0.2s;
     }
 
-    .collapsible.hidden {
+    .collapsible-content.hidden {
       display: none;
     }
 
-    /* ---- 底部按钮 ---- */
+    .modal-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .modal-buttons .btn {
+      padding: 9px 22px;
+      border-radius: 5px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+    }
+
+    .modal-buttons .btn-cancel {
+      background: #f5f5f5;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+
+    .modal-buttons .btn-cancel:hover {
+      background: #e8e8e8;
+    }
+
+    .modal-buttons .btn-save {
+      background: #4CAF50;
+      color: white;
+    }
+
+    .modal-buttons .btn-save:hover {
+      background: #45a049;
+    }
+
     .button-group {
-      margin-top: 28px;
+      margin-top: 24px;
       display: flex;
       justify-content: flex-end;
       gap: 10px;
@@ -280,27 +415,12 @@
       transition: background-color 0.2s;
     }
 
-    .btn-primary {
-      background-color: #4CAF50;
-      color: white;
-    }
-    .btn-primary:hover { background-color: #45a049; }
-    .btn-primary:disabled { background-color: #ccc; cursor: not-allowed; }
-
-    .btn-secondary {
-      background-color: #f5f5f5;
-      color: #333;
-      border: 1px solid #ddd;
-    }
-    .btn-secondary:hover { background-color: #e8e8e8; }
-
     .btn-blue {
       background-color: #2196F3;
       color: white;
     }
     .btn-blue:hover { background-color: #1976D2; }
 
-    /* ---- 状态消息 ---- */
     .status-message {
       margin-top: 16px;
       padding: 10px 14px;
@@ -321,12 +441,9 @@
       display: block;
     }
 
-    /* ---- 响应式：窄屏转单列 ---- */
     @media (max-width: 600px) {
-      .basic-section,
-      .sync-columns {
-        grid-template-columns: 1fr;
-      }
+      .modal-box { width: 98vw; padding: 18px 16px; }
+      .container { padding: 24px 16px; }
     }
   </style>
 </head>
@@ -334,41 +451,51 @@
   <div class="container">
     <h1>【网址收藏夹】同步助手 - 选项</h1>
 
-    <!-- 基本配置 -->
-    <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:14px;">基本配置</div>
-    <div class="basic-section">
-      <div class="form-group">
-        <label class="form-label" for="serverUrl">服务器地址</label>
-        <input type="text" id="serverUrl" class="form-input" placeholder="http://localhost:8901">
-        <div class="form-note">后端服务的完整地址，包括协议和端口</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="apiKey">API Key</label>
-        <input type="text" id="apiKey" class="form-input" placeholder="请输入 API Key">
-        <div class="form-note">在应用设置页面获取，用于扩展认证</div>
-      </div>
+    <div class="section-title">设备管理</div>
+    <div id="deviceList" class="device-list"></div>
+    <button type="button" id="addDeviceBtn" class="add-device-btn">+ 添加设备</button>
+
+    <div class="button-group">
+      <button id="openSyncWindowBtn" class="btn btn-blue">🪟 打开同步窗口</button>
     </div>
 
-    <!-- 分割线 -->
-    <hr class="divider"><span class="divider-label">同步方向配置</span>
+    <div id="statusMessage" class="status-message"></div>
+  </div>
 
-    <!-- 双列同步配置 -->
-    <div class="sync-columns">
-
-      <!-- 左列：浏览器 → 应用 -->
-      <div class="sync-col e2a">
-        <div class="sync-col-title">
-          🌐 浏览器 → 应用
-          <span class="col-badge">E→A</span>
+  <div id="deviceModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 id="modalTitle" class="modal-title">添加设备</h3>
+      <div class="modal-form">
+        <div class="form-group">
+          <label class="form-label" for="deviceName">设备名称</label>
+          <input type="text" id="deviceName" class="form-input" placeholder="例如：书房NAS、公司服务器">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="deviceServerUrl">服务器地址</label>
+          <input type="text" id="deviceServerUrl" class="form-input" placeholder="http://localhost:8901">
+          <div class="form-note">后端服务的完整地址，包括协议和端口</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="deviceApiKey">API Key</label>
+          <input type="text" id="deviceApiKey" class="form-input" placeholder="请输入 API Key">
+          <div class="form-note">在应用设置页面获取，用于扩展认证</div>
+        </div>
+        <div class="form-group">
+          <div class="toggle-row">
+            <input type="checkbox" id="deviceEnabled" checked>
+            <label class="toggle-label" for="deviceEnabled">启用此设备</label>
+          </div>
         </div>
 
-        <!-- 自动同步开关 -->
-        <div class="toggle-row">
-          <input type="checkbox" id="enableAutoSync">
-          <label class="toggle-label" for="enableAutoSync">启用自动同步</label>
-        </div>
+        <hr class="section-divider">
+        <div class="section-header e2a">🌐 浏览器 → 应用（E→A）</div>
 
-        <!-- 同步频率 -->
+        <div class="form-group">
+          <div class="toggle-row">
+            <input type="checkbox" id="e2aEnableAutoSync">
+            <label class="toggle-label" for="e2aEnableAutoSync">启用自动同步</label>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label" for="e2aSyncInterval">同步频率</label>
           <div class="range-wrap">
@@ -377,46 +504,28 @@
           </div>
           <div class="form-note">1分钟 ～ 1天</div>
         </div>
-
-        <!-- 浏览器来源目录 -->
         <div class="form-group">
           <label class="form-label">浏览器来源目录</label>
           <div class="radio-row">
-            <label class="radio-option">
-              <input type="radio" name="edgeFolderMode" value="all" checked> 全部
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="edgeFolderMode" value="select"> 指定目录
-            </label>
+            <label class="radio-option"><input type="radio" name="e2aEdgeFolderMode" value="all" checked> 全部</label>
+            <label class="radio-option"><input type="radio" name="e2aEdgeFolderMode" value="select"> 指定目录</label>
           </div>
-          <div class="folder-row" id="edgeFolderWrap" style="display:none;">
-            <select id="edgeFolder" class="form-select">
-              <option value="">选择浏览器目录...</option>
-            </select>
-            <button type="button" id="refreshEdgeFolderBtn" class="refresh-btn">刷新</button>
+          <div class="folder-row" id="e2aEdgeFolderWrap" style="display:none;">
+            <select id="e2aEdgeFolder" class="form-select"><option value="">选择浏览器目录...</option></select>
+            <button type="button" id="refreshE2aEdgeBtn" class="refresh-btn">刷新</button>
           </div>
         </div>
-
-        <!-- 应用目标目录 -->
         <div class="form-group">
           <label class="form-label">应用目标目录</label>
           <div class="radio-row">
-            <label class="radio-option">
-              <input type="radio" name="appFolderMode" value="all" checked> 全部
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="appFolderMode" value="select"> 指定目录
-            </label>
+            <label class="radio-option"><input type="radio" name="e2aAppFolderMode" value="all" checked> 全部</label>
+            <label class="radio-option"><input type="radio" name="e2aAppFolderMode" value="select"> 指定目录</label>
           </div>
-          <div class="folder-row" id="appFolderWrap" style="display:none;">
-            <select id="appFolder" class="form-select">
-              <option value="">选择应用目录...</option>
-            </select>
-            <button type="button" id="refreshAppFolderBtn" class="refresh-btn">刷新</button>
+          <div class="folder-row" id="e2aAppFolderWrap" style="display:none;">
+            <select id="e2aAppFolder" class="form-select"><option value="">选择应用目录...</option></select>
+            <button type="button" id="refreshE2aAppBtn" class="refresh-btn">刷新</button>
           </div>
         </div>
-
-        <!-- 同步方式 -->
         <div class="form-group">
           <label class="form-label" for="e2aSyncMode">同步方式</label>
           <select id="e2aSyncMode" class="form-select">
@@ -424,22 +533,16 @@
             <option value="replace">替换（浏览器覆盖应用）</option>
           </select>
         </div>
-      </div>
 
-      <!-- 右列：应用 → 浏览器 -->
-      <div class="sync-col a2e">
-        <div class="sync-col-title">
-          📱 应用 → 浏览器
-          <span class="col-badge">A→E</span>
+        <hr class="section-divider">
+        <div class="section-header a2e">📱 应用 → 浏览器（A→E）</div>
+
+        <div class="form-group">
+          <div class="toggle-row">
+            <input type="checkbox" id="a2eEnableAutoSync">
+            <label class="toggle-label" for="a2eEnableAutoSync">启用自动同步</label>
+          </div>
         </div>
-
-        <!-- 自动同步开关 -->
-        <div class="toggle-row">
-          <input type="checkbox" id="enableAppToEdgeSync">
-          <label class="toggle-label" for="enableAppToEdgeSync">启用自动同步</label>
-        </div>
-
-        <!-- 同步频率 -->
         <div class="form-group">
           <label class="form-label" for="a2eSyncInterval">同步频率</label>
           <div class="range-wrap">
@@ -448,42 +551,25 @@
           </div>
           <div class="form-note">1分钟 ～ 1天</div>
         </div>
-
-        <!-- 应用来源目录 -->
         <div class="form-group">
           <label class="form-label">应用来源目录</label>
           <div class="radio-row">
-            <label class="radio-option">
-              <input type="radio" name="appToEdgeSourceFolderMode" value="all" checked> 全部
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="appToEdgeSourceFolderMode" value="select"> 指定目录
-            </label>
+            <label class="radio-option"><input type="radio" name="a2eSourceFolderMode" value="all" checked> 全部</label>
+            <label class="radio-option"><input type="radio" name="a2eSourceFolderMode" value="select"> 指定目录</label>
           </div>
           <div class="folder-row" id="a2eSourceFolderWrap" style="display:none;">
-            <select id="appToEdgeSourceFolder" class="form-select">
-              <option value="">选择应用目录...</option>
-            </select>
-            <button type="button" id="refreshA2ESourceBtn" class="refresh-btn">刷新</button>
+            <select id="a2eSourceFolder" class="form-select"><option value="">选择应用目录...</option></select>
+            <button type="button" id="refreshA2eSourceBtn" class="refresh-btn">刷新</button>
           </div>
         </div>
-
-        <!-- 浏览器目标目录 -->
         <div class="form-group">
-          <label class="form-label">
-            浏览器目标目录
-            <span class="required-tag">* 必选</span>
-          </label>
+          <label class="form-label">浏览器目标目录 <span class="required-tag">* 必选</span></label>
           <div class="folder-row">
-            <select id="appToEdgeTargetFolder" class="form-select">
-              <option value="">选择浏览器目录...</option>
-            </select>
-            <button type="button" id="refreshA2ETargetBtn" class="refresh-btn">刷新</button>
+            <select id="a2eTargetFolder" class="form-select"><option value="">选择浏览器目录...</option></select>
+            <button type="button" id="refreshA2eTargetBtn" class="refresh-btn">刷新</button>
           </div>
           <div class="form-note">应用书签将写入此浏览器目录</div>
         </div>
-
-        <!-- 同步方式 -->
         <div class="form-group">
           <label class="form-label" for="a2eSyncMode">同步方式</label>
           <select id="a2eSyncMode" class="form-select">
@@ -492,17 +578,11 @@
           </select>
         </div>
       </div>
-
-    </div><!-- /sync-columns -->
-
-    <!-- 底部按钮 -->
-    <div class="button-group">
-      <button id="openSyncWindowBtn" class="btn btn-blue">🪟 打开同步窗口</button>
-      <button id="resetButton" class="btn btn-secondary">恢复默认</button>
-      <button id="saveButton" class="btn btn-primary">保存配置</button>
+      <div class="modal-buttons">
+        <button id="modalCancelBtn" class="btn btn-cancel">取消</button>
+        <button id="modalSaveBtn" class="btn btn-save">保存</button>
+      </div>
     </div>
-
-    <div id="statusMessage" class="status-message"></div>
   </div>
 
   <script src="options.js"></script>
