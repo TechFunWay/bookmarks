@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "【网址收藏夹】同步助手",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "同步Edge浏览器书签到【网址收藏夹】应用",
   "icons": {
     "16": "icons/icon16.png",
