@@ -1,98 +1,62 @@
-// DOM元素
 const elements = {
   syncStatus: document.getElementById('syncStatus'),
   statusMessage: document.getElementById('statusMessage'),
   serverUrl: document.getElementById('serverUrl'),
-  syncMode: document.getElementById('syncMode'),
-  syncInterval: document.getElementById('syncInterval'),
+  e2aStatus: document.getElementById('e2aStatus'),
+  a2eStatus: document.getElementById('a2eStatus'),
   syncButton: document.getElementById('syncButton'),
+  syncFromAppButton: document.getElementById('syncFromAppButton'),
+  syncAllButton: document.getElementById('syncAllButton'),
   lastSync: document.getElementById('lastSync'),
-  syncStatusText: document.getElementById('syncStatusText'),
-  folderSyncStatus: document.getElementById('folderSyncStatus'),
-  syncFolders: document.getElementById('syncFolders'),
   syncProgressContainer: document.getElementById('syncProgressContainer'),
   progressBar: document.getElementById('progressBar'),
   progressText: document.getElementById('progressText'),
-  progressDetail: document.getElementById('progressDetail')
+  progressDetail: document.getElementById('progressDetail'),
+  deviceSelect: document.getElementById('deviceSelect')
 };
 
-// 初始化页面
+let currentConfig = null;
+
 async function initialize() {
-  console.log('【网址收藏夹】同步助手 - 弹出页面初始化...');
-  
   await loadConfig();
-  
   await loadSyncStatus();
-  
   bindEvents();
-  
-  console.log('【网址收藏夹】同步助手 - 弹出页面初始化完成');
 }
 
 document.addEventListener('DOMContentLoaded', initialize);
 
-document.addEventListener('unload', () => {
-  stopStatusCheck();
-});
+function populateDeviceSelect(config) {
+  const devices = config.devices || [];
+  const savedId = elements.deviceSelect.value;
+  elements.deviceSelect.innerHTML = '';
+  devices.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = d.name + (d.enabled ? '' : ' (已禁用)');
+    elements.deviceSelect.appendChild(opt);
+  });
+  if (savedId && devices.find(d => d.id === savedId)) {
+    elements.deviceSelect.value = savedId;
+  } else if (devices.length > 0) {
+    elements.deviceSelect.value = devices[0].id;
+  }
+}
 
-// 加载配置
+function getSelectedDevice(config) {
+  const deviceId = elements.deviceSelect.value;
+  return (config.devices || []).find(d => d.id === deviceId);
+}
+
 async function loadConfig() {
   try {
     const response = await chrome.runtime.sendMessage({ action: 'getConfig' });
     if (response && response.config) {
-      const config = response.config;
-      
-      elements.serverUrl.textContent = config.serverUrl;
-      elements.syncMode.textContent = getSyncModeText(config.syncMode);
-      elements.syncInterval.textContent = formatSyncInterval(config.syncInterval);
-      
-      if (config.lastSyncTime) {
-        elements.lastSync.textContent = `最后同步: ${formatTime(config.lastSyncTime)}`;
+      currentConfig = response.config;
+      populateDeviceSelect(currentConfig);
+      updateDeviceDisplay();
+      if (currentConfig.lastSyncTime) {
+        elements.lastSync.textContent = `最后同步: ${formatTime(currentConfig.lastSyncTime)}`;
       }
-      
-      let syncInfo = '';
-      if (config.enableAutoSync) {
-        syncInfo += '自动同步';
-        const edgeMode = config.edgeFolderMode || 'all';
-        const appMode = config.appFolderMode || 'all';
-        const edgePart = edgeMode === 'select' ? (config.edgeFolderName || '未选择') : '全部书签';
-        const appPart = appMode === 'select' ? (config.appFolderName || '未选择') : '根目录';
-        syncInfo += ` (${edgePart} → ${appPart})`;
-
-        if (edgeMode === 'select' || appMode === 'select') {
-          elements.folderSyncStatus.style.display = 'flex';
-          elements.syncFolders.textContent = `${edgePart} → ${appPart}`;
-        } else {
-          elements.folderSyncStatus.style.display = 'none';
-        }
-      } else {
-        syncInfo = '手动同步';
-        elements.folderSyncStatus.style.display = 'none';
-      }
-      
-      elements.syncStatusText.textContent = syncInfo;
-      
-      if (config.syncResult) {
-        const stats = config.syncResult;
-        let resultText = '';
-        
-        if (stats.folders > 0) {
-          resultText += `创建文件夹: ${stats.folders} `;
-        }
-        if (stats.bookmarks > 0) {
-          resultText += `创建书签: ${stats.bookmarks} `;
-        }
-        if (stats.skipped > 0) {
-          resultText += `跳过节点: ${stats.skipped}`;
-        }
-        
-        if (resultText) {
-          console.log('显示同步结果:', resultText);
-          showStatus('success', resultText.trim());
-        }
-      }
-      
-      console.log('配置加载成功:', config);
     }
   } catch (error) {
     console.error('加载配置失败:', error);
@@ -100,10 +64,28 @@ async function loadConfig() {
   }
 }
 
-// 加载同步状态
+function updateDeviceDisplay() {
+  const device = getSelectedDevice(currentConfig);
+  if (device) {
+    elements.serverUrl.textContent = device.serverUrl || '未设置';
+    const e2a = device.e2a || {};
+    const a2e = device.a2e || {};
+    elements.e2aStatus.textContent = e2a.enableAutoSync
+      ? `自动 · ${formatSyncInterval(e2a.syncInterval || 5)} · ${getSyncModeText(e2a.syncMode)}`
+      : `手动 · ${getSyncModeText(e2a.syncMode)}`;
+    elements.a2eStatus.textContent = a2e.enableAutoSync
+      ? `自动 · ${formatSyncInterval(a2e.syncInterval || 5)} · ${getSyncModeText(a2e.syncMode)}`
+      : `手动 · ${getSyncModeText(a2e.syncMode)}`;
+  } else {
+    elements.serverUrl.textContent = '未设置';
+    elements.e2aStatus.textContent = '未设置';
+    elements.a2eStatus.textContent = '未设置';
+  }
+}
+
 let statusCheckInterval = null;
 let statusCheckCount = 0;
-const MAX_STATUS_CHECKS = 120; // 最多检查120次（60秒）
+const MAX_STATUS_CHECKS = 120;
 
 async function loadSyncStatus() {
   try {
@@ -111,35 +93,24 @@ async function loadSyncStatus() {
     if (response) {
       if (response.syncInProgress) {
         statusCheckCount++;
-
         if (statusCheckCount >= MAX_STATUS_CHECKS) {
-          console.warn('同步状态检查超时，停止检查');
           showStatus('error', '同步超时，请重试');
           hideProgress();
           resetSyncUI();
           stopStatusCheck();
           return;
         }
-
-        // 显示进度
-        if (response.syncProgress) {
-          showProgress(response.syncProgress);
-        }
+        if (response.syncProgress) showProgress(response.syncProgress);
         showStatus('syncing', '正在同步中...');
-        elements.syncButton.disabled = true;
-        elements.syncButton.textContent = '同步中...';
+        disableAllButtons();
       } else {
-        // 同步完成或没有进行中的同步
         hideProgress();
-
-        // 如果之前是在同步中，现在完成了，显示成功
         if (statusCheckCount > 0) {
           showStatus('success', '同步完成');
           await loadConfig();
         } else {
           showStatus('success', '就绪');
         }
-
         resetSyncUI();
         stopStatusCheck();
       }
@@ -153,14 +124,9 @@ async function loadSyncStatus() {
   }
 }
 
-// 显示进度
 function showProgress(progress) {
-  if (!elements.syncProgressContainer || !elements.progressBar || !elements.progressText) {
-    return;
-  }
-
+  if (!elements.syncProgressContainer) return;
   elements.syncProgressContainer.style.display = 'block';
-
   if (progress.total > 0) {
     const percent = Math.round((progress.processed / progress.total) * 100);
     elements.progressBar.style.width = `${percent}%`;
@@ -169,33 +135,37 @@ function showProgress(progress) {
     elements.progressBar.style.width = '0%';
     elements.progressDetail.textContent = '计算中...';
   }
-
-  elements.progressText.textContent = progress.currentStep || '准备同步...';
+  let stepText = progress.currentStep || '准备同步...';
+  if (progress.deviceName) stepText = `[${progress.deviceName}] ${stepText}`;
+  elements.progressText.textContent = stepText;
 }
 
-// 隐藏进度
 function hideProgress() {
   if (elements.syncProgressContainer) {
     elements.syncProgressContainer.style.display = 'none';
   }
 }
 
-// 重置同步UI
+function disableAllButtons() {
+  elements.syncButton.disabled = true;
+  elements.syncFromAppButton.disabled = true;
+  elements.syncAllButton.disabled = true;
+  elements.syncButton.textContent = '同步中...';
+}
+
 function resetSyncUI() {
   elements.syncButton.disabled = false;
-  elements.syncButton.textContent = '立即同步';
+  elements.syncButton.textContent = '同步（浏览器→应用）';
+  elements.syncFromAppButton.disabled = false;
+  elements.syncFromAppButton.textContent = '同步（应用→浏览器）';
+  elements.syncAllButton.disabled = false;
   statusCheckCount = 0;
 }
 
 function startStatusCheck() {
-  if (statusCheckInterval) {
-    clearInterval(statusCheckInterval);
-  }
-  
+  if (statusCheckInterval) clearInterval(statusCheckInterval);
   statusCheckCount = 0;
-  statusCheckInterval = setInterval(async () => {
-    await loadSyncStatus();
-  }, 500);
+  statusCheckInterval = setInterval(async () => { await loadSyncStatus(); }, 500);
 }
 
 function stopStatusCheck() {
@@ -205,111 +175,121 @@ function stopStatusCheck() {
   }
 }
 
-// 绑定事件
 function bindEvents() {
   elements.syncButton.addEventListener('click', async () => {
-    console.log('同步按钮点击');
-
-    // 防止重复点击
-    if (elements.syncButton.disabled) {
-      console.log('同步按钮已禁用，忽略点击');
-      return;
-    }
-
-    elements.syncButton.disabled = true;
-    elements.syncButton.textContent = '同步中...';
-    showStatus('syncing', '正在同步中...');
-
-    // 立即开始状态检查（用于显示进度）
+    if (elements.syncButton.disabled) return;
+    const deviceId = elements.deviceSelect.value;
+    if (!deviceId) { showStatus('error', '请选择设备'); return; }
+    disableAllButtons();
+    showStatus('syncing', '正在同步（浏览器→应用）...');
     startStatusCheck();
-
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'sync' });
-      console.log('同步请求响应:', response);
-
-      if (response && response.status === 'success') {
-        console.log('同步成功，等待状态检查检测到完成');
-        // 状态检查会自动检测到同步完成并更新UI
-      } else if (response && response.status === 'error') {
-        console.error('同步失败:', response.error);
+      const response = await chrome.runtime.sendMessage({ action: 'sync', deviceId });
+      if (response && response.status === 'error') {
         showStatus('error', `同步失败: ${response.error || '未知错误'}`);
         hideProgress();
         resetSyncUI();
         stopStatusCheck();
-      } else {
-        console.warn('同步响应状态未知:', response);
-        // 继续状态检查
       }
     } catch (error) {
-      console.error('同步请求失败:', error);
       showStatus('error', '同步失败');
       hideProgress();
       resetSyncUI();
       stopStatusCheck();
     }
   });
+
+  elements.syncFromAppButton.addEventListener('click', async () => {
+    if (elements.syncFromAppButton.disabled) return;
+    const deviceId = elements.deviceSelect.value;
+    if (!deviceId) { showStatus('error', '请选择设备'); return; }
+    disableAllButtons();
+    showStatus('syncing', '正在同步（应用→浏览器）...');
+    startStatusCheck();
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'syncFromApp', deviceId });
+      if (response && response.status === 'error') {
+        showStatus('error', `同步失败: ${response.error || '未知错误'}`);
+        hideProgress();
+        resetSyncUI();
+        stopStatusCheck();
+      }
+    } catch (error) {
+      showStatus('error', '同步失败');
+      hideProgress();
+      resetSyncUI();
+      stopStatusCheck();
+    }
+  });
+
+  elements.syncAllButton.addEventListener('click', async () => {
+    if (elements.syncAllButton.disabled) return;
+    disableAllButtons();
+    showStatus('syncing', '正在同步所有设备...');
+    startStatusCheck();
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'syncAllDevices' });
+      if (response && response.status === 'error') {
+        showStatus('error', `同步失败: ${response.error || '未知错误'}`);
+        hideProgress();
+        resetSyncUI();
+        stopStatusCheck();
+      }
+    } catch (error) {
+      showStatus('error', '同步失败');
+      hideProgress();
+      resetSyncUI();
+      stopStatusCheck();
+    }
+  });
+
+  elements.deviceSelect.addEventListener('change', () => {
+    if (currentConfig) updateDeviceDisplay();
+  });
+
+  document.getElementById('openWindowLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.runtime.sendMessage({ action: 'openSyncWindow' }, () => {
+      if (chrome.runtime.lastError) console.error('打开窗口失败:', chrome.runtime.lastError);
+    });
+  });
 }
 
-// 显示状态
 function showStatus(type, message) {
   elements.syncStatus.className = 'sync-status';
-  
   elements.syncStatus.classList.add(type);
-  
   elements.statusMessage.textContent = message;
   elements.statusMessage.style.display = 'block';
-  
-  setTimeout(() => {
-    elements.statusMessage.style.display = 'none';
-  }, 3000);
+  setTimeout(() => { elements.statusMessage.style.display = 'none'; }, 3000);
 }
 
-// 格式化时间
 function formatTime(timeString) {
   try {
     const date = new Date(timeString);
     return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
-  } catch (error) {
-    return timeString;
-  }
+  } catch { return timeString; }
 }
 
-// 格式化同步间隔
 function formatSyncInterval(minutes) {
-  if (minutes < 60) {
-    return `${minutes}分钟`;
-  } else if (minutes < 1440) {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (mins === 0) {
-      return `${hours}小时`;
-    }
-    return `${hours}小时${mins}分钟`;
-  } else {
-    const days = Math.floor(minutes / 1440);
-    const hours = (minutes % 1440) / 60;
-    if (hours === 0) {
-      return `${days}天`;
-    }
-    return `${days}天${Math.floor(hours)}小时`;
+  minutes = parseInt(minutes) || 5;
+  if (minutes < 60) return `${minutes}分钟`;
+  if (minutes < 1440) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m === 0 ? `${h}小时` : `${h}小时${m}分钟`;
   }
+  const d = Math.floor(minutes / 1440);
+  const h = (minutes % 1440) / 60;
+  return h === 0 ? `${d}天` : `${d}天${Math.floor(h)}小时`;
 }
 
-// 获取同步方式文本
 function getSyncModeText(mode) {
   switch (mode) {
-    case 'merge':
-      return '合并同步';
-    case 'replace':
-      return '替换同步';
-    default:
-      return '未知';
+    case 'merge': return '合并';
+    case 'replace': return '替换';
+    default: return '未知';
   }
 }
