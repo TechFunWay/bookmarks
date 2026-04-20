@@ -206,6 +206,13 @@
                     if (configData.allow_register === 'false') {
                         registerLink.style.display = 'none';
                     }
+                    if (configData.require_login === 'false') {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        if (!urlParams.get('force')) {
+                            window.location.href = 'index.html';
+                            return;
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('检查注册配置失败:', error);

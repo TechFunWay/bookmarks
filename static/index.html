@@ -48,13 +48,24 @@
     </div>
     
     <script>
-        function checkAuth() {
+        async function checkAuth() {
             const token = localStorage.getItem('token');
-            if (!token) {
-                window.location.href = 'login.html';
-                return false;
+            if (token) {
+                return true;
             }
-            return true;
+            try {
+                const response = await fetch('/api/config/system');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config.require_login === 'false') {
+                        return true;
+                    }
+                }
+            } catch (error) {
+                console.error('检查系统配置失败:', error);
+            }
+            window.location.href = 'login.html';
+            return false;
         }
 
         function isMobileDevice() {
@@ -79,8 +90,9 @@
             return isSmallScreen;
         }
         
-        function redirectToAppropriateVersion() {
-            if (!checkAuth()) {
+        async function redirectToAppropriateVersion() {
+            const authenticated = await checkAuth();
+            if (!authenticated) {
                 return;
             }
             

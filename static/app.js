@@ -347,12 +347,14 @@ const app = createApp({
         itemsPerRow: 1,
         // 配置相关
         config: {
-          showUrlInList: true, // 默认显示URL
-          showFolderPath: true, // 默认显示文件夹路径
-          showUpdatedAt: true, // 默认显示更新时间
-          showFullTitle: true, // 默认显示完整标题（可换行）
-          allowRegister: true // 默认允许注册
+          showUrlInList: true,
+          showFolderPath: true,
+          showUpdatedAt: true,
+          showFullTitle: true,
+          allowRegister: true,
+          requireLogin: true
         },
+        guestMode: false,
         configModal: {
           visible: false
         },
@@ -469,22 +471,39 @@ const app = createApp({
     }
   },
   methods: {
-    checkAuth() {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        window.location.href = 'login.html';
-        return false;
-      }
-      this.token = token;
-      this.loadCurrentUser();
-      return true;
+    getHeaders(contentType) {
+      const h = {};
+      if (contentType) h['Content-Type'] = contentType;
+      if (this.token) h['Authorization'] = this.token;
+      return h;
     },
+    async checkAuth() {
+  const token = localStorage.getItem('token');
+  if (token) {
+    this.token = token;
+    this.loadCurrentUser();
+    return true;
+  }
+  try {
+    const r = await fetch('/api/config/system');
+    if (r.ok) {
+      const d = await r.json();
+      this.requireLogin = d.require_login !== undefined ? d.require_login === 'true' : true;
+      this.config.requireLogin = this.requireLogin;
+    }
+  } catch {}
+  if (!this.requireLogin) {
+    this.guestMode = true;
+    return true;
+  }
+  window.location.href = 'login.html';
+  return false;
+},
     async loadCurrentUser() {
-      try {
+  if (!this.token) return;
+  try {
         const response = await fetch('/api/auth/me', {
-          headers: {
-            'Authorization': this.token
-          }
+          headers: this.getHeaders()
         });
         if (response.ok) {
           const user = await response.json();
@@ -508,22 +527,27 @@ const app = createApp({
       }
     },
     async logout() {
-      try {
-        await fetch('/api/auth/logout', {
-          headers: {
-            'Authorization': this.token
-          }
-        });
-      } catch (error) {
-        console.error('登出失败:', error);
-      } finally {
-        localStorage.removeItem('token');
-        localStorage.removeItem('currentUser');
-        this.token = null;
-        this.currentUser = null;
-        window.location.href = 'login.html';
-      }
-    },
+  try {
+    await fetch('/api/auth/logout', {
+      headers: this.getHeaders()
+    });
+  } catch (error) {
+    console.error('登出失败:', error);
+  } finally {
+    localStorage.removeItem('token');
+    localStorage.removeItem('currentUser');
+    this.token = null;
+    this.currentUser = null;
+    if (!this.requireLogin) {
+      this.guestMode = true;
+    } else {
+      window.location.href = 'login.html';
+    }
+  }
+},
+goToLogin() {
+  window.location.href = 'login.html?force=1';
+},
     toggleUserDropdown() {
       this.userDropdownVisible = !this.userDropdownVisible;
     },
@@ -563,10 +587,7 @@ const app = createApp({
       try {
         const response = await fetch('/api/auth/regenerate-api-key', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': this.token
-          }
+          headers: this.getHeaders('application/json')
         });
 
         const data = await response.json();
@@ -642,10 +663,7 @@ const app = createApp({
         const hashedNewPassword = MD5(this.changePasswordModal.newPassword);
         const response = await fetch('/api/auth/change-password', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': this.token
-          },
+          headers: this.getHeaders('application/json'),
           body: JSON.stringify({
             old_password: hashedOldPassword,
             new_password: hashedNewPassword
@@ -688,7 +706,7 @@ const app = createApp({
     async loadSecurityQuestions() {
       try {
         const response = await fetch('/api/auth/security-questions', {
-          headers: { 'Authorization': this.token }
+          headers: this.getHeaders()
         });
         const data = await response.json();
 
@@ -759,10 +777,7 @@ const app = createApp({
       try {
         const response = await fetch('/api/auth/security-questions', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': this.token
-          },
+          headers: this.getHeaders('application/json'),
           body: JSON.stringify({
             question1, answer1, question2, answer2, question3, answer3
           })
@@ -1105,10 +1120,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           // 发送导入请求，添加parent_id参数
           const response = await fetch('/api/import', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': this.token
-            },
+            headers: this.getHeaders('application/json'),
             body: JSON.stringify({
               bookmarks: data,
               mode: this.importMode,
@@ -1300,10 +1312,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async updateBookmarkMetadata(nodeId, url) {
       const response = await fetch(`/api/nodes/${nodeId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': this.token
-        },
+        headers: this.getHeaders('application/json'),
         body: JSON.stringify({
           url: url
         }),
@@ -1338,10 +1347,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           // 发送导入Edge书签请求
           const response = await fetch('/api/import-edge', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': this.token
-            },
+            headers: this.getHeaders('application/json'),
             body: JSON.stringify({
               html: html,
               mode: this.edgeImportMode,
@@ -1387,9 +1393,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async loadBackgroundSettings() {
       try {
         const response = await fetch('/api/config', {
-          headers: {
-            'Authorization': this.token
-          }
+          headers: this.getHeaders()
         });
         if (response.ok) {
           const config = await response.json();
@@ -1432,10 +1436,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       try {
         const response = await fetch('/api/config', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': this.token
-          },
+          headers: this.getHeaders('application/json'),
           body: JSON.stringify({
             key: 'background',
             value: JSON.stringify(this.backgroundSettings)
@@ -1645,7 +1646,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       try {
         const response = await fetch("/api/tree", {
           headers: {
-            "Authorization": this.token,
+            ...this.getHeaders(),
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
             "Expires": "0"
@@ -1830,10 +1831,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       };
       const res = await fetch("/api/folders", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": this.token
-        },
+        headers: this.getHeaders("application/json"),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1858,10 +1856,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       };
       const res = await fetch("/api/bookmarks", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": this.token
-        },
+        headers: this.getHeaders("application/json"),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1878,10 +1873,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       };
       const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
         method: "PUT",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": this.token
-        },
+        headers: this.getHeaders("application/json"),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1907,10 +1899,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       }
       const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
         method: "PUT",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": this.token
-        },
+        headers: this.getHeaders("application/json"),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -1941,10 +1930,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         const payload = { remark: this.remarkPopup.remark };
         const res = await fetch(`/api/nodes/${this.remarkPopup.nodeId}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": this.token,
-          },
+          headers: this.getHeaders("application/json"),
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
@@ -1999,9 +1985,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       try {
         const res = await fetch(`/api/nodes/${node.id}`, { 
           method: "DELETE",
-          headers: {
-            "Authorization": this.token
-          }
+          headers: this.getHeaders()
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -2045,10 +2029,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         };
         const res = await fetch("/api/nodes/reorder", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "Authorization": this.token
-          },
+          headers: this.getHeaders("application/json"),
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
@@ -2286,10 +2267,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       try {
         const response = await fetch(`/api/nodes/${node.id}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": this.token
-          },
+          headers: this.getHeaders("application/json"),
           body: JSON.stringify({
             parent_id: newParentId,
           }),
@@ -2424,8 +2402,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         const response = await fetch(`/api/nodes/batch-delete`, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": this.token,
+            ...this.getHeaders("application/json"),
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
             "Expires": "0"
@@ -2607,10 +2584,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       try {
         const response = await fetch('/api/config', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': this.token
-          },
+          headers: this.getHeaders('application/json'),
           body: JSON.stringify({
             key: 'items_per_row',
             value: num.toString(),
@@ -2629,9 +2603,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async loadConfig() {
       try {
         const response = await fetch('/api/config', {
-          headers: {
-            'Authorization': this.token
-          }
+          headers: this.getHeaders()
         });
         if (response.ok) {
           const configData = await response.json();
@@ -2679,17 +2651,19 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       }
 
       // 加载系统配置（无需认证）
-      try {
-        const sysResponse = await fetch('/api/config/system');
-        if (sysResponse.ok) {
-          const sysConfigData = await sysResponse.json();
-          this.config.allowRegister = sysConfigData.allow_register !== undefined ?
-            sysConfigData.allow_register === 'true' : true;
-        }
-      } catch (error) {
-        console.error('加载系统配置失败:', error);
-        // 使用默认配置
-      }
+  try {
+    const sysResponse = await fetch('/api/config/system');
+    if (sysResponse.ok) {
+      const sysConfigData = await sysResponse.json();
+      this.config.allowRegister = sysConfigData.allow_register !== undefined ?
+        sysConfigData.allow_register === 'true' : true;
+      this.config.requireLogin = sysConfigData.require_login !== undefined ?
+        sysConfigData.require_login === 'true' : true;
+      this.requireLogin = this.config.requireLogin;
+    }
+  } catch (error) {
+    console.error('加载系统配置失败:', error);
+  }
     },
     // 保存配置
     async saveConfig() {
@@ -2704,10 +2678,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         for (const config of configs) {
           const response = await fetch('/api/config', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': this.token
-            },
+            headers: this.getHeaders('application/json'),
             body: JSON.stringify(config),
           });
           if (!response.ok) {
@@ -2715,23 +2686,38 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
           }
         }
 
-        // 保存 allow_register 配置（仅管理员）
-        if (this.currentUser && this.currentUser.is_admin) {
-          const response = await fetch('/api/config', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': this.token
-            },
-            body: JSON.stringify({
-              key: 'allow_register',
-              value: this.config.allowRegister.toString()
-            }),
-          });
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || '保存允许注册配置失败');
-          }
+    if ((this.currentUser && this.currentUser.is_admin) || this.guestMode) {
+      const response = await fetch('/api/config', {
+        method: 'POST',
+        headers: this.getHeaders('application/json'),
+        body: JSON.stringify({
+          key: 'allow_register',
+          value: this.config.allowRegister.toString()
+        }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '保存允许注册配置失败');
+      }
+
+      const rlResponse = await fetch('/api/config', {
+        method: 'POST',
+        headers: this.getHeaders('application/json'),
+        body: JSON.stringify({
+          key: 'require_login',
+          value: this.config.requireLogin.toString()
+        }),
+      });
+      if (!rlResponse.ok) {
+        const errorData = await rlResponse.json();
+        throw new Error(errorData.error || '保存登录配置失败');
+      }
+    }
+
+        this.requireLogin = this.config.requireLogin;
+        if (!this.config.requireLogin && this.currentUser) {
+          this.logout();
+          return;
         }
 
         this.showToast('配置保存成功', 'success');
