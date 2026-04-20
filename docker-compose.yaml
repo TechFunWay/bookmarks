@@ -11,6 +11,7 @@ services:
       - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
+    command: ["/app/bookmarks", "-deviceType=docker"]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8901"]
       interval: 30s

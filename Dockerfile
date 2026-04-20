@@ -11,4 +11,4 @@ EXPOSE 8901
 
 VOLUME /app/data
 
-CMD ["/app/bookmarks"]
+CMD ["/app/bookmarks", "-deviceType=docker"]
