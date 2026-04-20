@@ -992,8 +992,8 @@
       <span class="tab-label">{{ editMode ? '完成' : '编辑' }}</span>
     </button>
     <button class="tab-item" :class="{ active: activeTab === 'account' }" @click="showAccountSheet = true">
-      <span class="tab-icon">👤</span>
-      <span class="tab-label">{{ currentUser ? (currentUser.nickname || currentUser.username) : '登录' }}</span>
+      <span class="tab-icon">{{ guestMode ? '🔓' : '👤' }}</span>
+      <span class="tab-label">{{ guestMode ? '免登录' : (currentUser ? (currentUser.nickname || currentUser.username) : '登录') }}</span>
     </button>
   </div>
 
@@ -1221,38 +1221,48 @@
       <transition name="slide-up">
         <div class="modal-sheet" @click.stop>
           <div class="modal-handle"></div>
-          <div class="modal-title">{{ currentUser ? (currentUser.nickname || currentUser.username) : '账号' }}</div>
+          <div class="modal-title">{{ guestMode ? '免登录模式' : (currentUser ? (currentUser.nickname || currentUser.username) : '账号') }}</div>
           <div class="modal-body" style="padding:8px 12px">
-            <div class="settings-list" v-if="currentUser">
-              <div class="settings-item" @click="openDuplicateCheck">
-                <span class="settings-item-icon">🔍</span>
-                <span class="settings-item-label">去重复</span>
-                <span class="settings-item-value">›</span>
+            <template v-if="guestMode">
+              <div style="text-align:center;padding:20px 0 8px;color:#FF9800;font-size:15px;font-weight:500;">🔓 免登录模式</div>
+              <div style="text-align:center;padding:0 16px 12px;color:var(--text3);font-size:13px;">当前以管理员身份操作，登录后可修改设置</div>
+              <button
+                style="width:100%;margin-top:8px;height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-size:15px;font-weight:500;"
+                @click="showAccountSheet=false; goToLogin()"
+              >登录</button>
+            </template>
+            <template v-else>
+              <div class="settings-list" v-if="currentUser">
+                <div class="settings-item" @click="openDuplicateCheck">
+                  <span class="settings-item-icon">🔍</span>
+                  <span class="settings-item-label">去重复</span>
+                  <span class="settings-item-value">›</span>
+                </div>
+                <div class="settings-item" v-if="currentUser && currentUser.is_admin" @click="openUserManagement">
+                  <span class="settings-item-icon">👥</span>
+                  <span class="settings-item-label">用户管理</span>
+                  <span class="settings-item-value">›</span>
+                </div>
+                <div class="settings-item" @click="showAccountSheet=false; openChangePassword()">
+                  <span class="settings-item-icon">🔑</span>
+                  <span class="settings-item-label">修改密码</span>
+                  <span class="settings-item-value">›</span>
+                </div>
+                <div class="settings-item" @click="showAccountSheet=false; openAPIKey()">
+                  <span class="settings-item-icon">🔌</span>
+                  <span class="settings-item-label">API Key</span>
+                  <span class="settings-item-value">›</span>
+                </div>
               </div>
-              <div class="settings-item" v-if="currentUser.is_admin" @click="openUserManagement">
-                <span class="settings-item-icon">👥</span>
-                <span class="settings-item-label">用户管理</span>
-                <span class="settings-item-value">›</span>
-              </div>
-              <div class="settings-item" @click="showAccountSheet=false; openChangePassword()">
-                <span class="settings-item-icon">🔑</span>
-                <span class="settings-item-label">修改密码</span>
-                <span class="settings-item-value">›</span>
-              </div>
-              <div class="settings-item" @click="showAccountSheet=false; openAPIKey()">
-                <span class="settings-item-icon">🔌</span>
-                <span class="settings-item-label">API Key</span>
-                <span class="settings-item-value">›</span>
-              </div>
-            </div>
-            <button v-if="currentUser"
-              style="width:100%;margin-top:16px;height:44px;border-radius:var(--radius-md);background:var(--danger-bg);color:var(--danger);font-size:15px;font-weight:500;"
-              @click="logout"
-            >退出登录</button>
-            <button v-else
-              style="width:100%;margin-top:8px;height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-size:15px;font-weight:500;"
-              @click="window.location.href='login.html'"
-            >立即登录</button>
+              <button v-if="currentUser"
+                style="width:100%;margin-top:16px;height:44px;border-radius:var(--radius-md);background:var(--danger-bg);color:var(--danger);font-size:15px;font-weight:500;"
+                @click="logout"
+              >退出登录</button>
+              <button v-else
+                style="width:100%;margin-top:8px;height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-size:15px;font-weight:500;"
+                @click="window.location.href='login.html'"
+              >立即登录</button>
+            </template>
           </div>
         </div>
       </transition>
@@ -1335,10 +1345,17 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
-              <div class="settings-item" v-if="currentUser && currentUser.is_admin">
+              <div class="settings-item" v-if="(currentUser && currentUser.is_admin) || guestMode">
                 <span class="settings-item-label">允许注册</span>
                 <label class="toggle-switch">
                   <input type="checkbox" v-model="config.allowRegister" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-item" v-if="(currentUser && currentUser.is_admin) || guestMode">
+                <span class="settings-item-label">需要登录</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="config.requireLogin" />
                   <span class="toggle-slider"></span>
                 </label>
               </div>
@@ -1641,7 +1658,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Toast
         toast: { visible: false, message: '', type: 'success', timer: null },
         // Config
-        config: { showUrlInList: true, showFolderPath: true, showFullTitle: false, showUpdatedAt: false, allowRegister: true },
+        config: { showUrlInList: true, showFolderPath: true, showFullTitle: false, showUpdatedAt: false, allowRegister: true, requireLogin: true },
+        guestMode: false,
+        requireLogin: true,
         // Change password
         pwdModal: { visible: false, old: '', new1: '', new2: '', error: '', loading: false },
         // API Key
@@ -1725,10 +1744,25 @@ document.addEventListener('DOMContentLoaded', () => {
     },
 
     methods: {
+      getHeaders(contentType) {
+        const h = {};
+        if (contentType) h['Content-Type'] = contentType;
+        if (this.token) h.Authorization = this.token;
+        return h;
+      },
       // ============ Auth ============
-      checkAuth() {
-        if (!this.token) { window.location.href = 'login.html'; return; }
-        this.loadCurrentUser();
+      async checkAuth() {
+        if (this.token) { this.loadCurrentUser(); return; }
+        try {
+          const r = await fetch('/api/config/system');
+          if (r.ok) {
+            const d = await r.json();
+            this.requireLogin = d.require_login !== undefined ? d.require_login === 'true' : true;
+            this.config.requireLogin = this.requireLogin;
+          }
+        } catch {}
+        if (!this.requireLogin) { this.guestMode = true; return; }
+        window.location.href = 'login.html';
       },
       openDuplicateCheck() {
         this.showAccountSheet = false;
@@ -1739,8 +1773,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = '/mobile_users.html';
       },
       async loadCurrentUser() {
+        if (!this.token) return;
         try {
-          const r = await fetch('/api/auth/me', { headers: { Authorization: this.token } });
+          const r = await fetch('/api/auth/me', { headers: this.getHeaders() });
           if (r.ok) {
             this.currentUser = await r.json();
           } else {
@@ -1765,9 +1800,18 @@ document.addEventListener('DOMContentLoaded', () => {
         this.doLogout();
       },
       doLogout() {
-        fetch('/api/auth/logout', { headers: { Authorization: this.token } }).catch(() => {});
+        fetch('/api/auth/logout', { headers: this.getHeaders() }).catch(() => {});
         localStorage.removeItem('token');
-        window.location.href = 'login.html';
+        this.token = null;
+        this.currentUser = null;
+        if (!this.requireLogin) {
+          this.guestMode = true;
+        } else {
+          window.location.href = 'login.html';
+        }
+      },
+      goToLogin() {
+        window.location.href = 'login.html?force=1';
       },
 
       // ============ Theme ============
@@ -1786,7 +1830,7 @@ document.addEventListener('DOMContentLoaded', () => {
       async loadTree() {
         this.loading = true;
         try {
-          const r = await fetch('/api/tree', { headers: { Authorization: this.token } });
+          const r = await fetch('/api/tree', { headers: this.getHeaders() });
           if (!r.ok) throw new Error('加载失败');
           const data = await r.json();
           this.tree = Array.isArray(data) ? data : [];
@@ -1989,7 +2033,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let success = 0;
         for (const id of this.selectedIds) {
           try {
-            const r = await fetch(`/api/nodes/${id}`, { method: 'DELETE', headers: { Authorization: this.token } });
+            const r = await fetch(`/api/nodes/${id}`, { method: 'DELETE', headers: this.getHeaders() });
             if (r.ok) success++;
           } catch {}
         }
@@ -2094,20 +2138,20 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           if (m.type === 'add-folder') {
             const r = await fetch('/api/folders', {
-              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              method: 'POST', headers: this.getHeaders('application/json'),
               body: JSON.stringify({ title: m.form.title.trim(), parent_id: m.parentId })
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '创建失败');
           } else if (m.type === 'add-bookmark') {
             if (!m.parentId) throw new Error('请先选择文件夹');
             const r = await fetch('/api/bookmarks', {
-              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              method: 'POST', headers: this.getHeaders('application/json'),
               body: JSON.stringify({ url: m.form.url.trim(), title: m.form.title.trim(), parent_id: m.parentId, favicon_url: m.form.favicon_url.trim() || undefined, remark: m.form.remark.trim() || undefined })
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '添加失败');
           } else if (m.type === 'edit-folder') {
             const r = await fetch(`/api/nodes/${m.nodeId}`, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              method: 'PUT', headers: this.getHeaders('application/json'),
               body: JSON.stringify({ title: m.form.title.trim() })
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '更新失败');
@@ -2116,7 +2160,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const payload = { title: m.form.title.trim(), url: m.form.url.trim(), parent_id: m.parentId, remark: m.form.remark.trim() };
             if (m.form.favicon_url.trim()) payload.favicon_url = m.form.favicon_url.trim();
             const r = await fetch(`/api/nodes/${m.nodeId}`, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              method: 'PUT', headers: this.getHeaders('application/json'),
               body: JSON.stringify(payload)
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '更新失败');
@@ -2153,7 +2197,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ok = await this.customConfirm('确认删除', `确定删除「${node.title}」吗？此操作不可撤销。`, 'warning', '删除');
         if (!ok) return;
         try {
-          const r = await fetch(`/api/nodes/${node.id}`, { method: 'DELETE', headers: { Authorization: this.token } });
+          const r = await fetch(`/api/nodes/${node.id}`, { method: 'DELETE', headers: this.getHeaders() });
           if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '删除失败');
           await this.loadTree();
           this.showToast('删除成功', 'success');
@@ -2177,7 +2221,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reordered.splice(dir === 'up' ? idx - 1 : idx + 1, 0, item);
         try {
           const r = await fetch('/api/nodes/reorder', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            method: 'POST', headers: this.getHeaders('application/json'),
             body: JSON.stringify({ parent_id: parentId, ordered_ids: reordered.map(n => n.id) })
           });
           if (!r.ok) throw new Error('排序失败');
@@ -2194,7 +2238,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!targetId) return;
         try {
           const r = await fetch(`/api/nodes/${nodeId}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            method: 'PUT', headers: this.getHeaders('application/json'),
             body: JSON.stringify({ parent_id: targetId })
           });
           if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '移动失败');
@@ -2221,7 +2265,7 @@ document.addEventListener('DOMContentLoaded', () => {
       async saveRemark() {
         try {
           const r = await fetch(`/api/nodes/${this.remarkModal.nodeId}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            method: 'PUT', headers: this.getHeaders('application/json'),
             body: JSON.stringify({ remark: this.remarkModal.remark.trim() })
           });
           if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '保存失败');
@@ -2256,7 +2300,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // ============ Config ============
       async loadConfig() {
         try {
-          const r = await fetch('/api/config', { headers: { Authorization: this.token } });
+          const r = await fetch('/api/config', { headers: this.getHeaders() });
           if (r.ok) {
             const d = await r.json();
             this.config.showUpdatedAt  = d.show_updated_at  === 'true';
@@ -2270,6 +2314,8 @@ document.addEventListener('DOMContentLoaded', () => {
           if (r.ok) {
             const d = await r.json();
             this.config.allowRegister = d.allow_register !== undefined ? d.allow_register === 'true' : true;
+            this.config.requireLogin = d.require_login !== undefined ? d.require_login === 'true' : true;
+            this.requireLogin = this.config.requireLogin;
           }
         } catch {}
       },
@@ -2283,15 +2329,25 @@ document.addEventListener('DOMContentLoaded', () => {
           ];
           for (const cfg of configs) {
             await fetch('/api/config', {
-              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              method: 'POST', headers: this.getHeaders('application/json'),
               body: JSON.stringify(cfg)
             });
           }
-          if (this.currentUser?.is_admin) {
+          if (this.currentUser?.is_admin || this.guestMode) {
             await fetch('/api/config', {
-              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              method: 'POST', headers: this.getHeaders('application/json'),
               body: JSON.stringify({ key: 'allow_register', value: this.config.allowRegister.toString() })
             });
+            await fetch('/api/config', {
+              method: 'POST', headers: this.getHeaders('application/json'),
+              body: JSON.stringify({ key: 'require_login', value: this.config.requireLogin.toString() })
+            });
+          }
+          this.requireLogin = this.config.requireLogin;
+          if (!this.config.requireLogin && this.currentUser) {
+            this.showConfigSheet = false;
+            this.doLogout();
+            return;
           }
           this.showConfigSheet = false;
           this.showToast('设置已保存', 'success');
@@ -2317,7 +2373,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const hashedOld = MD5(this.pwdModal.old);
           const hashedNew = MD5(this.pwdModal.new1);
           const r = await fetch('/api/auth/change-password', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: this.token },
+            method: 'POST', headers: this.getHeaders('application/json'),
             body: JSON.stringify({ old_password: hashedOld, new_password: hashedNew })
           });
           if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '修改失败');
@@ -2338,7 +2394,7 @@ document.addEventListener('DOMContentLoaded', () => {
       async regenAPIKey() {
         this.apiKeyModal.loading = true; this.apiKeyModal.error = '';
         try {
-          const r = await fetch('/api/auth/regenerate-api-key', { method: 'POST', headers: { Authorization: this.token } });
+          const r = await fetch('/api/auth/regenerate-api-key', { method: 'POST', headers: this.getHeaders() });
           if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '生成失败');
           const d = await r.json();
           this.apiKeyModal.key = d.api_key;
@@ -2391,7 +2447,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.showToast('正在导入...', 'info');
             const r = await fetch('/api/import', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              headers: this.getHeaders('application/json'),
               body: JSON.stringify({ bookmarks: data, mode: mode || 'merge', parent_id: parentId || null })
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '导入失败');
@@ -2415,7 +2471,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.showToast('正在导入...', 'info');
             const r = await fetch('/api/import-edge', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: this.token },
+              headers: this.getHeaders('application/json'),
               body: JSON.stringify({ html, mode: mode || 'merge', parent_id: parentId || null })
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '导入失败');
