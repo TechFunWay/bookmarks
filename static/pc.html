@@ -100,7 +100,11 @@
           <span>配置</span>
         </button>
         <div class="user-info" style="margin-left: 1rem;">
-          <div class="user-dropdown" :class="{ 'active': userDropdownVisible }">
+          <template v-if="guestMode">
+            <span class="user-name" style="color: #FF9800;">免登录模式</span>
+            <button class="tertiary small" @click="goToLogin" style="margin-left: 8px;">登录</button>
+          </template>
+          <div v-else class="user-dropdown" :class="{ 'active': userDropdownVisible }">
             <button class="user-dropdown-btn" @click="toggleUserDropdown">
               <span class="user-name">{{ currentUser ? currentUser.nickname || currentUser.username : '未登录' }}</span>
               <span class="dropdown-arrow">▼</span>
@@ -435,8 +439,8 @@
               </label>
             </div>
           </div>
-          <hr v-if="currentUser && currentUser.is_admin" class="config-section-divider" />
-          <div v-if="currentUser && currentUser.is_admin" class="config-item admin-config">
+          <hr v-if="(currentUser && currentUser.is_admin) || guestMode" class="config-section-divider" />
+          <div v-if="(currentUser && currentUser.is_admin) || guestMode" class="config-item admin-config">
             <div class="config-item-label">
               <span>允许注册</span>
               <span class="config-item-desc">是否允许新用户注册</span>
@@ -444,6 +448,18 @@
             <div class="config-item-control">
               <label class="toggle-switch">
                 <input type="checkbox" v-model="config.allowRegister" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div v-if="(currentUser && currentUser.is_admin) || guestMode" class="config-item admin-config">
+            <div class="config-item-label">
+              <span>需要登录</span>
+              <span class="config-item-desc">关闭后任何人可直接访问，以管理员身份操作</span>
+            </div>
+            <div class="config-item-control">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="config.requireLogin" />
                 <span class="toggle-slider"></span>
               </label>
             </div>
