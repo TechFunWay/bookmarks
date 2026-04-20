@@ -6,7 +6,7 @@
   <title>【网址收藏夹】同步助手</title>
   <style>
     body {
-      width: 300px;
+      width: 340px;
       padding: 16px;
       font-family: Arial, sans-serif;
       background-color: #f5f5f5;
@@ -24,6 +24,23 @@
       margin-bottom: 16px;
       color: #333;
       text-align: center;
+    }
+    .device-select-row {
+      margin-bottom: 12px;
+    }
+    .device-select-row label {
+      display: block;
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .device-select-row select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+      background-color: white;
     }
     .status-section {
       margin-bottom: 16px;
@@ -51,19 +68,18 @@
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       transition: background-color 0.2s;
     }
-    .sync-button:hover {
-      background-color: #45a049;
-    }
-    .sync-button:active {
-      background-color: #3d8b40;
-    }
-    .sync-button:disabled {
-      background-color: #cccccc;
-      cursor: not-allowed;
-    }
+    .sync-button:hover { background-color: #45a049; }
+    .sync-button:active { background-color: #3d8b40; }
+    .sync-button:disabled { background-color: #cccccc; cursor: not-allowed; }
+    .sync-button.sync-from-app { background-color: #2196F3; }
+    .sync-button.sync-from-app:hover { background-color: #1976D2; }
+    .sync-button.sync-from-app:disabled { background-color: #cccccc; }
+    .sync-button.sync-all { background-color: #FF9800; }
+    .sync-button.sync-all:hover { background-color: #F57C00; }
+    .sync-button.sync-all:disabled { background-color: #cccccc; }
     .options-link {
       display: block;
       text-align: center;
@@ -74,9 +90,7 @@
       border-radius: 4px;
       transition: background-color 0.2s;
     }
-    .options-link:hover {
-      background-color: #e3f2fd;
-    }
+    .options-link:hover { background-color: #e3f2fd; }
     .sync-status {
       display: flex;
       align-items: center;
@@ -85,28 +99,10 @@
       border-radius: 4px;
       font-size: 14px;
     }
-    .sync-status.success {
-      background-color: #e8f5e8;
-      color: #2e7d32;
-    }
-    .sync-status.error {
-      background-color: #ffebee;
-      color: #c62828;
-    }
-    .sync-status.syncing {
-      background-color: #e3f2fd;
-      color: #1565c0;
-    }
-    .status-icon {
-      margin-right: 8px;
-      font-size: 16px;
-    }
-    .last-sync {
-      font-size: 12px;
-      color: #999;
-      text-align: center;
-      margin-top: 8px;
-    }
+    .sync-status.success { background-color: #e8f5e8; color: #2e7d32; }
+    .sync-status.error { background-color: #ffebee; color: #c62828; }
+    .sync-status.syncing { background-color: #e3f2fd; color: #1565c0; }
+    .status-icon { margin-right: 8px; font-size: 16px; }
     .progress-container {
       margin-bottom: 12px;
       padding: 8px;
@@ -138,12 +134,18 @@
       text-align: center;
       margin-top: 2px;
     }
+    .last-sync {
+      font-size: 12px;
+      color: #999;
+      text-align: center;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>【网址收藏夹】同步助手</h1>
-    
+
     <div id="syncStatus" class="sync-status">
       <span class="status-icon">📋</span>
       <span id="statusMessage">就绪</span>
@@ -157,54 +159,36 @@
       <div id="progressDetail" class="progress-detail">0 / 0</div>
     </div>
 
+    <div class="device-select-row">
+      <label for="deviceSelect">选择设备</label>
+      <select id="deviceSelect"></select>
+    </div>
+
     <div class="status-section">
       <div class="status-item">
         <span class="status-label">服务器地址:</span>
         <span id="serverUrl" class="status-value">加载中...</span>
       </div>
       <div class="status-item">
-        <span class="status-label">同步方式:</span>
-        <span id="syncMode" class="status-value">加载中...</span>
+        <span class="status-label">E→A 同步:</span>
+        <span id="e2aStatus" class="status-value">加载中...</span>
       </div>
       <div class="status-item">
-        <span class="status-label">同步间隔:</span>
-        <span id="syncInterval" class="status-value">加载中...</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">同步状态:</span>
-        <span id="syncStatusText" class="status-value">加载中...</span>
-      </div>
-      <div class="status-item" id="folderSyncStatus" style="display: none;">
-        <span class="status-label">同步文件夹:</span>
-        <span id="syncFolders" class="status-value">加载中...</span>
+        <span class="status-label">A→E 同步:</span>
+        <span id="a2eStatus" class="status-value">加载中...</span>
       </div>
     </div>
-    
-    <button id="syncButton" class="sync-button">立即同步</button>
-    
+
+    <button id="syncButton" class="sync-button">同步（浏览器→应用）</button>
+    <button id="syncFromAppButton" class="sync-button sync-from-app">同步（应用→浏览器）</button>
+    <button id="syncAllButton" class="sync-button sync-all">同步所有设备</button>
+
     <a href="#" id="openWindowLink" class="options-link">🪟 打开独立窗口</a>
-    
     <a href="options.html" target="_blank" class="options-link">⚙️ 选项设置</a>
-    
-    <div id="lastSync" class="last-sync">
-      最后同步: 从未
-    </div>
+
+    <div id="lastSync" class="last-sync">最后同步: 从未</div>
   </div>
-  
+
   <script src="popup.js"></script>
-  <script>
-    // 打开独立同步窗口
-    document.getElementById('openWindowLink').addEventListener('click', (e) => {
-      e.preventDefault();
-      console.log('点击打开独立窗口，发送消息到 background.js');
-      chrome.runtime.sendMessage({ action: 'openSyncWindow' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error('打开窗口失败:', chrome.runtime.lastError);
-        } else {
-          console.log('打开窗口响应:', response);
-        }
-      });
-    });
-  </script>
 </body>
 </html>
