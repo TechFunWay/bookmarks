@@ -47,6 +47,9 @@
             font-weight: 500;
             font-size: 14px;
         }
+        .form-group label .required {
+            color: #d13438;
+        }
         .form-group input {
             width: 100%;
             padding: 14px 16px;
@@ -133,16 +136,16 @@
             <div id="error-message" class="error-message"></div>
             <form id="register-form">
                 <div class="form-group">
-                    <label for="username">用户名 *</label>
+                    <label for="username">用户名 <span class="required">*</span></label>
                     <input type="text" id="username" name="username" required autocomplete="username">
                 </div>
                 <div class="form-group">
-                    <label for="password">密码 *</label>
+                    <label for="password">密码 <span class="required">*</span></label>
                     <input type="password" id="password" name="password" required autocomplete="new-password" minlength="6">
                     <div class="form-hint">密码至少6位</div>
                 </div>
                 <div class="form-group">
-                    <label for="confirm-password">确认密码 *</label>
+                    <label for="confirm-password">确认密码 <span class="required">*</span></label>
                     <input type="password" id="confirm-password" name="confirm-password" required autocomplete="new-password" minlength="6">
                 </div>
                 <div class="form-group">
