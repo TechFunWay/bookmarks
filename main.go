@@ -5,6 +5,7 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"context"
+	"crypto/md5"
 	"crypto/tls"
 	"database/sql"
 	"embed"
@@ -21,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,7 +48,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v2.0.0"
+	appVersion = "v2.1.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -55,11 +57,11 @@ const (
 )
 
 type server struct {
-	db                 *sql.DB
-	httpClient         *http.Client
-	faviconChan        chan int64 // 图标获取任务队列
-	iconPath           string     // 图标存储路径
-	securityQuestions  *logic.SecurityQuestions
+	db                *sql.DB
+	httpClient        *http.Client
+	faviconChan       chan int64 // 图标获取任务队列
+	iconPath          string     // 图标存储路径
+	securityQuestions *logic.SecurityQuestions
 }
 
 // 全局配置
@@ -136,13 +138,59 @@ const (
 	userContextKey contextKey = "user"
 )
 
+type StatsRequest struct {
+	AppName    string `json:"app_name"`
+	Version    string `json:"version"`
+	DeviceType string `json:"device_type"`
+	DeviceID   string `json:"device_id"`
+	OS         string `json:"os"`
+	Arch       string `json:"arch"`
+	Hostname   string `json:"hostname"`
+}
+
+func getDeviceID(dataUrl string) string {
+	hostname, _ := os.Hostname()
+	raw := hostname + runtime.GOOS + runtime.GOARCH + dataUrl
+	return fmt.Sprintf("%x", md5.Sum([]byte(raw)))
+}
+
+func startStatsReporter(appName, version, deviceType, dataUrl string) {
+	hostname, _ := os.Hostname()
+	deviceID := getDeviceID(dataUrl)
+
+	req := StatsRequest{
+		AppName:    appName,
+		Version:    version,
+		DeviceType: deviceType,
+		DeviceID:   deviceID,
+		OS:         runtime.GOOS,
+		Arch:       runtime.GOARCH,
+		Hostname:   hostname,
+	}
+
+	report := func() {
+		body, _ := json.Marshal(req)
+		http.Post("http://techfunway.wycto.cn/api/apps.online/refresh", "application/json", bytes.NewReader(body))
+	}
+
+	ticker := time.NewTicker(60 * time.Minute)
+	go func() {
+		report()
+		for range ticker.C {
+			report()
+		}
+	}()
+}
+
 func main() {
-	dataUrl := flag.String("dataUrl", "./data", "数据存储路径")                          // 定义字符串参数
-	port := flag.String("port", "8901", "服务器监听端口")                                 // 定义端口参数
-	logModeFlag := flag.String("logmode", defaultLogMode, "日志模式: debug 或 release") // 日志模式参数
+	dataUrl := flag.String("dataUrl", "./data", "数据存储路径")
+	port := flag.String("port", "8901", "服务器监听端口")
+	logModeFlag := flag.String("logmode", defaultLogMode, "日志模式: debug 或 release")
+	deviceType := flag.String("deviceType", "", "设备类型")
 	flag.Parse()
 
-	// 初始化日志模式：先检查命令行参数，再检查环境变量，最后使用默认值
+	startStatsReporter("bookmarks", appVersion, *deviceType, *dataUrl)
+
 	logMode = *logModeFlag
 	if envLogMode := os.Getenv("LOG_MODE"); envLogMode != "" {
 		logMode = envLogMode
@@ -289,22 +337,22 @@ func main() {
 			r.Post("/{id}/reset-password", s.tokenAuthMiddleware(s.adminMiddleware(s.handleResetPassword)))
 			r.Post("/batch", s.tokenAuthMiddleware(s.adminMiddleware(s.handleBatchUsers)))
 		})
-		r.Get("/tree", s.tokenAuthMiddleware(s.handleGetTree))
+		r.Get("/tree", s.optionalAuthMiddleware(s.handleGetTree))
 		r.Get("/metadata", s.handleMetadata)
 		r.Get("/version", s.handleGetVersion)
-		r.Post("/folders", s.tokenAuthMiddleware(s.handleCreateFolder))
-		r.Post("/bookmarks", s.tokenAuthMiddleware(s.handleCreateBookmark))
-		r.Put("/nodes/{id}", s.tokenAuthMiddleware(s.handleUpdateNode))
-		r.Delete("/nodes/{id}", s.tokenAuthMiddleware(s.handleDeleteNode))
-		r.Delete("/bookmarks/{id}", s.tokenAuthMiddleware(s.handleDeleteNode))
-		r.Post("/nodes/batch-delete", s.tokenAuthMiddleware(s.handleBatchDeleteNodes))
-		r.Post("/nodes/reorder", s.tokenAuthMiddleware(s.handleReorderNodes))
-		r.Post("/import", s.tokenAuthMiddleware(s.handleImport))
-		r.Post("/import-edge", s.tokenAuthMiddleware(s.handleEdgeImport))
+		r.Post("/folders", s.optionalAuthMiddleware(s.handleCreateFolder))
+		r.Post("/bookmarks", s.optionalAuthMiddleware(s.handleCreateBookmark))
+		r.Put("/nodes/{id}", s.optionalAuthMiddleware(s.handleUpdateNode))
+		r.Delete("/nodes/{id}", s.optionalAuthMiddleware(s.handleDeleteNode))
+		r.Delete("/bookmarks/{id}", s.optionalAuthMiddleware(s.handleDeleteNode))
+		r.Post("/nodes/batch-delete", s.optionalAuthMiddleware(s.handleBatchDeleteNodes))
+		r.Post("/nodes/reorder", s.optionalAuthMiddleware(s.handleReorderNodes))
+		r.Post("/import", s.optionalAuthMiddleware(s.handleImport))
+		r.Post("/import-edge", s.optionalAuthMiddleware(s.handleEdgeImport))
 		r.Get("/config/system", s.handleGetSystemConfig)
-		r.Get("/config", s.tokenAuthMiddleware(s.handleGetConfig))
-		r.Post("/config", s.tokenAuthMiddleware(s.handleUpdateConfig))
-		r.Get("/check-duplicates", s.tokenAuthMiddleware(s.handleCheckDuplicates))
+		r.Get("/config", s.optionalAuthMiddleware(s.handleGetConfig))
+		r.Post("/config", s.optionalAuthMiddleware(s.handleUpdateConfig))
+		r.Get("/check-duplicates", s.optionalAuthMiddleware(s.handleCheckDuplicates))
 	})
 
 	// 浏览器书签同步接口（使用 API Key 认证）
@@ -2441,7 +2489,7 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	var err error
-	if req.Key == "allow_register" {
+	if req.Key == "allow_register" || req.Key == "require_login" {
 		var isAdmin int
 		err = s.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
 		if err != nil {
@@ -2555,9 +2603,9 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
-			"duplicates":            duplicates,
-			"totalBookmarks":        totalBookmarks,
-			"duplicateCount":        len(duplicates),
+			"duplicates":              duplicates,
+			"totalBookmarks":          totalBookmarks,
+			"duplicateCount":          len(duplicates),
 			"duplicateBookmarksCount": duplicateBookmarksCount,
 		},
 	})
@@ -2590,7 +2638,6 @@ func (s *server) buildBookmarkPath(parentID int64, userID int64) (string, error)
 
 	return "/" + strings.Join(pathParts, "/"), nil
 }
-
 
 type userListResponse struct {
 	Users []user `json:"users"`
@@ -3278,6 +3325,44 @@ func (s *server) tokenAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// optionalAuthMiddleware 可选认证中间件（支持免登录模式）
+func (s *server) optionalAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
+
+		if token != "" {
+			var userID int64
+			var isActive int
+			err := s.db.QueryRow("SELECT id, is_active FROM users WHERE token = ?", token).Scan(&userID, &isActive)
+			if err == nil && isActive == 1 {
+				ctx := context.WithValue(r.Context(), userContextKey, userID)
+				next(w, r.WithContext(ctx))
+				return
+			}
+		}
+
+		var requireLogin string
+		err := s.db.QueryRow("SELECT value FROM sys_config WHERE user_id = 0 AND key = 'require_login'").Scan(&requireLogin)
+		if err != nil || requireLogin != "false" {
+			respondError(w, http.StatusUnauthorized, errors.New("未提供认证token"))
+			return
+		}
+
+		var adminID int64
+		err = s.db.QueryRow("SELECT id FROM users WHERE is_admin = 1 AND is_active = 1 LIMIT 1").Scan(&adminID)
+		if err != nil {
+			respondError(w, http.StatusUnauthorized, errors.New("未找到管理员账户"))
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userContextKey, adminID)
+		next(w, r.WithContext(ctx))
+	}
+}
+
 // apiKeyAuthMiddleware 仅支持 API Key 的认证中间件
 func (s *server) apiKeyAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -3640,14 +3725,14 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := &user{
-		ID:                    dbUser.ID,
-		Username:              dbUser.Username,
-		Nickname:              dbUser.Nickname,
-		Email:                 dbUser.Email,
-		IsActive:              dbUser.IsActive == 1,
-		IsAdmin:               dbUser.IsAdmin == 1,
-		CreatedAt:             dbUser.CreatedAt,
-		HasSecurityQuestions:  hasSecurityQuestions,
+		ID:                   dbUser.ID,
+		Username:             dbUser.Username,
+		Nickname:             dbUser.Nickname,
+		Email:                dbUser.Email,
+		IsActive:             dbUser.IsActive == 1,
+		IsAdmin:              dbUser.IsAdmin == 1,
+		CreatedAt:            dbUser.CreatedAt,
+		HasSecurityQuestions: hasSecurityQuestions,
 	}
 	if dbUser.Avatar.Valid {
 		user.Avatar = &dbUser.Avatar.String
@@ -3666,8 +3751,14 @@ func (s *server) handleCheckAuth(w http.ResponseWriter, r *http.Request) {
 		token = r.URL.Query().Get("token")
 	}
 
+	var requireLogin string
+	s.db.QueryRow("SELECT value FROM sys_config WHERE user_id = 0 AND key = 'require_login'").Scan(&requireLogin)
+
 	if token == "" {
-		respondJSON(w, http.StatusOK, map[string]bool{"authenticated": false})
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"authenticated": false,
+			"require_login": requireLogin != "false",
+		})
 		return
 	}
 
@@ -3675,7 +3766,10 @@ func (s *server) handleCheckAuth(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRow("SELECT id FROM users WHERE token = ? AND is_active = 1", token).Scan(&userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			respondJSON(w, http.StatusOK, map[string]bool{"authenticated": false})
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"authenticated": false,
+				"require_login": requireLogin != "false",
+			})
 			return
 		}
 		respondError(w, http.StatusInternalServerError, err)
@@ -3685,6 +3779,7 @@ func (s *server) handleCheckAuth(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"authenticated": true,
 		"user_id":       userID,
+		"require_login": requireLogin != "false",
 	})
 }
 
