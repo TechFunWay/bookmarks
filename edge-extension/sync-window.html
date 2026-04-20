@@ -5,351 +5,137 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>【网址收藏夹】同步助手</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
-      width: 100%;
-      height: 100vh;
-      margin: 0;
-      padding: 0;
+      width: 100%; height: 100vh; margin: 0; padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
       background-color: #f5f5f5;
-      display: flex;
-      flex-direction: column;
+      display: flex; flex-direction: column;
     }
-
     .container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background-color: white;
-      height: 100%;
+      flex: 1; display: flex; flex-direction: column;
+      background-color: white; height: 100%;
     }
-
     .toolbar {
-      display: flex;
-      gap: 12px;
-      padding: 16px 24px;
-      background-color: #fafafa;
-      border-bottom: 1px solid #e0e0e0;
-      flex-shrink: 0;
-      justify-content: flex-end;
+      display: flex; gap: 10px; padding: 16px 24px;
+      background-color: #fafafa; border-bottom: 1px solid #e0e0e0;
+      flex-shrink: 0; align-items: center; flex-wrap: wrap;
     }
-
+    .toolbar .device-select {
+      padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px;
+      font-size: 13px; background-color: white; min-width: 140px;
+    }
     .toolbar button {
-      padding: 10px 24px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s;
+      padding: 10px 20px; background-color: #4CAF50; color: white;
+      border: none; border-radius: 4px; font-size: 14px; font-weight: 500;
+      cursor: pointer; transition: background-color 0.2s; white-space: nowrap;
     }
-
-    .toolbar button:hover {
-      background-color: #45a049;
-    }
-
-    .toolbar button:active {
-      background-color: #3d8b40;
-    }
-
-    .toolbar button:disabled {
-      background-color: #cccccc;
-      cursor: not-allowed;
-    }
-
+    .toolbar button:hover { background-color: #45a049; }
+    .toolbar button:disabled { background-color: #cccccc; cursor: not-allowed; }
+    .toolbar button.app-to-edge-btn { background-color: #2196F3; }
+    .toolbar button.app-to-edge-btn:hover { background-color: #1976D2; }
+    .toolbar button.sync-all-btn { background-color: #FF9800; }
+    .toolbar button.sync-all-btn:hover { background-color: #F57C00; }
     .toolbar button.config-btn {
-      background-color: #fff;
-      color: #4CAF50;
-      border: 2px solid #4CAF50;
+      background-color: #fff; color: #4CAF50; border: 2px solid #4CAF50; margin-left: auto;
     }
-
-    .toolbar button.config-btn:hover {
-      background-color: #4CAF50;
-      color: white;
-    }
-
+    .toolbar button.config-btn:hover { background-color: #4CAF50; color: white; }
     .main-content {
-      flex: 1;
-      padding: 24px;
-      overflow-y: auto;
+      flex: 1; padding: 24px; overflow-y: auto;
     }
-
     .sync-status {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 12px 16px;
-      border-radius: 6px;
-      font-size: 16px;
-      font-weight: 500;
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px 16px; border-radius: 6px; font-size: 16px; font-weight: 500;
       margin-bottom: 16px;
     }
-
-    .sync-status.success {
-      background-color: #e8f5e8;
-      color: #2e7d32;
-    }
-
-    .sync-status.error {
-      background-color: #ffebee;
-      color: #c62828;
-    }
-
-    .sync-status.syncing {
-      background-color: #e3f2fd;
-      color: #1565c0;
-    }
-
-    .sync-status.ready {
-      background-color: #f5f5f5;
-      color: #666;
-    }
-
-    .status-icon {
-      margin-right: 10px;
-      font-size: 20px;
-    }
-
+    .sync-status.success { background-color: #e8f5e8; color: #2e7d32; }
+    .sync-status.error { background-color: #ffebee; color: #c62828; }
+    .sync-status.syncing { background-color: #e3f2fd; color: #1565c0; }
+    .sync-status.ready { background-color: #f5f5f5; color: #666; }
+    .status-icon { margin-right: 10px; font-size: 20px; }
     .config-section {
-      background-color: #fafafa;
-      border-radius: 6px;
-      padding: 16px;
-      border: 1px solid #e0e0e0;
-      margin-bottom: 16px;
+      background-color: #fafafa; border-radius: 6px; padding: 16px;
+      border: 1px solid #e0e0e0; margin-bottom: 16px;
     }
-
     .config-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #333;
-      margin: 0 0 12px 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #e0e0e0;
+      font-size: 14px; font-weight: 600; color: #333;
+      margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0;
     }
-
     .config-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 12px;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
     }
-
-    .config-item {
-      display: flex;
-      align-items: center;
-      font-size: 14px;
-    }
-
-    .config-label {
-      color: #666;
-      min-width: 80px;
-      flex-shrink: 0;
-    }
-
-    .config-value {
-      color: #333;
-      font-weight: 500;
-      word-break: break-all;
-    }
-
-    .last-sync {
-      font-size: 13px;
-      color: #999;
-      text-align: center;
-      margin-top: 16px;
-    }
-
-    /* 同步方向展示块 */
+    .config-item { display: flex; align-items: center; font-size: 14px; }
+    .config-label { color: #666; min-width: 80px; flex-shrink: 0; }
+    .config-value { color: #333; font-weight: 500; word-break: break-all; }
     .sync-direction-section {
-      background-color: #fafafa;
-      border-radius: 6px;
-      padding: 16px;
-      border: 1px solid #e0e0e0;
-      margin-bottom: 16px;
+      background-color: #fafafa; border-radius: 6px; padding: 16px;
+      border: 1px solid #e0e0e0; margin-bottom: 16px;
     }
-
     .sync-direction-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #333;
-      margin: 0 0 14px 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #e0e0e0;
+      font-size: 14px; font-weight: 600; color: #333;
+      margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0;
     }
-
     .sync-direction-body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
+      display: flex; align-items: center; justify-content: center; gap: 12px;
     }
-
     .sync-dir-endpoint {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 6px; min-width: 0;
     }
-
-    .sync-dir-label {
-      font-size: 12px;
-      color: #888;
-      font-weight: 500;
-      letter-spacing: 0.5px;
-    }
-
+    .sync-dir-label { font-size: 12px; color: #888; font-weight: 500; letter-spacing: 0.5px; }
     .sync-dir-value {
-      font-size: 14px;
-      font-weight: 600;
-      color: #333;
-      background: #fff;
-      border: 1.5px solid #d0d0d0;
-      border-radius: 6px;
-      padding: 6px 14px;
-      text-align: center;
-      word-break: break-all;
-      width: 100%;
+      font-size: 14px; font-weight: 600; color: #333; background: #fff;
+      border: 1.5px solid #d0d0d0; border-radius: 6px; padding: 6px 14px;
+      text-align: center; word-break: break-all; width: 100%;
     }
-
     .sync-dir-arrow {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-      flex-shrink: 0;
-      color: #4CAF50;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 2px; flex-shrink: 0; color: #4CAF50;
     }
-
-    .sync-dir-arrow-icon {
-      font-size: 22px;
-      line-height: 1;
-    }
-
-    .sync-dir-arrow-label {
-      font-size: 11px;
-      color: #888;
-      white-space: nowrap;
-    }
-
-    .toolbar button.app-to-edge-btn {
-      background-color: #2196F3;
-    }
-
-    .toolbar button.app-to-edge-btn:hover {
-      background-color: #1976D2;
-    }
-
-    .toolbar button.app-to-edge-btn:active {
-      background-color: #1565C0;
-    }
-
+    .sync-dir-arrow-icon { font-size: 22px; line-height: 1; }
+    .sync-dir-arrow-label { font-size: 11px; color: #888; white-space: nowrap; }
     .a2e-direction-section {
-      background-color: #e8f4fd;
-      border-radius: 6px;
-      padding: 16px;
-      border: 1px solid #b3d9f5;
-      margin-bottom: 16px;
+      background-color: #e8f4fd; border-radius: 6px; padding: 16px;
+      border: 1px solid #b3d9f5; margin-bottom: 16px;
     }
-
     .a2e-direction-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #1565c0;
-      margin: 0 0 14px 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #b3d9f5;
+      font-size: 14px; font-weight: 600; color: #1565c0;
+      margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 1px solid #b3d9f5;
     }
-
-    @media (max-width: 480px) {
-      .sync-direction-body {
-        gap: 8px;
-      }
-      .sync-dir-value {
-        padding: 5px 8px;
-        font-size: 13px;
-      }
-    }
-
-    /* 内嵌进度面板 */
     .progress-section {
-      background-color: #fafafa;
-      border-radius: 6px;
-      padding: 16px;
-      border: 1px solid #e0e0e0;
-      margin-bottom: 16px;
-      display: none;
+      background-color: #fafafa; border-radius: 6px; padding: 16px;
+      border: 1px solid #e0e0e0; margin-bottom: 16px; display: none;
     }
-
-    .progress-section.visible {
-      display: block;
-    }
-
+    .progress-section.visible { display: block; }
     .progress-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #333;
-      margin: 0 0 12px 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #e0e0e0;
+      font-size: 14px; font-weight: 600; color: #333;
+      margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0;
     }
-
     .progress-bar-wrap {
-      width: 100%;
-      height: 10px;
-      background-color: #e0e0e0;
-      border-radius: 5px;
-      overflow: hidden;
-      margin-bottom: 8px;
+      width: 100%; height: 10px; background-color: #e0e0e0;
+      border-radius: 5px; overflow: hidden; margin-bottom: 8px;
     }
-
     .progress-fill {
-      height: 100%;
-      background-color: #4CAF50;
-      border-radius: 5px;
-      transition: width 0.3s ease;
-      width: 0%;
+      height: 100%; background-color: #4CAF50; border-radius: 5px;
+      transition: width 0.3s ease; width: 0%;
     }
-
-    .progress-step {
-      font-size: 13px;
-      color: #555;
-      text-align: center;
-      margin-bottom: 4px;
-    }
-
-    .progress-count {
-      font-size: 12px;
-      color: #999;
-      text-align: center;
-    }
-
+    .progress-step { font-size: 13px; color: #555; text-align: center; margin-bottom: 4px; }
+    .progress-count { font-size: 12px; color: #999; text-align: center; }
+    .last-sync { font-size: 13px; color: #999; text-align: center; margin-top: 16px; }
     @media (max-width: 700px) {
-      .toolbar {
-        padding: 12px 16px;
-      }
-
-      .main-content {
-        padding: 16px;
-      }
-
-      .config-grid {
-        grid-template-columns: 1fr;
-      }
+      .toolbar { padding: 12px 16px; }
+      .main-content { padding: 16px; }
+      .config-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="toolbar">
-      <button id="syncButton">立即同步（浏览器→应用）</button>
-      <button id="syncFromAppButton" class="app-to-edge-btn">立即同步（应用→浏览器）</button>
+      <select id="deviceSelect" class="device-select"></select>
+      <button id="syncButton">同步（E→A）</button>
+      <button id="syncFromAppButton" class="app-to-edge-btn">同步（A→E）</button>
+      <button id="syncAllButton" class="sync-all-btn">同步所有设备</button>
       <button id="configButton" class="config-btn">⚙️ 设置</button>
     </div>
     <div class="main-content">
@@ -362,21 +148,24 @@
         <h2 class="config-title">配置信息</h2>
         <div class="config-grid">
           <div class="config-item">
+            <span class="config-label">当前设备:</span>
+            <span id="currentDeviceName" class="config-value">加载中...</span>
+          </div>
+          <div class="config-item">
             <span class="config-label">服务器地址:</span>
             <span id="serverUrl" class="config-value">加载中...</span>
           </div>
           <div class="config-item">
-            <span class="config-label">浏览器→应用:</span>
+            <span class="config-label">E→A 同步:</span>
             <span id="e2aSyncStatusText" class="config-value">加载中...</span>
           </div>
-          <div class="config-item" id="a2eSyncStatusItem">
-            <span class="config-label">应用→浏览器:</span>
+          <div class="config-item">
+            <span class="config-label">A→E 同步:</span>
             <span id="a2eSyncStatusText" class="config-value">加载中...</span>
           </div>
         </div>
       </div>
 
-      <!-- 浏览器→应用同步方向展示 -->
       <div class="sync-direction-section">
         <h2 id="e2aDirectionTitle" class="sync-direction-title">浏览器 → 应用</h2>
         <div class="sync-direction-body">
@@ -395,7 +184,6 @@
         </div>
       </div>
 
-      <!-- 应用→浏览器同步方向展示（有配置时显示） -->
       <div id="a2eDirectionSection" class="a2e-direction-section">
         <h2 id="a2eDirectionTitle" class="a2e-direction-title">应用 → 浏览器</h2>
         <div class="sync-direction-body">
@@ -414,7 +202,6 @@
         </div>
       </div>
 
-      <!-- 内嵌进度面板，点击同步后展开 -->
       <div id="progressSection" class="progress-section">
         <h2 class="progress-title">同步进度</h2>
         <div class="progress-bar-wrap">
@@ -424,12 +211,9 @@
         <div id="progressCount" class="progress-count">0 / 0</div>
       </div>
 
-      <div id="lastSync" class="last-sync">
-        最后同步: 从未
-      </div>
+      <div id="lastSync" class="last-sync">最后同步: 从未</div>
     </div>
   </div>
-
   <script src="sync-window.js"></script>
 </body>
 </html>
