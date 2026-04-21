@@ -1227,6 +1227,16 @@
               <div style="text-align:center;padding:20px 0 8px;color:#FF9800;font-size:15px;font-weight:500;">🔓 免登录模式</div>
               <div style="text-align:center;padding:0 16px 12px;color:var(--text3);font-size:13px;">当前以管理员身份操作，登录后可修改设置</div>
               <div class="settings-list" style="margin-top:8px;">
+                <div class="settings-item" @click="openFolderView">
+                  <span class="settings-item-icon">⊞</span>
+                  <span class="settings-item-label">分类视图</span>
+                  <span class="settings-item-value">›</span>
+                </div>
+                <div class="settings-item" @click="openDuplicateCheck">
+                  <span class="settings-item-icon">🔍</span>
+                  <span class="settings-item-label">去重复</span>
+                  <span class="settings-item-value">›</span>
+                </div>
                 <div class="settings-item" @click="showAccountSheet=false; apiKeyModal.visible=true; apiKeyModal.key=''">
                   <span class="settings-item-icon">🔌</span>
                   <span class="settings-item-label">API Key</span>
@@ -1250,11 +1260,16 @@
             </template>
             <template v-else>
               <div class="settings-list" v-if="currentUser">
-                <div class="settings-item" @click="openDuplicateCheck">
-                  <span class="settings-item-icon">🔍</span>
-                  <span class="settings-item-label">去重复</span>
-                  <span class="settings-item-value">›</span>
-                </div>
+              <div class="settings-item" @click="openDuplicateCheck">
+                <span class="settings-item-icon">🔍</span>
+                <span class="settings-item-label">去重复</span>
+                <span class="settings-item-value">›</span>
+              </div>
+              <div class="settings-item" @click="openFolderView">
+                <span class="settings-item-icon">⊞</span>
+                <span class="settings-item-label">分类视图</span>
+                <span class="settings-item-value">›</span>
+              </div>
                 <div class="settings-item" v-if="currentUser && currentUser.is_admin" @click="openUserManagement">
                   <span class="settings-item-icon">👥</span>
                   <span class="settings-item-label">用户管理</span>
@@ -1865,6 +1880,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch {}
         if (!this.requireLogin) { this.guestMode = true; return; }
         window.location.href = 'login.html';
+      },
+      openFolderView() {
+        this.showAccountSheet = false;
+        window.location.href = '/folder-mobile.html';
       },
       openDuplicateCheck() {
         this.showAccountSheet = false;
