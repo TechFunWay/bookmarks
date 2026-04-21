@@ -1601,15 +1601,24 @@
         window.removeEventListener("resize", this.hideContextMenu);
       },
       methods: {
-        checkAuth() {
+        async checkAuth() {
           const token = localStorage.getItem('token');
-          if (!token) {
-            window.location.href = 'login.html';
-            return false;
+          if (token) {
+            this.token = token;
+            this.loadCurrentUser();
+            return true;
           }
-          this.token = token;
-          this.loadCurrentUser();
-          return true;
+          try {
+            const r = await fetch('/api/config/system');
+            if (r.ok) {
+              const d = await r.json();
+              if (d.require_login === 'false') {
+                return true;
+              }
+            }
+          } catch (e) { console.error('checkAuth error:', e); }
+          window.location.href = 'login.html';
+          return false;
         },
         async loadCurrentUser() {
           try {
