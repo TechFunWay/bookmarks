@@ -566,8 +566,12 @@
           }
         };
       },
-      mounted() {
+      async mounted() {
         if (!this.token) {
+          try {
+            const r = await fetch('/api/config/system');
+            if (r.ok) { const d = await r.json(); if (d.require_login === 'false') { this.showToast('免登录模式下无法访问用户管理', 'error'); setTimeout(() => { window.location.href = '/pc.html'; }, 1500); return; } }
+          } catch (e) { console.error('checkAuth error:', e); }
           window.location.href = '/login.html';
           return;
         }
