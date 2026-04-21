@@ -751,8 +751,15 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     },
 
-    mounted() {
-      if (!this.token) { window.location.href = 'login.html'; return; }
+    async mounted() {
+      if (!this.token) {
+        try {
+          const r = await fetch('/api/config/system');
+          if (r.ok) { const d = await r.json(); if (d.require_login === 'false') { this.showToast('免登录模式下无法访问用户管理', 'error'); setTimeout(() => { window.location.href = 'mobile.html'; }, 1500); return; } }
+        } catch (e) { console.error('checkAuth error:', e); }
+        window.location.href = 'login.html';
+        return;
+      }
       this.getCurrentUser();
       this.loadUsers();
       // document 级监听，点击菜单外任何地方都关闭上下文菜单
