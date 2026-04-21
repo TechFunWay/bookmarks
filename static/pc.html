@@ -229,6 +229,10 @@
               <span>➕</span>
               <span>添加网址</span>
             </button>
+            <button class="tertiary small" onclick="window.location.href='/folder-pc.html'">
+              <span>⊞</span>
+              <span>分类</span>
+            </button>
             <button class="tertiary small" @click="toggleBookmarkEdit" v-if="displayBookmarks.length > 0">
               <span>{{ bookmarkEditMode ? '✅' : '✏️' }}</span>
               <span>{{ bookmarkEditMode ? '完成' : '编辑' }}</span>
