@@ -234,6 +234,9 @@ const app = createApp({
           confirmText: "确认",
           callback: null
         },
+        supportModal: {
+          visible: false
+        },
         bookmarkEditMode: false,
         selectedBookmarks: new Set(),
         moveModal: {
