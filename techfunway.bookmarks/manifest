@@ -1,5 +1,5 @@
 appname               = techfunway.bookmarks
-version               = 2.0.0
+version               = 2.1.0
 display_name          = 网址收藏夹
 desc                  = """
 收藏自己的网址功能，支持点击跳转
@@ -16,11 +16,21 @@ desc                  = """
 cd /安装存储空间/@appcenter/techfunway.bookmarks/server
 ./reset-password -username admin -password 123456
 """
-platform              = x86
+platform              = arm
 source                = thirdparty
 maintainer            = 科技智趣坊
 maintainer_url        = http://techfunway.wycto.cn/fnapp/bookmarks
+distributor           = 科技智趣坊
+distributor_url       = http://techfunway.wycto.cn
+desktop_uidir         = ui
+desktop_applaunchname = techfunway.bookmarks.Application
 changelog             = """
+v2.1.0更新日志：
+&nbsp;&nbsp;1、更新：浏览器同步插件支持同时同步多个设备，每个设备独立配置设置
+&nbsp;&nbsp;2、新增：免登录功能（开启免登录后实际使用的是管理员数据）
+&nbsp;&nbsp;3、新增：新增分类显示页面，支持滑动缩放图标大小<br><br>
+
+v2.0.0更新日志：
 1. 账户安全增强
 &nbsp;&nbsp;1.1 安全问题验证：为忘记密码功能增加通过预设安全问题找回账户的途径。
 &nbsp;&nbsp;1.2 重置密码命令：新增可通过命令行执行的密码重置功能。
@@ -35,7 +45,3 @@ changelog             = """
 &nbsp;&nbsp;3.1 手机端背景设置：支持在移动端自定义应用界面背景（壁纸）。
 &nbsp;&nbsp;3.2 登录框记住密码：在登录界面增加“记住密码”选项，提升登录便捷性。
 """
-distributor           = 科技智趣坊
-distributor_url       = http://techfunway.wycto.cn
-desktop_uidir         = ui
-desktop_applaunchname = techfunway.bookmarks.Application
