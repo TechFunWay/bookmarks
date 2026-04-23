@@ -253,12 +253,12 @@ func main() {
 	// 迁移旧数据库：从 ./data.db 迁移到新路径并改名为 database.db
 	migrateOldDatabase(oldPath, dbPath, "data.db", "database.db")
 
-	db, err := sql.Open("sqlite", dbPath+"database.db?_foreign_keys=on")
+	db, err := sql.Open("sqlite", dbPath+"database.db?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL")
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(2)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	// 初始化数据库
 	if err := initializeDB(db); err != nil {
@@ -877,11 +877,7 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
+	defer tx.Rollback()
 
 	// remarkMap 仅在 replace 模式下有值，用于删除前保存 url→remark
 	var remarkMap map[string]string
@@ -1003,11 +999,7 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
+	defer tx.Rollback()
 
 	// remarkMap 仅在 replace 模式下有值
 	var remarkMap map[string]string
@@ -1638,11 +1630,7 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
+	defer tx.Rollback()
 
 	if parentID != nil {
 		var parentType string
@@ -1725,16 +1713,6 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 }
 
 func (s *server) updateNode(ctx context.Context, userID int64, id int64, req updateNodeRequest) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
 	var current struct {
 		Type     string
 		ParentID sql.NullInt64
@@ -1743,37 +1721,11 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		Favicon  sql.NullString
 		Remark   string
 	}
-	err = tx.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url, remark FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
+	err := s.db.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url, remark FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
 		&current.Type, &current.ParentID, &current.Title, &current.URL, &current.Favicon, &current.Remark,
 	)
 	if err != nil {
 		return err
-	}
-
-	if req.ParentID != nil {
-		if *req.ParentID == id {
-			err = ErrCycleDetected
-			return err
-		}
-		var parentType string
-		if err = tx.QueryRowContext(ctx, "SELECT type FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID).Scan(&parentType); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				err = ErrInvalidParent
-			}
-			return err
-		}
-		if parentType != nodeTypeFolder {
-			err = ErrInvalidParent
-			return err
-		}
-		isCycle, cycErr := s.parentCreatesCycle(tx, userID, id, *req.ParentID)
-		if cycErr != nil {
-			return cycErr
-		}
-		if isCycle {
-			err = ErrCycleDetected
-			return err
-		}
 	}
 
 	var parentIDValue int64
@@ -1808,8 +1760,7 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 	if req.Title != nil {
 		title := strings.TrimSpace(*req.Title)
 		if title == "" {
-			err = ErrInvalidUpdate
-			return err
+			return ErrInvalidUpdate
 		}
 		targetTitle = title
 		titleSet = true
@@ -1817,8 +1768,7 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 
 	if req.URL != nil {
 		if current.Type != nodeTypeBookmark {
-			err = ErrInvalidUpdate
-			return err
+			return ErrInvalidUpdate
 		}
 		normalized, normErr := normalizeURL(strings.TrimSpace(*req.URL))
 		if normErr != nil {
@@ -1844,8 +1794,7 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 
 	if req.FaviconURL != nil {
 		if current.Type != nodeTypeBookmark {
-			err = ErrInvalidUpdate
-			return err
+			return ErrInvalidUpdate
 		}
 		favicon := strings.TrimSpace(*req.FaviconURL)
 		if favicon == "" {
@@ -1874,6 +1823,35 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		return ErrInvalidUpdate
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if req.ParentID != nil {
+		if *req.ParentID == id {
+			return ErrCycleDetected
+		}
+		var parentType string
+		if err = tx.QueryRowContext(ctx, "SELECT type FROM nodes WHERE id = ? AND user_id = ?", *req.ParentID, userID).Scan(&parentType); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				err = ErrInvalidParent
+			}
+			return err
+		}
+		if parentType != nodeTypeFolder {
+			return ErrInvalidParent
+		}
+		isCycle, cycErr := s.parentCreatesCycle(tx, userID, id, *req.ParentID)
+		if cycErr != nil {
+			return cycErr
+		}
+		if isCycle {
+			return ErrCycleDetected
+		}
+	}
+
 	switch current.Type {
 	case nodeTypeFolder:
 		if titleSet || parentSet {
@@ -1883,8 +1861,7 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		}
 	case nodeTypeBookmark:
 		if !urlValid {
-			err = ErrInvalidUpdate
-			return err
+			return ErrInvalidUpdate
 		}
 		if titleSet || urlSet || parentSet {
 			if err := ensureUniqueBookmarkTx(tx, userID, targetParentID, targetTitle, targetURL, &id); err != nil {
@@ -1945,11 +1922,7 @@ func (s *server) reorderNodes(ctx context.Context, userID int64, parentID *int64
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
+	defer tx.Rollback()
 
 	placeholders := strings.Repeat("?,", len(orderedIDs))
 	placeholders = strings.TrimSuffix(placeholders, ",")
