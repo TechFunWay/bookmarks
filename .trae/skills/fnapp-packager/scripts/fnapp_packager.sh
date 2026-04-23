@@ -66,12 +66,12 @@ package_platform() {
 
     case $ARCH in
         "amd64")
-            PLATFORM_DIR="release/bookmarks-v${VERSION}-linux-amd64"
+            PLATFORM_DIR="release/v${VERSION}/bookmarks-v${VERSION}-linux-amd64"
             MANIFEST_PLATFORM="x86"
             OUTPUT_ARCH="amd64"
             ;;
         "arm64")
-            PLATFORM_DIR="release/bookmarks-v${VERSION}-linux-arm64"
+            PLATFORM_DIR="release/v${VERSION}/bookmarks-v${VERSION}-linux-arm64"
             MANIFEST_PLATFORM="arm"
             OUTPUT_ARCH="arm64"
             ;;
@@ -158,11 +158,11 @@ package_platform() {
     fi
 
     # 确保 release 目录存在
-    mkdir -p "release"
+    mkdir -p "release/v${VERSION}"
 
     # 重命名打包文件并移动到 release 目录
     OUTPUT_FILE="techfunway.bookmarks-v${VERSION}-${OUTPUT_ARCH}.fpk"
-    RELEASE_OUTPUT="release/$OUTPUT_FILE"
+    RELEASE_OUTPUT="release/v${VERSION}/$OUTPUT_FILE"
     echo "重命名打包文件为: $OUTPUT_FILE"
     echo "移动到 release 目录"
     mv "techfunway.bookmarks/techfunway.bookmarks.fpk" "$RELEASE_OUTPUT"
@@ -179,7 +179,7 @@ done
 
 echo "=== 打包完成 ==="
 echo "生成的文件:"
-ls -la release/techfunway.bookmarks-v${VERSION}-*.fpk || true
+ls -la release/v${VERSION}/techfunway.bookmarks-v${VERSION}-*.fpk || true
 
 echo "\n使用说明:"
 echo "1. 打包文件已生成在 release 目录"

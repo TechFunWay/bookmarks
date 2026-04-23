@@ -10,8 +10,8 @@ fi
 
 echo "使用版本号: $VERSION"
 
-AMD64_DIR="release/bookmarks-${VERSION}-linux-amd64"
-ARM64_DIR="release/bookmarks-${VERSION}-linux-arm64"
+AMD64_DIR="release/$VERSION/bookmarks-${VERSION}-linux-amd64"
+ARM64_DIR="release/$VERSION/bookmarks-${VERSION}-linux-arm64"
 
 if [ ! -d "$AMD64_DIR" ] || [ ! -f "$AMD64_DIR/bookmarks" ]; then
     echo "Error: 缺少linux-amd64可执行文件"

@@ -4,8 +4,8 @@ WORKDIR /app
 
 ARG TARGETARCH
 ARG VERSION
-COPY release/bookmarks-${VERSION}-linux-${TARGETARCH}/bookmarks /app/bookmarks
-COPY release/bookmarks-${VERSION}-linux-${TARGETARCH}/reset-password /app/reset-password
+COPY release/${VERSION}/bookmarks-${VERSION}-linux-${TARGETARCH}/bookmarks /app/bookmarks
+COPY release/${VERSION}/bookmarks-${VERSION}-linux-${TARGETARCH}/reset-password /app/reset-password
 
 EXPOSE 8901
 

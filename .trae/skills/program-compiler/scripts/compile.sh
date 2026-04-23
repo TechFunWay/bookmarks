@@ -36,7 +36,7 @@ echo "插件打包完成: static/downloads/edge-extension.zip"
 # ---- end 打包浏览器插件 ----
 
 # 创建 release 目录
-mkdir -p release
+mkdir -p "release/$VERSION"
 
 # 定义平台列表
 PLATFORMS=("linux-amd64" "linux-arm64" "macos-amd64" "macos-arm64" "windows-amd64" "windows-arm64")
@@ -89,7 +89,7 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     esac
     
     # 创建目标目录
-    TARGET_DIR="release/bookmarks-${VERSION}-${PLATFORM}"
+    TARGET_DIR="release/$VERSION/bookmarks-${VERSION}-${PLATFORM}"
     mkdir -p "$TARGET_DIR"
     
     # 编译可执行文件
@@ -108,12 +108,12 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     
     # 创建压缩包
     echo "创建压缩包..."
-    cd "release"
+    cd "release/$VERSION"
     tar -czf "bookmarks-${VERSION}-${PLATFORM}.tar.gz" "bookmarks-${VERSION}-${PLATFORM}"
-    cd ..
+    cd ../..
     
     echo "平台 $PLATFORM 编译完成"
 done
 
 echo "\n所有编译任务完成！"
-echo "编译结果位于: release/ 目录"
+echo "编译结果位于: release/$VERSION/ 目录"
