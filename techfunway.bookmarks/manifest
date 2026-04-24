@@ -16,7 +16,7 @@ desc                  = """
 cd /安装存储空间/@appcenter/techfunway.bookmarks/server
 ./reset-password -username admin -password 123456
 """
-platform              = arm
+platform              = x86
 source                = thirdparty
 maintainer            = 科技智趣坊
 maintainer_url        = http://techfunway.wycto.cn/fnapp/bookmarks
@@ -28,8 +28,9 @@ changelog             = """
 v2.1.0更新日志：
 &nbsp;&nbsp;1、更新：浏览器同步插件支持同时同步多个设备，每个设备独立配置设置
 &nbsp;&nbsp;2、新增：免登录功能（开启免登录后实际使用的是管理员数据）
-&nbsp;&nbsp;3、新增：新增分类显示页面，支持滑动缩放图标大小<br><br>
-&nbsp;&nbsp;4、修复：修复数据库锁住的问题<br>
+&nbsp;&nbsp;3、新增：新增分类显示页面，支持滑动缩放图标大小
+&nbsp;&nbsp;4、优化：文件夹支持移动到根目录
+&nbsp;&nbsp;5、修复：修复数据库锁住的问题<br>
 
 v2.0.0更新日志：
 1. 账户安全增强

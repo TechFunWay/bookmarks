@@ -35,6 +35,7 @@ echo "\n构建模式: 仅本地构建（不推送）"
 echo "\n使用 Docker Buildx 构建多架构镜像..."
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
+    --build-arg VERSION=${VERSION} \
     --output type=docker \
     -t ${REPO_NAME}:${VERSION} \
     .

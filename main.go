@@ -622,11 +622,28 @@ func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateNodeRequest struct {
-	Title      *string `json:"title"`
-	URL        *string `json:"url"`
-	ParentID   *int64  `json:"parent_id"`
-	FaviconURL *string `json:"favicon_url"`
-	Remark     *string `json:"remark"`
+	Title       *string `json:"title"`
+	URL         *string `json:"url"`
+	ParentID    *int64  `json:"parent_id"`
+	ParentIDSet bool    `json:"-"`
+	FaviconURL  *string `json:"favicon_url"`
+	Remark      *string `json:"remark"`
+}
+
+func (r *updateNodeRequest) UnmarshalJSON(data []byte) error {
+	type Alias updateNodeRequest
+	var a Alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*r = updateNodeRequest(a)
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) == nil {
+		if _, ok := raw["parent_id"]; ok {
+			r.ParentIDSet = true
+		}
+	}
+	return nil
 }
 
 func (s *server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
@@ -1812,10 +1829,13 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		remarkSet = true
 	}
 
-	if req.ParentID != nil {
-		newParent := *req.ParentID
-		parentIDValue = newParent
-		targetParentID = &parentIDValue
+	if req.ParentIDSet {
+		if req.ParentID != nil {
+			parentIDValue = *req.ParentID
+			targetParentID = &parentIDValue
+		} else {
+			targetParentID = nil
+		}
 		parentSet = true
 	}
 
@@ -1829,7 +1849,7 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 	}
 	defer tx.Rollback()
 
-	if req.ParentID != nil {
+	if req.ParentIDSet && req.ParentID != nil {
 		if *req.ParentID == id {
 			return ErrCycleDetected
 		}

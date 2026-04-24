@@ -1146,6 +1146,14 @@
           <div class="modal-title">移动到文件夹</div>
           <div class="modal-body">
             <div class="folder-selector">
+              <div class="folder-option"
+                :class="{ selected: moveModal.targetId === null }"
+                @click="moveModal.targetId = null"
+              >
+                <span>🏠</span>
+                <span>根目录</span>
+                <span class="folder-option-check" v-if="moveModal.targetId === null">✓</span>
+              </div>
               <div v-for="f in getAllFolders()" :key="f.id"
                 class="folder-option"
                 :class="{ selected: moveModal.targetId === f.id, disabled: isFolderOrChild(f.id, moveModal.nodeParentId) }"
@@ -1159,7 +1167,7 @@
           </div>
           <div class="modal-footer">
             <button class="modal-btn secondary" @click="closeMoveModal">取消</button>
-            <button class="modal-btn primary" @click="confirmMove" :disabled="!moveModal.targetId || moveModal.targetId === moveModal.nodeParentId">确认移动</button>
+            <button class="modal-btn primary" @click="confirmMove" :disabled="moveModal.targetId === moveModal.nodeParentId">确认移动</button>
           </div>
         </div>
       </transition>
@@ -2273,11 +2281,10 @@ document.addEventListener('DOMContentLoaded', () => {
           } else if (m.type === 'edit-folder') {
             const r = await fetch(`/api/nodes/${m.nodeId}`, {
               method: 'PUT', headers: this.getHeaders('application/json'),
-              body: JSON.stringify({ title: m.form.title.trim() })
+              body: JSON.stringify({ title: m.form.title.trim(), parent_id: m.parentId })
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '更新失败');
           } else if (m.type === 'edit-bookmark') {
-            if (!m.parentId) throw new Error('请先选择文件夹');
             const payload = { title: m.form.title.trim(), url: m.form.url.trim(), parent_id: m.parentId, remark: m.form.remark.trim() };
             if (m.form.favicon_url.trim()) payload.favicon_url = m.form.favicon_url.trim();
             const r = await fetch(`/api/nodes/${m.nodeId}`, {
@@ -2356,7 +2363,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeMoveModal() { this.moveModal.visible = false; },
       async confirmMove() {
         const { nodeId, targetId } = this.moveModal;
-        if (!targetId) return;
+        if (targetId === undefined) return;
         try {
           const r = await fetch(`/api/nodes/${nodeId}`, {
             method: 'PUT', headers: this.getHeaders('application/json'),

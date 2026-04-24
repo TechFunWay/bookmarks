@@ -97,8 +97,10 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     # 对于Linux平台，使用CGO_ENABLED=0进行静态编译
     if [[ "$GOOS" == "linux" ]]; then
         CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/bookmarks$EXT" main.go
+        CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/reset-password$EXT" cmd/reset-password.go
     else
         CGO_ENABLED=1 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/bookmarks$EXT" main.go
+        CGO_ENABLED=1 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$TARGET_DIR/reset-password$EXT" cmd/reset-password.go
     fi
     
     if [ $? -ne 0 ]; then
