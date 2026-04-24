@@ -1872,6 +1872,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
     async updateFolder() {
       const payload = {
         title: this.modal.form.title.trim(),
+        parent_id: this.modal.parentId,
         remark: this.modal.form.remark.trim(),
       };
       const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
@@ -1885,11 +1886,6 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       }
     },
     async updateBookmark() {
-      // 验证是否选中了文件夹
-      if (!this.modal.parentId) {
-        throw new Error("请先选择一个文件夹");
-      }
-      
       const payload = {
         title: this.modal.form.title.trim(),
         url: this.modal.form.url.trim(),
