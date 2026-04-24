@@ -552,11 +552,11 @@
         <div class="form-group">
           <label>选择目标文件夹</label>
           <div class="folder-selector">
-            <!--<div class="folder-option" @click="selectMoveTarget(null)">
+            <div class="folder-option" @click="selectMoveTarget(null)">
               <span class="action-icon">🏠</span>
               <span class="action-text">根目录</span>
               <span class="selected-indicator" v-if="moveModal.targetParentId === null">✓</span>
-            </div>-->
+            </div>
             <div
                     v-for="folder in getAllFolders()"
                     :key="folder.id"
