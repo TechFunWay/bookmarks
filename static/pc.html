@@ -298,7 +298,7 @@
                       @touchend="endBookmarkLongPress"
                       @touchcancel="endBookmarkLongPress"
               >
-                <div class="bookmark-edit-checkbox" v-if="bookmarkEditMode">
+                <div class="bookmark-edit-checkbox" v-if="bookmarkEditMode && isOwnNode(item.raw)">
                   <input
                           type="checkbox"
                           :checked="selectedBookmarks.has(item.id)"
@@ -325,7 +325,7 @@
                         </span>
                   </div>
                 </div>
-                <div class="bookmark-actions" v-if="bookmarkEditMode">
+                <div class="bookmark-actions" v-if="bookmarkEditMode && isOwnNode(item.raw)">
                   <button class="tertiary small" @click="moveSingleBookmark(item.raw, 'up')" title="上移">
                     <span class="action-icon">⬆️</span>
                   </button>
@@ -354,7 +354,7 @@
             :style="contextMenuStyle"
             @click.stop
     >
-      <template v-if="contextNode.type === 'folder'">
+      <template v-if="contextNode.type === 'folder' && isOwnNode(contextNode)">
         <button type="button" @click="contextAddFolder">
           <span class="action-icon">🗂️</span>
           <span class="action-text">新建子文件夹</span>
@@ -365,6 +365,7 @@
         </button>
         <hr />
       </template>
+      <template v-if="isOwnNode(contextNode)">
       <button type="button" @click="contextReorder('up')">
         <span class="action-icon">⬆️</span>
         <span class="action-text">上移</span>
@@ -390,6 +391,17 @@
         <span class="action-icon">🗑️</span>
         <span class="action-text">删除</span>
       </button>
+      </template>
+      <template v-if="!isOwnNode(contextNode) && contextNode.type === 'bookmark'">
+        <a :href="contextNode.url" target="_blank" rel="noopener" style="display:block;padding:8px 16px;text-decoration:none;color:inherit;">
+          <span class="action-icon">🔗</span>
+          <span class="action-text">打开链接</span>
+        </a>
+        <span style="display:block;padding:4px 16px;font-size:11px;color:#999;">来自其他用户的公开书签</span>
+      </template>
+      <template v-if="!isOwnNode(contextNode) && contextNode.type === 'folder'">
+        <span style="display:block;padding:4px 16px;font-size:11px;color:#999;">来自其他用户的公开书签</span>
+      </template>
     </div>
   </transition>
 
@@ -526,6 +538,13 @@
                     type="text"
                     placeholder="自动获取或手动输入（支持网址、base64、本地路径）"
             />
+          </div>
+          <div class="form-group" v-if="modal.type.includes('bookmark')">
+            <label>可见性</label>
+            <select v-model="modal.form.visibility" style="width:100%;padding:8px;border:1px solid var(--border-color, #ddd);border-radius:4px;font-size:13px;background:var(--input-bg,#fff);color:var(--text-color,#333);">
+              <option value="private">🔒 私密（仅自己可见）</option>
+              <option value="public">🌐 公开（所有人可见）</option>
+            </select>
           </div>
           <div class="form-group">
             <label>备注</label>
