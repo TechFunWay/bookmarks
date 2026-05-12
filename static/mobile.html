@@ -870,7 +870,7 @@
             @click="editMode ? toggleSelect(item.id) : openBookmark(item)"
             @contextmenu.prevent="showBookmarkCtx(item.raw || item, $event)"
           >
-            <input v-if="editMode" type="checkbox" class="bm-checkbox" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
+            <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-checkbox" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
             <div class="bm-favicon">
               <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
               <span v-else class="bm-favicon-placeholder">🔖</span>
@@ -895,7 +895,7 @@
             :class="{ selected: selectedIds.has(item.id) }"
             @click="editMode ? toggleSelect(item.id) : openBookmark(item)"
           >
-            <input v-if="editMode" type="checkbox" class="bm-grid-check" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
+            <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-grid-check" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
             <button class="bm-grid-more" @click.stop="showBookmarkCtx(item.raw || item, $event)" v-if="!editMode">⋮</button>
             <div class="bm-grid-favicon">
               <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
@@ -933,7 +933,7 @@
           @click="editMode ? toggleSelect(item.id) : openBookmark(item)"
           @contextmenu.prevent="showBookmarkCtx(item.raw || item, $event)"
         >
-          <input v-if="editMode" type="checkbox" class="bm-checkbox" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
+          <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-checkbox" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
           <div class="bm-favicon">
             <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
             <span v-else class="bm-favicon-placeholder">🔖</span>
@@ -958,7 +958,7 @@
           :class="{ selected: selectedIds.has(item.id) }"
           @click="editMode ? toggleSelect(item.id) : openBookmark(item)"
         >
-          <input v-if="editMode" type="checkbox" class="bm-grid-check" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
+          <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-grid-check" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
           <button class="bm-grid-more" @click.stop="showBookmarkCtx(item.raw || item, $event)" v-if="!editMode">⋮</button>
           <div class="bm-grid-favicon">
             <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
@@ -1028,7 +1028,7 @@
       :style="{ top: ctxMenu.y + 'px', left: ctxMenu.x + 'px' }"
       @click.stop
     >
-      <template v-if="ctxMenu.node && ctxMenu.node.type === 'folder'">
+      <template v-if="ctxMenu.node && ctxMenu.node.type === 'folder' && isOwnNode(ctxMenu.node)">
         <button class="ctx-item" @click="ctxAddFolder">
           <span class="ctx-icon">🗂️</span>新建子文件夹
         </button>
@@ -1037,6 +1037,7 @@
         </button>
         <div class="ctx-sep"></div>
       </template>
+      <template v-if="isOwnNode(ctxMenu.node)">
       <button class="ctx-item" @click="ctxEdit">
         <span class="ctx-icon">✏️</span>编辑
       </button>
@@ -1058,6 +1059,16 @@
       <button class="ctx-item danger" @click="ctxDelete">
         <span class="ctx-icon">🗑️</span>删除
       </button>
+      </template>
+      <template v-if="!isOwnNode(ctxMenu.node) && ctxMenu.node && ctxMenu.node.type === 'bookmark'">
+        <a :href="ctxMenu.node.url" target="_blank" rel="noopener" style="display:block;padding:12px 16px;text-decoration:none;color:inherit;">
+          <span class="ctx-icon">🔗</span>打开链接
+        </a>
+        <span style="display:block;padding:4px 16px 12px;font-size:11px;color:var(--text3);">来自其他用户的公开书签</span>
+      </template>
+      <template v-if="!isOwnNode(ctxMenu.node) && ctxMenu.node && ctxMenu.node.type === 'folder'">
+        <span style="display:block;padding:8px 16px;font-size:11px;color:var(--text3);">来自其他用户的公开书签</span>
+      </template>
     </div>
   </transition>
 
@@ -1102,6 +1113,14 @@
             <div class="form-group" v-if="nodeModal.type.includes('bookmark')">
               <label class="form-label">图标地址（可选）</label>
               <input class="form-input" v-model="nodeModal.form.favicon_url" type="text" placeholder="留空自动获取" />
+            </div>
+            <!-- Visibility -->
+            <div class="form-group" v-if="nodeModal.type.includes('bookmark')">
+              <label class="form-label">可见性</label>
+              <select class="form-input" v-model="nodeModal.form.visibility">
+                <option value="private">🔒 私密（仅自己可见）</option>
+                <option value="public">🌐 公开（所有人可见）</option>
+              </select>
             </div>
             <!-- Remark -->
             <div class="form-group" v-if="nodeModal.type.includes('bookmark')">
@@ -1757,7 +1776,7 @@ document.addEventListener('DOMContentLoaded', () => {
           type: '',    // add-folder | add-bookmark | edit-folder | edit-bookmark
           nodeId: null,
           parentId: null,
-          form: { title: '', url: '', favicon_url: '', remark: '' }
+          form: { title: '', url: '', favicon_url: '', remark: '', visibility: 'private' }
         },
         metaLoading: false,
         metaError: '',
@@ -1853,7 +1872,16 @@ document.addEventListener('DOMContentLoaded', () => {
           default: return '';
         }
       },
-      specialFolderVisible() { return true; }
+      specialFolderVisible() { return true; },
+      ownUserId() {
+        if (this.currentUser) return this.currentUser.id;
+        if (this.tree && this.tree.length > 0) {
+          for (const n of this.tree) {
+            if (n.id !== -1 && n.user_id) return n.user_id;
+          }
+        }
+        return null;
+      },
     },
 
     mounted() {
@@ -1874,6 +1902,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (contentType) h['Content-Type'] = contentType;
         if (this.token) h.Authorization = this.token;
         return h;
+      },
+      isOwnNode(node) {
+        if (!node || node.id === -1) return false;
+        if (node.user_id === undefined || node.user_id === null) return true;
+        return node.user_id === this.ownUserId;
       },
       // ============ Auth ============
       async checkAuth() {
@@ -1907,18 +1940,20 @@ document.addEventListener('DOMContentLoaded', () => {
           const r = await fetch('/api/auth/me', { headers: this.getHeaders() });
           if (r.ok) {
             this.currentUser = await r.json();
-          } else {
+          } else if (r.status === 401) {
+            // token 无效，清除并跳转登录页
+            localStorage.removeItem('token');
+            localStorage.removeItem('currentUser');
+            window.location.href = 'login.html';
+          } else if (r.status === 403) {
+            // 账号被禁用
             const data = await r.json().catch(() => ({}));
             const msg = data.error || '';
-            if (r.status === 403) {
-              // 账号被禁用
-              this.showToast(msg || '账号已被禁用，请联系管理员', 'error');
-              setTimeout(() => { this.doLogout(); }, 2000);
-            } else {
-              this.doLogout();
-            }
+            this.showToast(msg || '账号已被禁用，请联系管理员', 'error');
+            setTimeout(() => { this.doLogout(); }, 2000);
           }
-        } catch { this.doLogout(); }
+          // 其他错误不处理，保留 token
+        } catch { /* 网络错误不处理，保留 token */ }
       },
       async logout() {
         // 先关掉 Account Sheet，再弹确认，防止弹窗被遮住
@@ -2002,6 +2037,7 @@ document.addEventListener('DOMContentLoaded', () => {
             list.push({
               id: n.id, title: n.title, url: n.url,
               favicon_url: n.favicon_url, remark: n.remark || '',
+              visibility: n.visibility || 'private',
               updated_at: n.updated_at,
               path: trail.join(' / '),
               raw: n,
@@ -2244,7 +2280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this.nodeModal = {
           visible: true, type: 'add-bookmark', nodeId: null,
           parentId: parentId ?? (this.currentPath.length > 0 ? this.currentPath[this.currentPath.length - 1] : null),
-          form: { title: '', url: '', favicon_url: '', remark: '' }
+          form: { title: '', url: '', favicon_url: '', remark: '', visibility: 'private' }
         };
         this.metaError = '';
       },
@@ -2254,7 +2290,7 @@ document.addEventListener('DOMContentLoaded', () => {
           type: node.type === 'folder' ? 'edit-folder' : 'edit-bookmark',
           nodeId: node.id,
           parentId: node.parent_id ?? null,
-          form: { title: node.title, url: node.url || '', favicon_url: node.favicon_url || '', remark: node.remark || '' }
+          form: { title: node.title, url: node.url || '', favicon_url: node.favicon_url || '', remark: node.remark || '', visibility: node.visibility || 'private' }
         };
         this.metaError = '';
       },
@@ -2275,7 +2311,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!m.parentId) throw new Error('请先选择文件夹');
             const r = await fetch('/api/bookmarks', {
               method: 'POST', headers: this.getHeaders('application/json'),
-              body: JSON.stringify({ url: m.form.url.trim(), title: m.form.title.trim(), parent_id: m.parentId, favicon_url: m.form.favicon_url.trim() || undefined, remark: m.form.remark.trim() || undefined })
+              body: JSON.stringify({ url: m.form.url.trim(), title: m.form.title.trim(), parent_id: m.parentId, favicon_url: m.form.favicon_url.trim() || undefined, remark: m.form.remark.trim() || undefined, visibility: m.form.visibility || 'private' })
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '添加失败');
           } else if (m.type === 'edit-folder') {
@@ -2285,7 +2321,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '更新失败');
           } else if (m.type === 'edit-bookmark') {
-            const payload = { title: m.form.title.trim(), url: m.form.url.trim(), parent_id: m.parentId, remark: m.form.remark.trim() };
+            const payload = { title: m.form.title.trim(), url: m.form.url.trim(), parent_id: m.parentId, remark: m.form.remark.trim(), visibility: m.form.visibility || 'private' };
             if (m.form.favicon_url.trim()) payload.favicon_url = m.form.favicon_url.trim();
             const r = await fetch(`/api/nodes/${m.nodeId}`, {
               method: 'PUT', headers: this.getHeaders('application/json'),
