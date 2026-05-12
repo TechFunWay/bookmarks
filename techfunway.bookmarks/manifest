@@ -1,5 +1,5 @@
 appname               = techfunway.bookmarks
-version               = 2.1.0
+version               = 2.2.0
 display_name          = 网址收藏夹
 desc                  = """
 收藏自己的网址功能，支持点击跳转
@@ -25,6 +25,11 @@ distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway.bookmarks.Application
 changelog             = """
+v2.2.0 更新日志
+  新增功能
+  1. 公开书签 — 书签支持设置为"公开"或"私密"，公开的书签对所有用户可见（只读），适合团队共享资源
+  2. 自动登录 — 已有有效登录 token 时跳过登录页，直接进入首页（?force=1 可强制显示登录页）
+
 v2.1.0更新日志：
 &nbsp;&nbsp;1、更新：浏览器同步插件支持同时同步多个设备，每个设备独立配置设置
 &nbsp;&nbsp;2、新增：免登录功能（开启免登录后实际使用的是管理员数据）
