@@ -169,6 +169,32 @@
             const passwordInput = document.getElementById('password');
             const rememberMeCheckbox = document.getElementById('remember-me');
 
+            // 自动登录：如果已有有效token，验证后直接跳转
+            async function autoLogin() {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('force') === '1') {
+                    return false;
+                }
+                const token = localStorage.getItem('token');
+                if (!token) return false;
+                try {
+                    const response = await fetch('/api/auth/me', {
+                        headers: { 'Authorization': token }
+                    });
+                    if (response.ok) {
+                        window.location.href = 'index.html';
+                        return true;
+                    }
+                    if (response.status === 401) {
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('currentUser');
+                    }
+                } catch (e) {
+                    // 网络错误，保留 token 并停留在登录页
+                }
+                return false;
+            }
+
             // 加载保存的登录信息
             function loadSavedCredentials() {
                 const savedUsername = localStorage.getItem('saved_username');
@@ -194,6 +220,10 @@
                     localStorage.setItem('remember_me', 'false');
                 }
             }
+
+            // 自动登录检查：已有有效token则直接跳转
+            const autoLoggedIn = await autoLogin();
+            if (autoLoggedIn) return; // 已跳转到index.html
 
             // 初始化时加载保存的信息
             loadSavedCredentials();

@@ -48,7 +48,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v2.1.0"
+	appVersion = "v2.2.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -84,11 +84,13 @@ func Error(format string, v ...interface{}) {
 type node struct {
 	ID            int64   `json:"id"`
 	ParentID      *int64  `json:"parent_id"`
+	UserID        int64   `json:"user_id,omitempty"`
 	Type          string  `json:"type"`
 	Title         string  `json:"title"`
 	URL           *string `json:"url,omitempty"`
 	FaviconURL    *string `json:"favicon_url,omitempty"`
 	Remark        string  `json:"remark,omitempty"`
+	Visibility    string  `json:"visibility,omitempty"`
 	Position      int     `json:"position"`
 	Children      []*node `json:"children,omitempty"`
 	BookmarkCount int     `json:"bookmark_count,omitempty"`
@@ -338,6 +340,7 @@ func main() {
 			r.Post("/batch", s.tokenAuthMiddleware(s.adminMiddleware(s.handleBatchUsers)))
 		})
 		r.Get("/tree", s.optionalAuthMiddleware(s.handleGetTree))
+		r.Get("/public-tree", s.handleGetPublicTree)
 		r.Get("/metadata", s.handleMetadata)
 		r.Get("/version", s.handleGetVersion)
 		r.Post("/folders", s.optionalAuthMiddleware(s.handleCreateFolder))
@@ -459,6 +462,33 @@ func (s *server) handleGetTree(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	// 加载所有公开书签，并过滤掉当前用户自己的（它们已在主树中）
+	publicNodes, err := s.loadPublicTree(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	otherPublicNodes := filterNodesByUser(publicNodes, userID)
+	if len(otherPublicNodes) > 0 {
+		publicFolder := &node{
+			ID:       -1,
+			Type:     "folder",
+			Title:    "🌐 公开书签",
+			Children: otherPublicNodes,
+		}
+		nodes = append([]*node{publicFolder}, nodes...)
+	}
+
+	respondJSON(w, http.StatusOK, nodes)
+}
+
+func (s *server) handleGetPublicTree(w http.ResponseWriter, r *http.Request) {
+	nodes, err := s.loadPublicTree(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
 	respondJSON(w, http.StatusOK, nodes)
 }
 
@@ -539,7 +569,7 @@ func (s *server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, errors.New("title is required"))
 		return
 	}
-	newNode, err := s.insertNode(r.Context(), userID, nodeTypeFolder, req.Title, req.ParentID, nil, nil, "")
+	newNode, err := s.insertNode(r.Context(), userID, nodeTypeFolder, req.Title, req.ParentID, nil, nil, "", "private")
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) {
 			respondError(w, http.StatusBadRequest, err)
@@ -557,6 +587,7 @@ type createBookmarkRequest struct {
 	ParentID   *int64  `json:"parent_id"`
 	FaviconURL *string `json:"favicon_url"`
 	Remark     string  `json:"remark"`
+	Visibility string  `json:"visibility"`
 }
 
 func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
@@ -609,7 +640,11 @@ func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
 		tmp := favicon
 		faviconPtr = &tmp
 	}
-	newNode, err := s.insertNode(r.Context(), userID, nodeTypeBookmark, title, req.ParentID, &urlCopy, faviconPtr, req.Remark)
+	visibility := req.Visibility
+	if visibility == "" {
+		visibility = "private"
+	}
+	newNode, err := s.insertNode(r.Context(), userID, nodeTypeBookmark, title, req.ParentID, &urlCopy, faviconPtr, req.Remark, visibility)
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) || errors.Is(err, ErrDuplicateBookmark) {
 			respondError(w, http.StatusBadRequest, err)
@@ -628,6 +663,7 @@ type updateNodeRequest struct {
 	ParentIDSet bool    `json:"-"`
 	FaviconURL  *string `json:"favicon_url"`
 	Remark      *string `json:"remark"`
+	Visibility  *string `json:"visibility"`
 }
 
 func (r *updateNodeRequest) UnmarshalJSON(data []byte) error {
@@ -1472,7 +1508,7 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, userID int64, node
 
 				res, err := tx.ExecContext(ctx, `
 					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position, user_id, remark)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, pos, userID, remark)
 				if err != nil {
 					return err
@@ -1502,7 +1538,7 @@ var (
 
 func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, parent_id, type, title, url, favicon_url, remark, position, created_at, updated_at
+		SELECT id, parent_id, user_id, type, title, url, favicon_url, remark, visibility, position, created_at, updated_at
 		FROM nodes
 		WHERE user_id = ?
 		ORDER BY parent_id IS NOT NULL, parent_id, position, id
@@ -1513,6 +1549,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	defer rows.Close()
 
 	type rawNode struct {
+		userID     int64
 		id         int64
 		parentID   sql.NullInt64
 		nodeType   string
@@ -1520,6 +1557,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 		url        sql.NullString
 		faviconURL sql.NullString
 		remark     string
+		visibility string
 		position   int
 		createdAt  string
 		updatedAt  string
@@ -1528,7 +1566,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	var rawNodes []rawNode
 	for rows.Next() {
 		var rn rawNode
-		if err := rows.Scan(&rn.id, &rn.parentID, &rn.nodeType, &rn.title, &rn.url, &rn.faviconURL, &rn.remark, &rn.position, &rn.createdAt, &rn.updatedAt); err != nil {
+		if err := rows.Scan(&rn.id, &rn.parentID, &rn.userID, &rn.nodeType, &rn.title, &rn.url, &rn.faviconURL, &rn.remark, &rn.visibility, &rn.position, &rn.createdAt, &rn.updatedAt); err != nil {
 			return nil, err
 		}
 		rawNodes = append(rawNodes, rn)
@@ -1543,13 +1581,15 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 
 	for _, rn := range rawNodes {
 		n := &node{
-			ID:        rn.id,
-			Type:      rn.nodeType,
-			Title:     rn.title,
-			Remark:    rn.remark,
-			Position:  rn.position,
-			CreatedAt: rn.createdAt,
-			UpdatedAt: rn.updatedAt,
+			ID:         rn.id,
+			UserID:     rn.userID,
+			Type:       rn.nodeType,
+			Title:      rn.title,
+			Remark:     rn.remark,
+			Visibility: rn.visibility,
+			Position:   rn.position,
+			CreatedAt:  rn.createdAt,
+			UpdatedAt:  rn.updatedAt,
 		}
 		if rn.parentID.Valid {
 			parentID := rn.parentID.Int64
@@ -1606,6 +1646,122 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	return roots, nil
 }
 
+func (s *server) loadPublicTree(ctx context.Context) ([]*node, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, parent_id, user_id, type, title, url, favicon_url, remark, visibility, position, created_at, updated_at
+		FROM nodes
+		WHERE visibility = 'public'
+		ORDER BY parent_id IS NOT NULL, parent_id, position, id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type rawNode struct {
+		id         int64
+		parentID   sql.NullInt64
+		userID     int64
+		nodeType   string
+		title      string
+		url        sql.NullString
+		faviconURL sql.NullString
+		remark     string
+		visibility string
+		position   int
+		createdAt  string
+		updatedAt  string
+	}
+
+	var rawNodes []rawNode
+	for rows.Next() {
+		var rn rawNode
+		if err := rows.Scan(&rn.id, &rn.parentID, &rn.userID, &rn.nodeType, &rn.title, &rn.url, &rn.faviconURL, &rn.remark, &rn.visibility, &rn.position, &rn.createdAt, &rn.updatedAt); err != nil {
+			return nil, err
+		}
+		rawNodes = append(rawNodes, rn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	nodeMap := make(map[int64]*node, len(rawNodes))
+	var roots []*node
+	var nodesWithoutValidParent []*node
+
+	for _, rn := range rawNodes {
+		n := &node{
+			ID:         rn.id,
+			UserID:     rn.userID,
+			Type:       rn.nodeType,
+			Title:      rn.title,
+			Remark:     rn.remark,
+			Visibility: rn.visibility,
+			Position:   rn.position,
+			CreatedAt:  rn.createdAt,
+			UpdatedAt:  rn.updatedAt,
+		}
+		if rn.parentID.Valid {
+			parentID := rn.parentID.Int64
+			n.ParentID = &parentID
+		}
+		if rn.url.Valid {
+			urlStr := rn.url.String
+			n.URL = &urlStr
+		}
+		if rn.faviconURL.Valid {
+			favicon := rn.faviconURL.String
+			n.FaviconURL = &favicon
+		}
+		nodeMap[rn.id] = n
+	}
+
+	for _, n := range nodeMap {
+		if n.ParentID == nil {
+			roots = append(roots, n)
+			continue
+		}
+		parent := nodeMap[*n.ParentID]
+		if parent == nil {
+			n.ParentID = nil
+			nodesWithoutValidParent = append(nodesWithoutValidParent, n)
+			continue
+		}
+		parent.Children = append(parent.Children, n)
+	}
+
+	if len(roots) == 0 {
+		roots = nodesWithoutValidParent
+	} else {
+		roots = append(roots, nodesWithoutValidParent...)
+	}
+
+	sortNodes(roots)
+	calculateBookmarkCounts(roots)
+
+	if roots == nil {
+		roots = []*node{}
+	}
+	return roots, nil
+}
+
+// filterNodesByUser 递归过滤掉指定用户的节点，返回其他用户的公开节点
+func filterNodesByUser(nodes []*node, excludeUserID int64) []*node {
+	var result []*node
+	for _, n := range nodes {
+		if n.UserID == excludeUserID {
+			continue
+		}
+		filteredChildren := filterNodesByUser(n.Children, excludeUserID)
+		if n.Type == "folder" && len(filteredChildren) == 0 {
+			continue
+		}
+		n.Children = filteredChildren
+		result = append(result, n)
+	}
+	return result
+}
+
 func calculateBookmarkCounts(nodes []*node) {
 	for _, n := range nodes {
 		if n.Type == nodeTypeFolder {
@@ -1642,7 +1798,7 @@ func sortNodes(nodes []*node) {
 	}
 }
 
-func (s *server) insertNode(ctx context.Context, userID int64, nType, title string, parentID *int64, url, favicon *string, remark string) (*node, error) {
+func (s *server) insertNode(ctx context.Context, userID int64, nType, title string, parentID *int64, url, favicon *string, remark, visibility string) (*node, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -1689,9 +1845,9 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 	}
 
 	res, execErr := tx.ExecContext(ctx, `
-		INSERT INTO nodes (parent_id, type, title, url, favicon_url, remark, position, user_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, parentID, nType, title, url, favicon, remark, nextPos, userID)
+		INSERT INTO nodes (parent_id, type, title, url, favicon_url, remark, position, user_id, visibility)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, parentID, nType, title, url, favicon, remark, nextPos, userID, visibility)
 	if execErr != nil {
 		err = execErr
 		return nil, err
@@ -1712,6 +1868,7 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 		Type:     nType,
 		Title:    title,
 		Remark:   remark,
+			Visibility: visibility,
 		Position: nextPos,
 	}
 	if parentID != nil {
@@ -1737,9 +1894,10 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		URL      sql.NullString
 		Favicon  sql.NullString
 		Remark   string
+		Visibility string
 	}
-	err := s.db.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url, remark FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
-		&current.Type, &current.ParentID, &current.Title, &current.URL, &current.Favicon, &current.Remark,
+	err := s.db.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url, remark, visibility FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
+		&current.Type, &current.ParentID, &current.Title, &current.URL, &current.Favicon, &current.Remark, &current.Visibility,
 	)
 	if err != nil {
 		return err
@@ -1829,6 +1987,21 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		remarkSet = true
 	}
 
+	targetVisibility := current.Visibility
+	visibilitySet := false
+
+	if req.Visibility != nil {
+		if current.Type != nodeTypeBookmark {
+			return ErrInvalidUpdate
+		}
+		v := strings.TrimSpace(*req.Visibility)
+		if v != "public" && v != "private" {
+			return ErrInvalidUpdate
+		}
+		targetVisibility = v
+		visibilitySet = true
+	}
+
 	if req.ParentIDSet {
 		if req.ParentID != nil {
 			parentIDValue = *req.ParentID
@@ -1839,7 +2012,7 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 		parentSet = true
 	}
 
-	if !titleSet && !urlSet && !faviconSet && !parentSet && !remarkSet {
+	if !titleSet && !urlSet && !faviconSet && !parentSet && !remarkSet && !visibilitySet {
 		return ErrInvalidUpdate
 	}
 
@@ -1910,6 +2083,10 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 			} else {
 				args = append(args, nil)
 			}
+		}
+		if visibilitySet {
+			fields = append(fields, "visibility = ?")
+			args = append(args, targetVisibility)
 		}
 	}
 

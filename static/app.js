@@ -133,7 +133,7 @@ const BookmarkNode = {
               <span class="node-count" v-if="isFolder">({{ bookmarkCount }})</span>
             </span>
           </button>
-        <div class="tree-actions inline" v-if="globalActionsVisible">
+        <div class="tree-actions inline" v-if="globalActionsVisible && $root.isOwnNode(node)">
           <button type="button" title="上移" @click="onMove('up')">
             <span class="action-icon">⬆️</span>
           </button>
@@ -210,6 +210,7 @@ const app = createApp({
             url: "",
             favicon_url: "",
             remark: "",
+            visibility: "private",
           },
         },
         remarkPopup: {
@@ -459,6 +460,15 @@ const app = createApp({
           return "";
       }
     },
+    ownUserId() {
+      if (this.currentUser) return this.currentUser.id;
+      if (this.tree && this.tree.length > 0) {
+        for (const n of this.tree) {
+          if (n.id !== -1 && n.user_id) return n.user_id;
+        }
+      }
+      return null;
+    },
   },
   beforeUnmount() {
     window.removeEventListener("scroll", this.hideContextMenu, true);
@@ -479,6 +489,11 @@ const app = createApp({
       if (contentType) h['Content-Type'] = contentType;
       if (this.token) h['Authorization'] = this.token;
       return h;
+    },
+    isOwnNode(node) {
+      if (!node || node.id === -1) return false;
+      if (node.user_id === undefined || node.user_id === null) return true;
+      return node.user_id === this.ownUserId;
     },
     async checkAuth() {
   const token = localStorage.getItem('token');
@@ -517,16 +532,16 @@ const app = createApp({
               this.checkSecurityQuestionsReminder();
             }, 2000); // 延迟2秒显示提示
           }
-        } else {
+        } else if (response.status === 401) {
+          // token 无效，清除并跳转登录页
           localStorage.removeItem('token');
           localStorage.removeItem('currentUser');
           window.location.href = 'login.html';
         }
+        // 其他错误状态码（500等）不处理，保留 token 等待恢复
       } catch (error) {
-        console.error('加载用户信息失败:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('currentUser');
-        window.location.href = 'login.html';
+        // 网络错误不处理，保留 token 等待网络恢复
+        console.error('加载用户信息失败（网络错误，保留登录状态）:', error);
       }
     },
     async logout() {
@@ -1741,6 +1756,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.modal.form.url = "";
       this.modal.form.favicon_url = "";
       this.modal.form.remark = "";
+      this.modal.form.visibility = "private";
       this.metadataError = "";
     },
     openAddBookmark(parent = null) {
@@ -1753,9 +1769,8 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.modal.form.url = "";
       this.modal.form.favicon_url = "";
       this.modal.form.remark = "";
+      this.modal.form.visibility = "private";
       this.metadataError = "";
-      // 从列表顶部按钮调用时，确保不强制设置parentId
-      // 这样用户可以先选择文件夹，再填写信息
     },
     openEdit(node) {
       this.hideContextMenu();
@@ -1767,6 +1782,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.modal.form.url = node.url || "";
       this.modal.form.favicon_url = node.favicon_url || "";
       this.modal.form.remark = node.remark || "";
+      this.modal.form.visibility = node.visibility || "private";
       this.metadataError = "";
     },
     async lookupMetadata() {
@@ -1856,6 +1872,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         parent_id: this.modal.parentId,
         favicon_url: this.modal.form.favicon_url.trim() || undefined,
         remark: this.modal.form.remark.trim(),
+        visibility: this.modal.form.visibility || "private",
       };
       const res = await fetch("/api/bookmarks", {
         method: "POST",
@@ -1891,6 +1908,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         url: this.modal.form.url.trim(),
         parent_id: this.modal.parentId,
         remark: this.modal.form.remark.trim(),
+        visibility: this.modal.form.visibility || "private",
       };
       const favicon = this.modal.form.favicon_url.trim();
       if (favicon) {
@@ -2298,6 +2316,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
             url: node.url,
             favicon_url: node.favicon_url,
             remark: node.remark || "",
+            visibility: node.visibility || "private",
             path: trail.length > 0 ? trail.join(" / ") : "",
             updated_at: node.updated_at,
             raw: node,
