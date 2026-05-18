@@ -642,6 +642,10 @@ goToLogin() {
       this.userDropdownVisible = false;
       window.location.href = '/users.html';
     },
+    openAdminPage() {
+      this.userDropdownVisible = false;
+      window.location.href = '/admin.html';
+    },
     closeChangePasswordModal() {
       this.changePasswordModal.visible = false;
       this.changePasswordModal.oldPassword = '';
