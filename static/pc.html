@@ -86,6 +86,10 @@
           <span>🔄</span>
           <span>更新信息</span>
         </button>
+        <button class="tertiary" onclick="window.open('/portal.html', '_blank')">
+          <span>🌐</span>
+          <span>公开门户</span>
+        </button>
       </div>
       <div class="theme-toggle">
         <span class="theme-toggle-icon moon-icon">🌙</span>
@@ -105,6 +109,7 @@
             <a href="javascript:void(0)" class="guest-action-link" @click="openPluginAPIKeyModal">🔌API Key</a>
             <a href="javascript:void(0)" class="guest-action-link" @click="openExtensionModal">🧩插件</a>
             <a href="javascript:void(0)" class="guest-action-link" @click="supportModal.visible = true">❤️支持</a>
+            <a href="javascript:void(0)" class="guest-action-link" style="font-weight:600;" @click="openAdminPage">🛠️后台管理</a>
             <a href="javascript:void(0)" class="guest-action-link guest-login" @click="goToLogin">登录</a>
           </template>
           <div v-else class="user-dropdown" :class="{ 'active': userDropdownVisible }">
@@ -116,6 +121,10 @@
               <button class="dropdown-item" v-if="currentUser && currentUser.is_admin" @click="openUserManagement">
                 <span class="dropdown-icon">👥</span>
                 <span>用户管理</span>
+              </button>
+              <button class="dropdown-item" v-if="currentUser && currentUser.is_admin" @click="openAdminPage">
+                <span class="dropdown-icon">🛠️</span>
+                <span>后台管理</span>
               </button>
               <button class="dropdown-item" @click="openChangePasswordModal">
                 <span class="dropdown-icon">🔑</span>

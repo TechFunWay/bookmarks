@@ -356,6 +356,7 @@ func main() {
 		r.Get("/config", s.optionalAuthMiddleware(s.handleGetConfig))
 		r.Post("/config", s.optionalAuthMiddleware(s.handleUpdateConfig))
 		r.Get("/check-duplicates", s.optionalAuthMiddleware(s.handleCheckDuplicates))
+	r.Get("/admin/stats", s.tokenAuthMiddleware(s.adminMiddleware(s.handleAdminStats)))
 	})
 
 	// 浏览器书签同步接口（使用 API Key 认证）
@@ -3177,6 +3178,25 @@ func (s *server) handleBatchUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
+}
+
+// handleAdminStats 返回后台管理统计信息
+func (s *server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
+	var stats struct {
+		TotalUsers      int `json:"total_users"`
+		TotalBookmarks  int `json:"total_bookmarks"`
+		TotalFolders    int `json:"total_folders"`
+		PublicBookmarks int `json:"public_bookmarks"`
+		TotalNodes      int `json:"total_nodes"`
+	}
+
+	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
+	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark'").Scan(&stats.TotalBookmarks)
+	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes WHERE type = 'folder'").Scan(&stats.TotalFolders)
+	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark' AND visibility = 'public'").Scan(&stats.PublicBookmarks)
+	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes").Scan(&stats.TotalNodes)
+
+	respondJSON(w, http.StatusOK, stats)
 }
 
 // 辅助函数：获取最小值
