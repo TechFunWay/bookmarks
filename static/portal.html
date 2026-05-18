@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>公开书签 - 网址导航</title>
+  <link rel="icon" href="/favicon.ico" />
+  <script src="/vue.global.prod.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #f0f2f5; color: #333; min-height: 100vh;
+    }
+    [v-cloak] { display: none !important; }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #fff; padding: 40px 24px 30px; text-align: center;
+    }
+    .hero h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 6px; }
+    .hero p { font-size: 14px; opacity: .75; margin-bottom: 20px; }
+    .hero .search-box {
+      max-width: 500px; margin: 0 auto;
+      display: flex; background: rgba(255,255,255,.15);
+      border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.2);
+    }
+    .hero .search-box input {
+      flex: 1; padding: 12px 16px; border: none; background: transparent;
+      color: #fff; font-size: 14px; outline: none;
+    }
+    .hero .search-box input::placeholder { color: rgba(255,255,255,.5); }
+    .hero .search-box button {
+      padding: 12px 20px; border: none; background: rgba(255,255,255,.2);
+      color: #fff; cursor: pointer; font-size: 14px; transition: background .2s;
+    }
+    .hero .search-box button:hover { background: rgba(255,255,255,.3); }
+
+    /* Category Nav */
+    .category-nav {
+      display: flex; gap: 8px; padding: 16px 24px; overflow-x: auto;
+      scrollbar-width: none; flex-wrap: wrap;
+    }
+    .category-nav::-webkit-scrollbar { display: none; }
+    .category-nav button {
+      padding: 6px 16px; border: 1px solid #ddd; border-radius: 20px;
+      background: #fff; cursor: pointer; font-size: 13px; color: #555;
+      white-space: nowrap; transition: all .2s; flex-shrink: 0;
+    }
+    .category-nav button:hover { border-color: #1a73e8; color: #1a73e8; }
+    .category-nav button.active { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+
+    /* Main Content */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px 60px; }
+
+    .section { margin-bottom: 32px; }
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 16px 0 12px; border-bottom: 2px solid #e8e8e8; margin-bottom: 16px;
+    }
+    .section-header .icon { font-size: 1.3rem; }
+    .section-header h2 { font-size: 1.1rem; font-weight: 600; color: #1a1a2e; }
+    .section-header .count {
+      font-size: 12px; color: #888; background: #f0f0f0;
+      padding: 2px 10px; border-radius: 10px; font-weight: 500;
+    }
+
+    /* Bookmark Cards */
+    .bookmark-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .bookmark-card {
+      background: #fff; border-radius: 10px; padding: 16px;
+      display: flex; align-items: center; gap: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06); transition: all .2s;
+      text-decoration: none; color: inherit;
+    }
+    .bookmark-card:hover {
+      transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,.1);
+    }
+    .bookmark-card .favicon {
+      width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #f5f5f5; font-size: 1.2rem; overflow: hidden;
+    }
+    .bookmark-card .favicon img { width: 100%; height: 100%; object-fit: contain; }
+    .bookmark-card .info { min-width: 0; flex: 1; }
+    .bookmark-card .info .title {
+      font-size: 14px; font-weight: 600; color: #1a1a2e;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bookmark-card .info .url {
+      font-size: 12px; color: #888; margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bookmark-card .external-link {
+      color: #aaa; font-size: 14px; flex-shrink: 0; transition: color .2s;
+    }
+    .bookmark-card:hover .external-link { color: #1a73e8; }
+
+    /* Empty */
+    .empty-state { text-align: center; padding: 80px 20px; color: #888; }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 16px; }
+    .empty-state p { font-size: 15px; margin-bottom: 8px; }
+    .empty-state .sub { font-size: 13px; opacity: .7; }
+
+    /* Loading */
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 100px 20px; }
+    .spinner {
+      width: 40px; height: 40px; border: 4px solid #e0e0e0; border-top-color: #1a73e8;
+      border-radius: 50%; animation: spin .6s linear infinite; margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Footer */
+    .footer {
+      text-align: center; padding: 32px 24px; color: #aaa; font-size: 13px;
+    }
+    .footer a { color: #888; text-decoration: none; }
+    .footer a:hover { color: #1a73e8; }
+
+    /* Tags / Notice */
+    .notice-banner {
+      background: #e8f0fe; color: #1a73e8; padding: 10px 24px; text-align: center; font-size: 13px;
+    }
+    .notice-banner a { color: #1a73e8; font-weight: 500; text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero { padding: 30px 16px 24px; }
+      .hero h1 { font-size: 1.4rem; }
+      .container { padding: 0 12px 40px; }
+      .bookmark-grid { grid-template-columns: 1fr; }
+      .category-nav { padding: 12px 12px; flex-wrap: nowrap; }
+    }
+  </style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <!-- Hero -->
+  <div class="hero">
+    <h1>🌐 公开书签导航</h1>
+    <p>发现和分享精选的网址资源</p>
+    <div class="search-box">
+      <input type="text" v-model="searchQuery" placeholder="搜索书签标题或网址..." @input="debouncedSearch" />
+      <button @click="doSearch">🔍 搜索</button>
+    </div>
+  </div>
+
+  <!-- Search Mode Notice -->
+  <div class="notice-banner" v-if="isSearching">
+    🔍 搜索 "{{ searchQuery }}" 找到 {{ searchResults.length }} 个结果
+    <a href="javascript:void(0)" @click="clearSearch">清除搜索</a>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" v-if="loading">
+    <div class="spinner"></div>
+    <p style="color:#888;font-size:14px;">正在加载书签...</p>
+  </div>
+
+  <!-- Categories Nav -->
+  <div class="category-nav" v-if="!loading && categories.length > 0 && !isSearching">
+    <button :class="{ active: activeCategory === null }" @click="activeCategory = null">🏠 全部</button>
+    <button v-for="cat in categories" :key="cat.id" :class="{ active: activeCategory === cat.id }" @click="activeCategory = cat.id">
+      {{ cat.icon || '📁' }} {{ cat.title }}
+    </button>
+  </div>
+
+  <!-- Content -->
+  <div class="container" v-if="!loading">
+    <!-- No data -->
+    <div class="empty-state" v-if="displaySections.length === 0">
+      <div class="icon">📚</div>
+      <p v-if="isSearching">没有找到匹配的书签</p>
+      <p v-else>暂无公开书签</p>
+      <p class="sub" v-if="!isSearching">还没有用户分享公开书签，登录后可以将书签设置为公开</p>
+    </div>
+
+    <!-- Sections -->
+    <div class="section" v-for="section in displaySections" :key="section.id">
+      <div class="section-header">
+        <span class="icon">{{ section.icon || '📁' }}</span>
+        <h2>{{ section.title }}</h2>
+        <span class="count">{{ section.bookmarks.length }} 个</span>
+      </div>
+      <div class="bookmark-grid">
+        <a
+          v-for="bm in section.bookmarks"
+          :key="bm.id"
+          :href="bm.url"
+          class="bookmark-card"
+          target="_blank"
+          rel="noopener noreferrer"
+          :title="bm.title + (bm.remark ? ' - ' + bm.remark : '')"
+        >
+          <div class="favicon">
+            <img v-if="bm.favicon_url" :src="bm.favicon_url" alt="" @error="onImgError($event)" />
+            <span v-else>🌏</span>
+          </div>
+          <div class="info">
+            <div class="title">{{ bm.title }}</div>
+            <div class="url">{{ bm.url }}</div>
+          </div>
+          <span class="external-link">↗</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <a href="/pc.html">← 登录管理书签</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+const app = createApp({
+  data() {
+    return {
+      loading: true,
+      tree: [],
+      searchQuery: '',
+      isSearching: false,
+      searchResults: [],
+      activeCategory: null,
+      searchTimer: null,
+    };
+  },
+  computed: {
+    categories() {
+      const cats = [];
+      const walk = (nodes) => {
+        for (const n of nodes) {
+          if (n.type === 'folder' && n.children && n.children.length > 0) {
+            const hasBookmark = n.children.some(c => c.type === 'bookmark');
+            if (hasBookmark) cats.push(n);
+            walk(n.children);
+          }
+        }
+      };
+      walk(this.tree);
+      return cats;
+    },
+    displaySections() {
+      if (this.isSearching) {
+        if (this.searchResults.length === 0) return [];
+        return [{ id: 'search', icon: '🔍', title: `搜索结果 (${this.searchResults.length})`, bookmarks: this.searchResults }];
+      }
+
+      const sections = [];
+      const rootBookmarks = [];
+
+      // Collect root-level bookmarks
+      const walk = (nodes, parentFolder) => {
+        for (const n of nodes) {
+          if (n.type === 'bookmark') {
+            if (parentFolder) {
+              let section = sections.find(s => s.id === parentFolder.id);
+              if (!section) {
+                section = { id: parentFolder.id, icon: parentFolder.icon || '📁', title: parentFolder.title, bookmarks: [] };
+                sections.push(section);
+              }
+              section.bookmarks.push(n);
+            } else {
+              rootBookmarks.push(n);
+            }
+          } else if (n.type === 'folder') {
+            walk(n.children || [], n);
+            // Also process the folder's own children that are nested folders
+          }
+        }
+      };
+
+      if (this.activeCategory !== null) {
+        // Only show a specific category
+        const folder = this.findNode(this.tree, this.activeCategory);
+        if (folder && folder.children) {
+          walk(folder.children, folder);
+        }
+      } else {
+        // Show all
+        walk(this.tree, null);
+        // Check for public bookmark folders from other users
+        const publicFolder = this.tree.find(n => n.title && n.title.includes('公开书签'));
+        if (publicFolder) {
+          walk(publicFolder.children || [], null);
+        }
+      }
+
+      // If there are root bookmarks, add them
+      if (rootBookmarks.length > 0) {
+        sections.unshift({ id: 'root', icon: '📌', title: '常用书签', bookmarks: rootBookmarks });
+      }
+
+      return sections;
+    },
+  },
+  methods: {
+    findNode(nodes, id) {
+      for (const n of nodes) {
+        if (n.id === id) return n;
+        if (n.children) { const f = this.findNode(n.children, id); if (f) return f; }
+      }
+      return null;
+    },
+    async loadTree() {
+      try {
+        const res = await fetch('/api/public-tree');
+        if (res.ok) {
+          const data = await res.json();
+          this.tree = Array.isArray(data) ? data : [];
+        }
+      } catch {}
+      this.loading = false;
+    },
+    collectBookmarks(nodes) {
+      const list = [];
+      const walk = (ns) => {
+        for (const n of ns) {
+          if (n.type === 'bookmark') list.push(n);
+          if (n.children) walk(n.children);
+        }
+      };
+      walk(nodes);
+      return list;
+    },
+    doSearch() {
+      const q = this.searchQuery.toLowerCase().trim();
+      if (!q) { this.clearSearch(); return; }
+      const all = this.collectBookmarks(this.tree);
+      this.searchResults = all.filter(b =>
+        b.title.toLowerCase().includes(q) ||
+        (b.url || '').toLowerCase().includes(q)
+      );
+      this.isSearching = true;
+    },
+    debouncedSearch() {
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => this.doSearch(), 300);
+    },
+    clearSearch() {
+      this.searchQuery = '';
+      this.isSearching = false;
+      this.searchResults = [];
+    },
+    onImgError(e) { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '🌏'; },
+  },
+  mounted() {
+    this.loadTree();
+  },
+});
+
+app.mount('#app');
+</script>
+</body>
+</html>
