@@ -794,6 +794,7 @@
       <span>&#8592;</span>
     </button>
     <span class="header-title">{{ pageTitle }}</span>
+    <button class="header-action" onclick="window.open('/portal.html', '_blank')" title="公开门户">🌐</button>
     <button class="header-action" @click="showSearch" title="搜索">🔍</button>
     <button class="header-action" @click="toggleViewMode" title="切换视图">
       {{ viewMode === 'list' ? '⊞' : '☰' }}
@@ -1279,6 +1280,11 @@
                   <span class="settings-item-label">支持</span>
                   <span class="settings-item-value">›</span>
                 </div>
+                <div class="settings-item" @click="showAccountSheet=false; openAdminPage()">
+                  <span class="settings-item-icon">🛠️</span>
+                  <span class="settings-item-label">后台管理</span>
+                  <span class="settings-item-value">›</span>
+                </div>
               </div>
               <button
                 style="width:100%;margin-top:12px;height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-size:15px;font-weight:500;"
@@ -1300,6 +1306,11 @@
                 <div class="settings-item" v-if="currentUser && currentUser.is_admin" @click="openUserManagement">
                   <span class="settings-item-icon">👥</span>
                   <span class="settings-item-label">用户管理</span>
+                  <span class="settings-item-value">›</span>
+                </div>
+                <div class="settings-item" v-if="currentUser && currentUser.is_admin" @click="openAdminPage">
+                  <span class="settings-item-icon">🛠️</span>
+                  <span class="settings-item-label">后台管理</span>
                   <span class="settings-item-value">›</span>
                 </div>
                 <div class="settings-item" @click="showAccountSheet=false; openChangePassword()">
@@ -1933,6 +1944,10 @@ document.addEventListener('DOMContentLoaded', () => {
       openUserManagement() {
         this.showAccountSheet = false;
         window.location.href = '/mobile_users.html';
+      },
+      openAdminPage() {
+        this.showAccountSheet = false;
+        window.location.href = '/admin.html';
       },
       async loadCurrentUser() {
         if (!this.token) return;
