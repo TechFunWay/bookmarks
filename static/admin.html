@@ -26,6 +26,9 @@
       box-shadow: 0 2px 8px rgba(0,0,0,.15);
     }
     .admin-header h1 { font-size: 1.2rem; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+    .admin-header .header-actions { display: flex; align-items: center; gap: 8px; position: relative; }
+    .admin-header .header-buttons { display: flex; align-items: center; gap: 6px; }
+    .mobile-menu-btn { display: none; }
     .admin-header .back-btn {
       background: rgba(255,255,255,.15);
       border: none;
@@ -122,9 +125,12 @@
     .badge-user { background: #f1f3f4; color: #666; }
     .badge-active { background: #e6f4ea; color: #188038; }
     .badge-inactive { background: #fce8e6; color: #d93025; }
-    .table-actions { display: flex; gap: 4px; }
+    .table-actions {
+      display: flex; gap: 4px; flex-wrap: nowrap;
+    }
     .table-actions button {
-      padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all .2s;
+      padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all .2s;
+      white-space: nowrap;
     }
     .table-actions .edit-btn { background: #e8f0fe; color: #1a73e8; }
     .table-actions .edit-btn:hover { background: #d2e3fc; }
@@ -174,6 +180,9 @@
     .modal .form-group input:focus { border-color: #1a73e8; }
     .modal .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
     .modal .modal-error { color: #d93025; font-size: 13px; margin-top: 8px; }
+    .modal .form-hint { font-size: 12px; color: #888; margin-top: 4px; }
+    .api-key-display { display: flex; gap: 8px; }
+    .api-key-display input { flex: 1; }
 
     /* Empty/loading */
     .empty-state { text-align: center; padding: 60px 20px; color: #888; }
@@ -205,9 +214,88 @@
     .pagination button[disabled] { opacity: .4; cursor: default; }
     .pagination .page-info { font-size: 13px; color: #666; }
 
+    /* Config & Background */
+    .config-section-divider { border: none; border-top: 1px solid #eee; margin: 8px 0; }
+    .bg-type-options { display: flex; gap: 10px; margin-top: 8px; }
+    .bg-type-option {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px;
+      cursor: pointer; font-size: 13px; transition: all .2s;
+    }
+    .bg-type-option:hover { border-color: #1a73e8; background: #f8f9ff; }
+    .bg-type-option input[type="radio"] { accent-color: #1a73e8; }
+    .color-picker-area input[type="color"] { width: 100%; height: 40px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; }
+    .preset-colors { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .preset-color {
+      width: 28px; height: 28px; border-radius: 50%;
+      cursor: pointer; border: 2px solid transparent; transition: all .2s;
+    }
+    .preset-color:hover { transform: scale(1.15); border-color: #1a73e8; }
+    .image-upload-area { margin: 8px 0; }
+    .image-preview { margin-top: 8px; max-width: 100%; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+    .image-preview img { width: 100%; height: auto; display: block; }
+    .opacity-slider { width: 100%; height: 8px; -webkit-appearance: none; appearance: none; background: #ddd; border-radius: 4px; outline: none; cursor: pointer; }
+    .opacity-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #1a73e8; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+    .opacity-slider::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #1a73e8; cursor: pointer; border: none; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+
+    /* Import & Folder Selector */
+    .import-options { display: flex; flex-direction: column; gap: 12px; }
+    .import-option {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 12px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer;
+      transition: all .2s;
+    }
+    .import-option:hover { border-color: #1a73e8; background: #f8f9ff; }
+    .import-option input[type="radio"] { margin-top: 3px; accent-color: #1a73e8; }
+    .import-option label { cursor: pointer; flex: 1; }
+    .import-option .option-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .import-option .option-text { font-weight: 600; font-size: 14px; }
+    .import-option .option-description { font-size: 12px; color: #888; }
+    .folder-select-btn {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
+      cursor: pointer; font-size: 13px; transition: all .2s; background: #fff;
+    }
+    .folder-select-btn:hover { border-color: #1a73e8; background: #f8f9ff; }
+    .folder-selector { max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; margin-top: 8px; }
+    .folder-option {
+      display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+      cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; transition: all .2s;
+    }
+    .folder-option:last-child { border-bottom: none; }
+    .folder-option:hover { background: #f8f9ff; }
+    .folder-option .selected-indicator { margin-left: auto; color: #1a73e8; font-weight: bold; }
+    .import-summary { margin: 12px 0; padding: 12px; background: #fafafa; border-radius: 6px; }
+    .summary-item { font-size: 13px; margin-bottom: 8px; }
+    .summary-item:last-child { margin-bottom: 0; }
+    .summary-label { color: #888; }
+    .summary-value { color: #333; font-weight: 500; }
+    .warning-text { font-size: 13px; color: #d93025; margin-top: 8px; }
+
+    /* Update progress */
+    .update-progress { margin: 16px 0; padding: 12px; background: #fafafa; border-radius: 8px; }
+    .progress-bar { width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #1a73e8, #1557b0); border-radius: 4px; transition: width .3s; }
+    .progress-info { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+    .progress-text { color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .progress-count { color: #888; font-weight: 500; }
+
     /* Responsive */
     @media (max-width: 768px) {
-      .admin-header { padding: 0 16px; }
+      .admin-header { padding: 0 12px; }
+      .admin-header h1 { font-size: 1rem; }
+      .mobile-menu-btn { display: flex !important; }
+      .header-buttons {
+        display: none; position: absolute; top: 100%; right: 8px;
+        background: linear-gradient(135deg, #1a1a2e, #16213e);
+        border-radius: 10px; padding: 6px; flex-direction: column; gap: 2px;
+        min-width: 170px; z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+      }
+      .header-buttons.open { display: flex; }
+      .header-buttons .back-btn { width: 100%; justify-content: flex-start; font-size: 13px; padding: 8px 12px; }
+      .header-actions { position: relative; }
+      .tab-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .tab-item { flex: none; padding: 12px 14px; font-size: 13px; white-space: nowrap; }
       .admin-container { padding: 16px; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
       .stat-card { padding: 16px; }
@@ -227,7 +315,20 @@
 <div id="app" v-cloak>
   <header class="admin-header">
     <h1>🛠️ 后台管理</h1>
-    <button class="back-btn" onclick="window.location.href='/pc.html'">← 返回首页</button>
+    <div class="header-actions">
+      <button class="back-btn mobile-menu-btn" @click="headerMenuOpen = !headerMenuOpen">☰</button>
+      <div class="header-buttons" :class="{ open: headerMenuOpen }" @click="headerMenuOpen = false">
+        <button class="back-btn" @click="openChangePasswordModal">🔑 修改密码</button>
+        <button class="back-btn" @click="openSecurityQuestionsModal">❓ 安全问题</button>
+        <button class="back-btn" @click="openPluginAPIKeyModal">🔌 API Key</button>
+        <button class="back-btn" @click="openDuplicateCheck">🔍 去重复</button>
+        <button class="back-btn" @click="showImportDialog">📥 导入</button>
+        <button class="back-btn" @click="showEdgeImportDialog">🔄 导入Edge</button>
+        <button class="back-btn" @click="showUpdateMetadataDialog">🔄 更新信息</button>
+        <button class="back-btn" onclick="window.location.href='/pc.html'">← 返回首页</button>
+        <button class="back-btn" @click="handleLogout" style="color:#f9ab00;">🚪 退出</button>
+      </div>
+    </div>
   </header>
 
   <div class="admin-container">
@@ -236,6 +337,7 @@
       <button class="tab-item" :class="{ active: currentTab === 'dashboard' }" @click="currentTab = 'dashboard'">📊 仪表盘</button>
       <button class="tab-item" :class="{ active: currentTab === 'users' }" @click="currentTab = 'users'">👥 用户管理</button>
       <button class="tab-item" :class="{ active: currentTab === 'settings' }" @click="currentTab = 'settings'">⚙️ 系统设置</button>
+      <button class="tab-item" :class="{ active: currentTab === 'background' }" @click="currentTab = 'background'">🎨 背景</button>
     </div>
 
     <!-- Dashboard Tab -->
@@ -261,8 +363,8 @@
           <div class="stat-value">{{ stats.public_bookmarks }}</div>
           <div class="stat-label">公开书签</div>
         </div>
-      </div>
-      <div v-if="loading.stats" class="loading-spinner"></div>
+    </div>
+    <div v-if="loading.stats" class="loading-spinner"></div>
     </div>
 
     <!-- Users Tab -->
@@ -295,7 +397,7 @@
                 <th>角色</th>
                 <th>状态</th>
                 <th>创建时间</th>
-                <th style="width:180px">操作</th>
+                <th style="width:220px">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -353,7 +455,108 @@
           </label>
         </div>
       </div>
+      <div class="settings-section">
+        <h3>📋 显示设置</h3>
+        <div class="setting-item">
+          <div>
+            <div class="label">显示URL地址</div>
+            <div class="desc">在网址列表中显示URL地址</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="config.showUrlInList" @change="saveConfigDebounced" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="setting-item">
+          <div>
+            <div class="label">显示文件夹路径</div>
+            <div class="desc">在网址列表中显示所属文件夹路径</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="config.showFolderPath" @change="saveConfigDebounced" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="setting-item">
+          <div>
+            <div class="label">显示更新时间</div>
+            <div class="desc">在网址列表中显示最后更新时间</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="config.showUpdatedAt" @change="saveConfigDebounced" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="setting-item">
+          <div>
+            <div class="label">完整显示标题</div>
+            <div class="desc">超出时换行显示完整标题</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="config.showFullTitle" @change="saveConfigDebounced" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
     </div>
+
+    <!-- Background Tab -->
+    <div v-if="currentTab === 'background'">
+      <div class="settings-section">
+        <h3>🎨 背景设置</h3>
+        <div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px;">
+          <div class="label">背景类型</div>
+          <div class="bg-type-options">
+            <label class="bg-type-option">
+              <input type="radio" v-model="backgroundSettings.type" value="default" @change="applyBackgroundSettings(backgroundSettings)" />
+              <span>默认背景</span>
+            </label>
+            <label class="bg-type-option">
+              <input type="radio" v-model="backgroundSettings.type" value="color" @change="onBgTypeChangeColor" />
+              <span>纯色背景</span>
+            </label>
+            <label class="bg-type-option">
+              <input type="radio" v-model="backgroundSettings.type" value="image" @change="applyBackgroundSettings(backgroundSettings)" />
+              <span>图片背景</span>
+            </label>
+          </div>
+        </div>
+        <div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px;" v-if="backgroundSettings.type === 'color'">
+          <div class="label">选择颜色</div>
+          <div class="color-picker-area">
+            <input type="color" v-model="backgroundSettings.color" @change="applyBackgroundSettings(backgroundSettings)" />
+            <div class="preset-colors">
+              <div v-for="c in presetColors" :key="c" class="preset-color" :style="{ backgroundColor: c }" @click="backgroundSettings.color=c; backgroundSettings.type='color'; applyBackgroundSettings(backgroundSettings)"></div>
+            </div>
+          </div>
+        </div>
+        <div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px;" v-if="backgroundSettings.type === 'image'">
+          <div class="label">上传背景图片</div>
+          <div class="image-upload-area">
+            <input type="file" accept="image/*" @change="handleImageUpload" style="display:none;" ref="bgFileInput" />
+            <button class="btn btn-secondary" @click="$refs.bgFileInput.click()">📁 选择图片</button>
+            <div class="image-preview" v-if="backgroundSettings.image">
+              <img :src="backgroundSettings.image" alt="背景预览" />
+            </div>
+          </div>
+        </div>
+        <div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px;">
+          <div class="label">面板透明度：{{ backgroundSettings.panelOpacity }}%</div>
+          <div class="opacity-area">
+            <input type="range" min="0" max="100" v-model.number="backgroundSettings.panelOpacity" @input="applyPanelOpacity(backgroundSettings.panelOpacity)" class="opacity-slider" />
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-top:4px;">
+              <span>透明</span>
+              <span>不透明</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button class="btn btn-secondary" @click="resetBackground">🔄 重置背景</button>
+          <button class="btn btn-primary" @click="saveBackgroundSettings">💾 保存背景</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Edit User Modal -->
@@ -415,6 +618,278 @@
     </div>
   </transition>
 
+  <!-- Change Password Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="changePasswordModal.visible" @click="closeChangePasswordModal">
+      <div class="modal" @click.stop>
+        <h3>🔑 修改密码</h3>
+        <div class="form-group">
+          <label>旧密码</label>
+          <input type="password" v-model="changePasswordModal.oldPassword" placeholder="请输入当前密码" autocomplete="current-password" />
+        </div>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" v-model="changePasswordModal.newPassword" placeholder="请输入新密码（至少6位）" autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label>确认新密码</label>
+          <input type="password" v-model="changePasswordModal.confirmPassword" placeholder="请再次输入新密码" autocomplete="new-password" />
+        </div>
+        <p v-if="changePasswordModal.error" class="modal-error">{{ changePasswordModal.error }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closeChangePasswordModal">取消</button>
+          <button class="btn btn-primary" @click="handleChangePassword" :disabled="changePasswordModal.loading">{{ changePasswordModal.loading ? '修改中...' : '确认修改' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Security Questions Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="securityQuestionsModal.visible" @click="closeSecurityQuestionsModal">
+      <div class="modal" @click.stop>
+        <h3>❓ 安全问题</h3>
+        <p v-if="!securityQuestionsModal.hasQuestions" style="font-size:13px;color:#888;margin-bottom:12px;">设置安全问题后，如果忘记密码可以通过安全问题重置密码。请妥善保管您的答案。</p>
+        <p v-if="securityQuestionsModal.hasQuestions" style="font-size:13px;color:#1a73e8;margin-bottom:12px;">您已设置过安全问题，可以修改或重新设置。</p>
+        <div class="form-group">
+          <label>安全问题 1</label>
+          <input type="text" v-model="securityQuestionsModal.question1" placeholder="例如：您的出生城市是？" />
+        </div>
+        <div class="form-group">
+          <label>答案 1</label>
+          <input type="text" v-model="securityQuestionsModal.answer1" :placeholder="securityQuestionsModal.hasQuestions && securityQuestionsModal.savedQuestions.answerLength1 > 0 ? '原答案：' + '*'.repeat(Math.min(securityQuestionsModal.savedQuestions.answerLength1, 20)) : '请输入答案'" />
+        </div>
+        <div class="form-group">
+          <label>安全问题 2</label>
+          <input type="text" v-model="securityQuestionsModal.question2" placeholder="例如：您小学的校名是？" />
+        </div>
+        <div class="form-group">
+          <label>答案 2</label>
+          <input type="text" v-model="securityQuestionsModal.answer2" :placeholder="securityQuestionsModal.hasQuestions && securityQuestionsModal.savedQuestions.answerLength2 > 0 ? '原答案：' + '*'.repeat(Math.min(securityQuestionsModal.savedQuestions.answerLength2, 20)) : '请输入答案'" />
+        </div>
+        <div class="form-group">
+          <label>安全问题 3</label>
+          <input type="text" v-model="securityQuestionsModal.question3" placeholder="例如：您最喜欢的食物是？" />
+        </div>
+        <div class="form-group">
+          <label>答案 3</label>
+          <input type="text" v-model="securityQuestionsModal.answer3" :placeholder="securityQuestionsModal.hasQuestions && securityQuestionsModal.savedQuestions.answerLength3 > 0 ? '原答案：' + '*'.repeat(Math.min(securityQuestionsModal.savedQuestions.answerLength3, 20)) : '请输入答案'" />
+        </div>
+        <p v-if="securityQuestionsModal.error" class="modal-error">{{ securityQuestionsModal.error }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closeSecurityQuestionsModal">取消</button>
+          <button class="btn btn-primary" @click="saveSecurityQuestions" :disabled="securityQuestionsModal.loading">{{ securityQuestionsModal.loading ? '保存中...' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- API Key Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="pluginAPIKeyModal.visible" @click="closePluginAPIKeyModal">
+      <div class="modal" @click.stop>
+        <h3>🔌 API Key</h3>
+        <div class="form-group">
+          <label>API Key</label>
+          <div class="api-key-display">
+            <input v-model="pluginAPIKeyModal.apiKey" type="text" readonly placeholder="暂无API Key" />
+            <button class="btn btn-secondary" @click="copyPluginAPIKey" :disabled="!pluginAPIKeyModal.apiKey">复制</button>
+          </div>
+          <p class="form-hint">此API Key用于浏览器插件数据同步，请妥善保管</p>
+        </div>
+        <p v-if="pluginAPIKeyModal.error" class="modal-error">{{ pluginAPIKeyModal.error }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closePluginAPIKeyModal">关闭</button>
+          <button class="btn btn-primary" @click="regeneratePluginAPIKey" :disabled="pluginAPIKeyModal.loading">{{ pluginAPIKeyModal.loading ? '生成中...' : '重新生成' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Import Options Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="importDialog.visible" @click="closeImportDialog">
+      <div class="modal" @click.stop>
+        <h3>📥 导入选项</h3>
+        <div class="form-group">
+          <button type="button" class="folder-select-btn" @click="showImportFolderSelector">
+            <span>📁</span>
+            <span>{{ importParentId ? getFolderPath(importParentId) : '选择导入目标文件夹' }}</span>
+          </button>
+        </div>
+        <div class="form-group">
+          <div class="import-options">
+            <div class="import-option">
+              <input type="radio" id="admin-import-merge" v-model="importMode" value="merge" />
+              <label for="admin-import-merge">
+                <div class="option-header"><span>🔄</span><span class="option-text">合并</span></div>
+                <span class="option-description">保留现有书签，添加新导入的书签</span>
+              </label>
+            </div>
+            <div class="import-option">
+              <input type="radio" id="admin-import-replace" v-model="importMode" value="replace" />
+              <label for="admin-import-replace">
+                <div class="option-header"><span>⚠️</span><span class="option-text">替换</span></div>
+                <span class="option-description">删除所有现有书签，使用导入的数据</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="handleFileUpload">选择文件</button>
+          <button class="btn btn-secondary" @click="closeImportDialog">取消</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Import Folder Selector Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="importFolderSelectorVisible" @click="cancelFolderSelection">
+      <div class="modal" @click.stop>
+        <h3>选择导入目标文件夹</h3>
+        <div class="form-group">
+          <div class="folder-selector">
+            <div class="folder-option" @click="selectImportParentFolder(null)">
+              <span>🏠</span><span>根目录</span>
+              <span class="selected-indicator" v-if="importParentId === null">✓</span>
+            </div>
+            <div v-for="f in allFolders" :key="f.id" class="folder-option" @click="selectImportParentFolder(f.id)">
+              <span>📁</span><span>{{ getFolderPath(f.id) }}</span>
+              <span class="selected-indicator" v-if="importParentId === f.id">✓</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="confirmFolderSelection">确认</button>
+          <button class="btn btn-secondary" @click="cancelFolderSelection">取消</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Edge Import Options Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="edgeImportDialog.visible" @click="closeEdgeImportDialog">
+      <div class="modal" @click.stop>
+        <h3>🔄 导入Edge书签</h3>
+        <div class="form-group">
+          <button type="button" class="folder-select-btn" @click="showEdgeFolderSelector">
+            <span>📁</span>
+            <span>{{ edgeImportParentId ? getFolderPath(edgeImportParentId) : '选择导入目标文件夹' }}</span>
+          </button>
+        </div>
+        <div class="form-group">
+          <div class="import-options">
+            <div class="import-option">
+              <input type="radio" id="admin-edge-merge" v-model="edgeImportMode" value="merge" />
+              <label for="admin-edge-merge">
+                <div class="option-header"><span>🔄</span><span class="option-text">合并</span></div>
+                <span class="option-description">保留现有书签，添加新导入的书签</span>
+              </label>
+            </div>
+            <div class="import-option">
+              <input type="radio" id="admin-edge-replace" v-model="edgeImportMode" value="replace" />
+              <label for="admin-edge-replace">
+                <div class="option-header"><span>⚠️</span><span class="option-text">替换</span></div>
+                <span class="option-description">删除所有现有书签，使用导入的数据</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="handleEdgeFileUpload">选择文件</button>
+          <button class="btn btn-secondary" @click="closeEdgeImportDialog">取消</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Edge Import Folder Selector Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="edgeFolderSelectorVisible" @click="cancelEdgeFolderSelection">
+      <div class="modal" @click.stop>
+        <h3>选择导入目标文件夹</h3>
+        <div class="form-group">
+          <div class="folder-selector">
+            <div class="folder-option" @click="selectEdgeImportParentFolder(null)">
+              <span>🏠</span><span>根目录</span>
+              <span class="selected-indicator" v-if="edgeImportParentId === null">✓</span>
+            </div>
+            <div v-for="f in allFolders" :key="f.id" class="folder-option" @click="selectEdgeImportParentFolder(f.id)">
+              <span>📁</span><span>{{ getFolderPath(f.id) }}</span>
+              <span class="selected-indicator" v-if="edgeImportParentId === f.id">✓</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="confirmEdgeFolderSelection">确认</button>
+          <button class="btn btn-secondary" @click="cancelEdgeFolderSelection">取消</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Edge Import Confirm Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="edgeConfirmImportVisible" @click="closeEdgeConfirmImportDialog">
+      <div class="modal" @click.stop>
+        <h3>确认导入Edge书签</h3>
+        <div class="form-group">
+          <p>您确定要导入选中的Edge书签吗？</p>
+          <div class="import-summary">
+            <div class="summary-item"><span class="summary-label">导入方式：</span><span class="summary-value">{{ edgeImportMode === 'merge' ? '合并' : '替换' }}</span></div>
+            <div class="summary-item"><span class="summary-label">导入位置：</span><span class="summary-value">{{ edgeImportParentId ? getFolderPath(edgeImportParentId) : '根目录' }}</span></div>
+          </div>
+          <p class="warning-text" v-if="edgeImportMode === 'replace'">⚠️ 替换模式会删除所有现有书签，请注意数据安全！</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="confirmEdgeImportBookmarks">确认导入</button>
+          <button class="btn btn-secondary" @click="closeEdgeConfirmImportDialog">取消</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Update Metadata Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="updateMetadataDialog.visible" @click="closeUpdateMetadataDialog">
+      <div class="modal" @click.stop>
+        <h3>🔄 更新网址信息(图标和名称)</h3>
+        <div class="form-group">
+          <label>选择要更新的文件夹</label>
+          <div class="folder-selector">
+            <div class="folder-option" @click="updateMetadataDialog.targetFolderId = null">
+              <span>🏠</span><span>根目录</span>
+              <span class="selected-indicator" v-if="updateMetadataDialog.targetFolderId === null">✓</span>
+            </div>
+            <div v-for="f in allFolders" :key="f.id" class="folder-option" @click="updateMetadataDialog.targetFolderId = f.id">
+              <span>📁</span><span>{{ getFolderPath(f.id) }}</span>
+              <span class="selected-indicator" v-if="updateMetadataDialog.targetFolderId === f.id">✓</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="updateMetadataDialog.updating" class="update-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: ((updateMetadataDialog.currentIndex || 0) / (updateMetadataDialog.totalCount || 1) * 100) + '%' }"></div>
+          </div>
+          <div class="progress-info">
+            <span class="progress-text">正在更新: {{ updateMetadataDialog.currentBookmarkTitle || '准备中...' }}</span>
+            <span class="progress-count">{{ updateMetadataDialog.currentIndex || 0 }} / {{ updateMetadataDialog.totalCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="modal-actions" v-if="!updateMetadataDialog.updating">
+          <button class="btn btn-primary" @click="handleStartUpdate" :disabled="updateMetadataDialog.targetFolderId === null">开始更新</button>
+          <button class="btn btn-secondary" @click="closeUpdateMetadataDialog">取消</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Hidden file inputs -->
+  <input type="file" ref="adminImportFile" accept=".json" style="display:none" @change="importBookmarks" />
+  <input type="file" ref="adminEdgeImportFile" accept=".html" style="display:none" @change="importEdgeBookmarks" />
+
   <!-- Toast -->
   <transition name="fade">
     <div v-if="toast.visible" class="toast" :class="toast.type">{{ toast.message }}</div>
@@ -440,11 +915,39 @@ const app = createApp({
       currentPage: 1,
       pageSize: 20,
       settings: { allowRegister: true, requireLogin: true },
+      config: { showUrlInList: true, showFolderPath: true, showUpdatedAt: true, showFullTitle: true },
+      backgroundSettings: { type: 'default', color: '', image: '', panelOpacity: 90 },
+      presetColors: ['#0c0c0c','#1a1a2e','#16213e','#0f3460','#533483','#f8fafc','#f1f5f9','#e2e8f0','#cbd5e1','#94a3b1'],
       editModal: { visible: false, user: null, form: { nickname: '', email: '' }, loading: false, error: '' },
       resetModal: { visible: false, user: null, newPassword: '', loading: false, error: '', success: false, successPassword: '' },
       deleteModal: { visible: false, user: null, loading: false, error: '' },
       toast: { visible: false, message: '', type: 'success', timer: null },
+      changePasswordModal: {
+        visible: false, oldPassword: '', newPassword: '', confirmPassword: '', loading: false, error: '',
+      },
+      securityQuestionsModal: {
+        visible: false, question1: '', answer1: '', question2: '', answer2: '', question3: '', answer3: '',
+        loading: false, error: '', hasQuestions: false, savedQuestions: {},
+      },
+      pluginAPIKeyModal: { visible: false, apiKey: '', loading: false, error: '' },
+      importDialog: { visible: false },
+      importMode: 'merge',
+      importParentId: null,
+      importFolderSelectorVisible: false,
+      edgeImportDialog: { visible: false },
+      edgeImportMode: 'merge',
+      edgeImportParentId: null,
+      edgeFolderSelectorVisible: false,
+      edgeImportFile: null,
+      edgeConfirmImportVisible: false,
+      updateMetadataDialog: {
+        visible: false, targetFolderId: null, updating: false,
+        currentIndex: 0, totalCount: 0, currentBookmarkTitle: '',
+      },
+      tree: [],
+      headerMenuOpen: false,
       saveSettingsTimer: null,
+      saveConfigTimer: null,
     };
   },
   computed: {
@@ -468,6 +971,16 @@ const app = createApp({
         pages.push(total);
       }
       return pages;
+    },
+    allFolders() {
+      const result = [];
+      const traverse = (nodes) => {
+        for (const node of nodes) {
+          if (node.type === 'folder') { result.push(node); if (node.children) traverse(node.children); }
+        }
+      };
+      traverse(this.tree);
+      return result;
     },
   },
   methods: {
@@ -639,6 +1152,375 @@ const app = createApp({
       if (this.saveSettingsTimer) clearTimeout(this.saveSettingsTimer);
       this.saveSettingsTimer = setTimeout(() => this.saveSettings(), 500);
     },
+    async loadConfig() {
+      try {
+        const res = await fetch('/api/config', { headers: this.getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          this.config.showUrlInList = data.show_url_in_list !== undefined ? data.show_url_in_list === 'true' : true;
+          this.config.showFolderPath = data.show_folder_path !== undefined ? data.show_folder_path === 'true' : true;
+          this.config.showUpdatedAt = data.show_updated_at !== undefined ? data.show_updated_at === 'true' : true;
+          this.config.showFullTitle = data.show_full_title !== undefined ? data.show_full_title === 'true' : true;
+        }
+      } catch {}
+    },
+    async saveConfig() {
+      try {
+        const items = [
+          { key: 'show_url_in_list', value: this.config.showUrlInList.toString() },
+          { key: 'show_folder_path', value: this.config.showFolderPath.toString() },
+          { key: 'show_updated_at', value: this.config.showUpdatedAt.toString() },
+          { key: 'show_full_title', value: this.config.showFullTitle.toString() },
+        ];
+        for (const item of items) {
+          await fetch('/api/config', {
+            method: 'POST', headers: this.getHeaders('application/json'),
+            body: JSON.stringify(item),
+          });
+        }
+        this.showToast('配置已保存', 'success');
+      } catch { this.showToast('保存配置失败', 'error'); }
+    },
+    saveConfigDebounced() {
+      if (this.saveConfigTimer) clearTimeout(this.saveConfigTimer);
+      this.saveConfigTimer = setTimeout(() => this.saveConfig(), 500);
+    },
+    async loadBackgroundSettings() {
+      try {
+        const res = await fetch('/api/config', { headers: this.getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data['background']) {
+            const settings = JSON.parse(data['background']);
+            if (typeof settings.panelOpacity === 'undefined') settings.panelOpacity = 90;
+            this.backgroundSettings = settings;
+            this.applyBackgroundSettings(settings);
+          }
+        }
+      } catch {}
+    },
+    async saveBackgroundSettings() {
+      try {
+        await fetch('/api/config', {
+          method: 'POST', headers: this.getHeaders('application/json'),
+          body: JSON.stringify({ key: 'background', value: JSON.stringify(this.backgroundSettings) }),
+        });
+        this.showToast('背景已保存', 'success');
+      } catch { this.showToast('保存背景失败', 'error'); }
+    },
+    applyBackgroundSettings(settings) {
+      const body = document.body;
+      switch (settings.type) {
+        case 'color':
+          body.style.background = settings.color;
+          body.style.backgroundImage = 'none';
+          body.style.backgroundSize = 'auto';
+          break;
+        case 'image':
+          body.style.background = `url('${settings.image}') center center / cover no-repeat fixed`;
+          break;
+        default:
+          body.style.background = `url('/img/background.jpg') center center / cover no-repeat fixed`;
+          break;
+      }
+      this.applyPanelOpacity(settings.panelOpacity);
+    },
+    applyPanelOpacity(opacity) {
+      const v = opacity / 100;
+      document.querySelectorAll('.settings-section').forEach(el => {
+        el.style.backgroundColor = `rgba(255, 255, 255, ${v * 0.95})`;
+      });
+    },
+    handleImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        this.backgroundSettings = { type: 'image', color: '', image: e.target.result, panelOpacity: this.backgroundSettings.panelOpacity };
+        this.applyBackgroundSettings(this.backgroundSettings);
+      };
+      reader.readAsDataURL(file);
+      event.target.value = '';
+    },
+    resetBackground() {
+      this.backgroundSettings = { type: 'default', color: '', image: '', panelOpacity: 90 };
+      this.applyBackgroundSettings(this.backgroundSettings);
+      this.saveBackgroundSettings();
+    },
+    onBgTypeChangeColor() {
+      if (!this.backgroundSettings.color) this.backgroundSettings.color = '#1a1a2e';
+      this.applyBackgroundSettings(this.backgroundSettings);
+    },
+    handleLogout() {
+      localStorage.removeItem('token');
+      window.location.href = '/login.html';
+    },
+    openDuplicateCheck() {
+      window.location.href = '/duplicate.html';
+    },
+    async loadTree() {
+      try {
+        const res = await fetch('/api/tree', { headers: this.getHeaders() });
+        if (res.ok) this.tree = await res.json();
+      } catch {}
+    },
+    getFolderPath(id) {
+      const find = (nodes, path = []) => {
+        for (const node of nodes) {
+          if (node.id === id) return [...path, node.title].join(' / ');
+          if (node.children) { const f = find(node.children, [...path, node.title]); if (f) return f; }
+        }
+        return null;
+      };
+      return find(this.tree) || '';
+    },
+    findNodeById(id, nodes) {
+      for (const node of nodes) {
+        if (node.id === id) return node;
+        if (node.children) { const f = this.findNodeById(id, node.children); if (f) return f; }
+      }
+      return null;
+    },
+    collectBookmarks(nodes) {
+      const list = [];
+      for (const node of nodes) {
+        if (node.type === 'folder' && node.children) list.push(...this.collectBookmarks(node.children));
+        else if (node.type === 'bookmark') list.push({ id: node.id, title: node.title, url: node.url });
+      }
+      return list;
+    },
+    /* Import */
+    showImportDialog() {
+      this.importDialog.visible = true;
+      this.importMode = 'merge';
+      this.importParentId = null;
+    },
+    closeImportDialog() {
+      this.importDialog.visible = false;
+      if (this.$refs.adminImportFile) this.$refs.adminImportFile.value = '';
+    },
+    handleFileUpload() {
+      this.$refs.adminImportFile?.click();
+    },
+    showImportFolderSelector() { this.importFolderSelectorVisible = true; },
+    selectImportParentFolder(id) { this.importParentId = id; },
+    confirmFolderSelection() { this.importFolderSelectorVisible = false; },
+    cancelFolderSelection() { this.importFolderSelectorVisible = false; },
+    async importBookmarks(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          const res = await fetch('/api/import', {
+            method: 'POST', headers: this.getHeaders('application/json'),
+            body: JSON.stringify({ bookmarks: data, mode: this.importMode, parent_id: this.importParentId }),
+          });
+          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || '导入失败'); }
+          this.showToast('导入成功', 'success');
+          this.closeImportDialog();
+        } catch (err) { this.showToast(err.message || '导入失败，请检查文件格式', 'error'); }
+      };
+      reader.readAsText(file);
+    },
+    /* Edge Import */
+    showEdgeImportDialog() {
+      this.edgeImportDialog.visible = true;
+      this.edgeImportMode = 'merge';
+      this.edgeImportParentId = null;
+    },
+    closeEdgeImportDialog() {
+      this.edgeImportDialog.visible = false;
+      if (this.$refs.adminEdgeImportFile) this.$refs.adminEdgeImportFile.value = '';
+    },
+    handleEdgeFileUpload() { this.$refs.adminEdgeImportFile?.click(); },
+    showEdgeFolderSelector() { this.edgeFolderSelectorVisible = true; },
+    selectEdgeImportParentFolder(id) { this.edgeImportParentId = id; },
+    confirmEdgeFolderSelection() { this.edgeFolderSelectorVisible = false; },
+    cancelEdgeFolderSelection() { this.edgeFolderSelectorVisible = false; },
+    importEdgeBookmarks(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      this.edgeImportFile = file;
+      this.edgeConfirmImportVisible = true;
+    },
+    closeEdgeConfirmImportDialog() { this.edgeConfirmImportVisible = false; this.edgeImportFile = null; },
+    async confirmEdgeImportBookmarks() {
+      if (!this.edgeImportFile) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const res = await fetch('/api/import-edge', {
+            method: 'POST', headers: this.getHeaders('application/json'),
+            body: JSON.stringify({ html: e.target.result, mode: this.edgeImportMode, parent_id: this.edgeImportParentId }),
+          });
+          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || '导入失败'); }
+          this.showToast('Edge书签导入成功', 'success');
+          this.closeEdgeImportDialog();
+          this.closeEdgeConfirmImportDialog();
+        } catch (err) { this.showToast(err.message || '导入失败', 'error'); this.closeEdgeConfirmImportDialog(); }
+      };
+      reader.readAsText(this.edgeImportFile);
+    },
+    /* Update Metadata */
+    showUpdateMetadataDialog() {
+      this.updateMetadataDialog.visible = true;
+      this.updateMetadataDialog.targetFolderId = null;
+    },
+    closeUpdateMetadataDialog() { this.updateMetadataDialog.visible = false; },
+    handleStartUpdate() {
+      this.updateFolderMetadata(this.updateMetadataDialog.targetFolderId);
+    },
+    async updateFolderMetadata(folderId) {
+      const folder = this.findNodeById(folderId, this.tree);
+      if (!folder || folder.type !== 'folder') { this.showToast('请选择文件夹', 'error'); return; }
+      const bookmarks = this.collectBookmarks([folder]);
+      if (bookmarks.length === 0) { this.showToast('该文件夹下没有书签', 'warning'); return; }
+      this.updateMetadataDialog.updating = true;
+      this.updateMetadataDialog.currentIndex = 0;
+      this.updateMetadataDialog.totalCount = bookmarks.length;
+      let success = 0, fail = 0;
+      for (const bm of bookmarks) {
+        if (!bm.url) { this.updateMetadataDialog.currentIndex++; continue; }
+        try { new URL(bm.url); } catch { this.updateMetadataDialog.currentIndex++; fail++; continue; }
+        this.updateMetadataDialog.currentBookmarkTitle = bm.title;
+        try {
+          await fetch(`/api/nodes/${bm.id}`, {
+            method: 'PUT', headers: this.getHeaders('application/json'),
+            body: JSON.stringify({ url: bm.url }),
+          });
+          success++;
+        } catch { fail++; }
+        this.updateMetadataDialog.currentIndex++;
+      }
+      this.updateMetadataDialog.updating = false;
+      if (success > 0) this.showToast(`成功更新 ${success} 个书签的信息`, 'success');
+      if (fail > 0) this.showToast(`更新失败 ${fail} 个书签`, 'error');
+      this.closeUpdateMetadataDialog();
+    },
+    openChangePasswordModal() {
+      this.changePasswordModal = { visible: true, oldPassword: '', newPassword: '', confirmPassword: '', loading: false, error: '' };
+    },
+    closeChangePasswordModal() {
+      this.changePasswordModal.visible = false;
+    },
+    async handleChangePassword() {
+      this.changePasswordModal.error = '';
+      const { oldPassword, newPassword, confirmPassword } = this.changePasswordModal;
+      if (!oldPassword || !newPassword || !confirmPassword) { this.changePasswordModal.error = '请填写所有字段'; return; }
+      if (newPassword.length < 6) { this.changePasswordModal.error = '新密码长度不能少于6位'; return; }
+      if (newPassword !== confirmPassword) { this.changePasswordModal.error = '两次输入的新密码不一致'; return; }
+      if (oldPassword === newPassword) { this.changePasswordModal.error = '新密码不能与旧密码相同'; return; }
+      this.changePasswordModal.loading = true;
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST', headers: this.getHeaders('application/json'),
+          body: JSON.stringify({ old_password: MD5(oldPassword), new_password: MD5(newPassword) }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.showToast('密码修改成功，请重新登录', 'success');
+          this.closeChangePasswordModal();
+          setTimeout(() => { localStorage.removeItem('token'); window.location.href = '/login.html'; }, 1500);
+        } else {
+          this.changePasswordModal.error = data.error || '密码修改失败';
+        }
+      } catch { this.changePasswordModal.error = '网络错误，请稍后重试'; }
+      this.changePasswordModal.loading = false;
+    },
+    async openSecurityQuestionsModal() {
+      this.securityQuestionsModal.visible = true;
+      await this.loadSecurityQuestions();
+      if (!this.securityQuestionsModal.hasQuestions) {
+        this.securityQuestionsModal.question1 = '你最喜欢的颜色是什么？';
+        this.securityQuestionsModal.question2 = '你的出生城市是哪里？';
+        this.securityQuestionsModal.question3 = '你小学的名字是什么？';
+      }
+    },
+    closeSecurityQuestionsModal() {
+      this.securityQuestionsModal.visible = false;
+    },
+    async loadSecurityQuestions() {
+      try {
+        const res = await fetch('/api/auth/security-questions', { headers: this.getHeaders() });
+        const data = await res.json();
+        if (res.ok) {
+          this.securityQuestionsModal.hasQuestions = data.has_security_questions;
+          this.securityQuestionsModal.savedQuestions = {
+            question1: data.questions?.question1 || '',
+            question2: data.questions?.question2 || '',
+            question3: data.questions?.question3 || '',
+            answerLength1: data.answer_lengths?.answer1 || 0,
+            answerLength2: data.answer_lengths?.answer2 || 0,
+            answerLength3: data.answer_lengths?.answer3 || 0,
+          };
+          if (data.has_security_questions && data.questions) {
+            this.securityQuestionsModal.question1 = data.questions.question1 || '';
+            this.securityQuestionsModal.answer1 = '';
+            this.securityQuestionsModal.question2 = data.questions.question2 || '';
+            this.securityQuestionsModal.answer2 = '';
+            this.securityQuestionsModal.question3 = data.questions.question3 || '';
+            this.securityQuestionsModal.answer3 = '';
+          }
+        }
+      } catch {}
+    },
+    async saveSecurityQuestions() {
+      this.securityQuestionsModal.error = '';
+      const { question1, answer1, question2, answer2, question3, answer3 } = this.securityQuestionsModal;
+      if (!question1 || !answer1 || !question2 || !answer2 || !question3 || !answer3) {
+        this.securityQuestionsModal.error = '请填写所有问题和答案'; return;
+      }
+      this.securityQuestionsModal.loading = true;
+      try {
+        const res = await fetch('/api/auth/security-questions', {
+          method: 'POST', headers: this.getHeaders('application/json'),
+          body: JSON.stringify({ question1, answer1, question2, answer2, question3, answer3 }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.showToast('安全问题设置成功', 'success');
+          this.closeSecurityQuestionsModal();
+        } else {
+          this.securityQuestionsModal.error = data.error || '设置失败';
+        }
+      } catch { this.securityQuestionsModal.error = '网络错误，请稍后重试'; }
+      this.securityQuestionsModal.loading = false;
+    },
+    openPluginAPIKeyModal() {
+      this.pluginAPIKeyModal.visible = true;
+      this.pluginAPIKeyModal.apiKey = this.currentUser?.api_key || '';
+      this.pluginAPIKeyModal.error = '';
+      this.pluginAPIKeyModal.loading = false;
+    },
+    closePluginAPIKeyModal() {
+      this.pluginAPIKeyModal.visible = false;
+    },
+    async regeneratePluginAPIKey() {
+      this.pluginAPIKeyModal.error = '';
+      this.pluginAPIKeyModal.loading = true;
+      try {
+        const res = await fetch('/api/auth/regenerate-api-key', {
+          method: 'POST', headers: this.getHeaders('application/json'),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.pluginAPIKeyModal.apiKey = data.api_key;
+          if (this.currentUser) this.currentUser.api_key = data.api_key;
+          this.showToast('API Key重新生成成功', 'success');
+        } else {
+          this.pluginAPIKeyModal.error = data.error || '重新生成失败';
+        }
+      } catch { this.pluginAPIKeyModal.error = '网络错误，请稍后重试'; }
+      this.pluginAPIKeyModal.loading = false;
+    },
+    async copyPluginAPIKey() {
+      try {
+        await navigator.clipboard.writeText(this.pluginAPIKeyModal.apiKey);
+        this.showToast('已复制到剪贴板', 'success');
+      } catch { this.showToast('复制失败，请手动复制', 'error'); }
+    },
     formatDate(d) {
       if (!d) return '-';
       return new Date(d).toLocaleDateString('zh-CN');
@@ -654,6 +1536,9 @@ const app = createApp({
     this.loadStats();
     this.loadUsers();
     this.loadSettings();
+    this.loadConfig();
+    this.loadBackgroundSettings();
+    this.loadTree();
   },
 });
 
