@@ -376,6 +376,9 @@ func main() {
 			r.Put("/nodes/{id}", s.handleAdminUpdateNode)
 			r.Delete("/nodes/{id}", s.handleAdminDeleteNode)
 			r.Get("/audit-log", s.handleGetAuditLog)
+				r.Post("/folders", s.handleAdminCreateFolder)
+				r.Post("/bookmarks", s.handleAdminCreateBookmark)
+				r.Put("/nodes/reorder", s.handleAdminReorderNodes)
 		})
 		r.Get("/tree", s.optionalAuthMiddleware(s.handleGetTree))
 		r.Get("/public-tree", s.handleGetPublicTree)
@@ -3607,6 +3610,132 @@ func (s *server) handleAdminExportUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bookmarks_export_user_%d.json"`, userID))
 	json.NewEncoder(w).Encode(tree)
+}
+
+// handleAdminCreateFolder 管理员为任意用户创建文件夹
+func (s *server) handleAdminCreateFolder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID   int64  `json:"user_id"`
+		Title    string `json:"title"`
+		ParentID *int64 `json:"parent_id"`
+		Icon     string `json:"icon"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" {
+		respondError(w, http.StatusBadRequest, errors.New("title is required"))
+		return
+	}
+	var icon *string
+	if req.Icon != "" {
+		icon = &req.Icon
+	}
+	newNode, err := s.insertNode(r.Context(), req.UserID, nodeTypeFolder, req.Title, req.ParentID, nil, icon, "", "private")
+	if err != nil {
+		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) {
+			respondError(w, http.StatusBadRequest, err)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	adminUserID := getUserID(r)
+	s.logAudit(r.Context(), adminUserID, "", "admin_create_folder", "folder", newNode.ID,
+		fmt.Sprintf("管理员为用户 #%d 创建文件夹: %s", req.UserID, req.Title), r.RemoteAddr)
+	respondJSON(w, http.StatusCreated, newNode)
+}
+
+// handleAdminCreateBookmark 管理员为任意用户创建书签
+func (s *server) handleAdminCreateBookmark(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID     int64  `json:"user_id"`
+		URL        string `json:"url"`
+		Title      string `json:"title"`
+		ParentID   *int64 `json:"parent_id"`
+		FaviconURL string `json:"favicon_url"`
+		Visibility string `json:"visibility"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	req.URL = strings.TrimSpace(req.URL)
+	if req.URL == "" {
+		respondError(w, http.StatusBadRequest, errors.New("url is required"))
+		return
+	}
+	normalizedURL, err := normalizeURL(req.URL)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid url: %w", err))
+		return
+	}
+	title := req.Title
+	favicon := req.FaviconURL
+	if title == "" || favicon == "" {
+		metaTitle, metaIcon, metaErr := s.fetchMetadata(normalizedURL)
+		if metaErr == nil {
+			if title == "" {
+				title = metaTitle
+			}
+			if favicon == "" {
+				favicon = metaIcon
+			}
+		}
+	}
+	if title == "" {
+		title = normalizedURL
+	}
+	visibility := "private"
+	if req.Visibility != "" {
+		visibility = req.Visibility
+	}
+	var faviconPtr *string
+	if favicon != "" {
+		faviconPtr = &favicon
+	}
+	newNode, err := s.insertNode(r.Context(), req.UserID, nodeTypeBookmark, title, req.ParentID, &normalizedURL, faviconPtr, "", visibility)
+	if err != nil {
+		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) {
+			respondError(w, http.StatusBadRequest, err)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	adminUserID := getUserID(r)
+	s.logAudit(r.Context(), adminUserID, "", "admin_create_bookmark", "bookmark", newNode.ID,
+		fmt.Sprintf("管理员为用户 #%d 创建书签: %s", req.UserID, req.Title), r.RemoteAddr)
+	respondJSON(w, http.StatusCreated, newNode)
+}
+
+// handleAdminReorderNodes 管理员为任意用户排序节点
+func (s *server) handleAdminReorderNodes(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID     int64   `json:"user_id"`
+		ParentID   *int64  `json:"parent_id"`
+		OrderedIDs []int64 `json:"ordered_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	if len(req.OrderedIDs) == 0 {
+		respondError(w, http.StatusBadRequest, errors.New("ordered_ids cannot be empty"))
+		return
+	}
+	if err := s.reorderNodes(r.Context(), req.UserID, req.ParentID, req.OrderedIDs); err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidParent), errors.Is(err, ErrInvalidUpdate):
+			respondError(w, http.StatusBadRequest, err)
+		default:
+			respondError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // 辅助函数：获取最小值
