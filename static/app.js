@@ -34,6 +34,15 @@ const BookmarkNode = {
       // 回退到前端计算
       return this.countBookmarks(this.node);
     },
+    folderIcon() {
+      if (this.node.favicon_url) return this.node.favicon_url;
+      if (this.hasChildren) return '';
+      return this.level === 0 ? '📁' : '🗂️';
+    },
+    isIconUrl() {
+      const s = this.node.favicon_url;
+      return s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:'));
+    },
     hasChildren() {
       // 检查是否有子文件夹
       if (!this.node.children || this.node.children.length === 0) {
@@ -113,6 +122,7 @@ const BookmarkNode = {
       event.stopPropagation(); // 防止触发select事件
       this.collapsed = !this.collapsed;
     },
+    onFolderIconError(e) { e.target.style.display = 'none'; },
   },
   template: `
     <li class="tree-item" v-if="isFolder">
@@ -120,11 +130,17 @@ const BookmarkNode = {
         <button class="node-main" type="button" @click="onSelect">
             <span class="node-icon" @click="hasChildren && toggleCollapse($event)">
               <template v-if="isFolder">
-                <span v-if="hasChildren">
+                <span v-if="hasChildren && !node.favicon_url">
                   {{ collapsed ? '▶️' : '▼️' }}
                 </span>
+                <span v-else-if="hasChildren && node.favicon_url" style="display:inline-flex;align-items:center;gap:2px;">
+                  <span style="font-size:10px;">{{ collapsed ? '▶' : '▼' }}</span>
+                  <img v-if="isIconUrl" :src="node.favicon_url" style="width:14px;height:14px;border-radius:3px;vertical-align:middle;" @error="onFolderIconError" />
+                  <span v-else style="font-size:14px;">{{ node.favicon_url }}</span>
+                </span>
                 <span v-else>
-                  {{ level === 0 ? '📁' : '🗂️' }}
+                  <img v-if="isIconUrl" :src="node.favicon_url" style="width:14px;height:14px;border-radius:3px;vertical-align:middle;" @error="onFolderIconError" />
+                  <span v-else style="font-size:14px;">{{ folderIcon }}</span>
                 </span>
               </template>
             </span>
@@ -1663,6 +1679,8 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         return '';
       }
     },
+    isIconUrl(s) { return s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:')); },
+    onPreviewError(e) { e.target.style.display = 'none'; },
     async loadTree() {
       this.loading = true;
       try {
@@ -1896,6 +1914,9 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         parent_id: this.modal.parentId,
         remark: this.modal.form.remark.trim(),
       };
+      const icon = this.modal.form.favicon_url.trim();
+      if (icon) payload.favicon_url = icon;
+      else payload.favicon_url = '';
       const res = await fetch(`/api/nodes/${this.modal.nodeId}`, {
         method: "PUT",
         headers: this.getHeaders("application/json"),
