@@ -583,39 +583,39 @@
           <div style="margin-bottom:10px;font-size:13px;color:#666;">
             共 <strong>{{ bm.totalBookmarks }}</strong> 个书签，<strong>{{ bm.totalFolders }}</strong> 个文件夹
           </div>
+          <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-primary" @click="bmAddFolder">📂 新建文件夹</button>
+            <button class="btn btn-sm btn-primary" @click="bmAddBookmark">🔖 新建书签</button>
+            <button class="btn btn-sm btn-secondary" @click="expandAllBm">展开全部</button>
+            <button class="btn btn-sm btn-secondary" @click="collapseAllBm">收起全部</button>
+          </div>
           <div class="bm-tree" style="max-height:500px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:8px;background:#fafafa;">
-            <template v-for="node in bm.tree" :key="node.id">
-              <div class="bm-node" :style="{ paddingLeft: '12px' }">
-                <div class="bm-node-row">
-                  <span class="bm-toggle" v-if="node.type === 'folder'" @click="toggleBmFolder(node.id)" style="cursor:pointer;margin-right:6px;">
-                    <span v-if="node.favicon_url && isIconUrl(node.favicon_url)"><img :src="node.favicon_url" style="width:16px;height:16px;vertical-align:middle;border-radius:3px;" @error="onAdminIconError($event, node)" /></span>
-                    <span v-else>{{ bm.expandedFolders[node.id] ? (node.favicon_url||'📂') : (node.favicon_url||'📁') }}</span>
-                  </span>
-                  <span v-else style="margin-right:6px;">📎</span>
-                  <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ node.title }}</span>
-                  <span v-if="node.type === 'bookmark' && node.url" style="font-size:11px;color:#888;margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">{{ node.url }}</span>
-                  <span v-if="node.type === 'folder'" style="font-size:11px;color:#1a73e8;margin:0 8px;">({{ node.bookmark_count || 0 }})</span>
-                  <button class="btn btn-sm" style="padding:2px 8px;font-size:11px;background:#e8f0fe;color:#1a73e8;border:1px solid #d2e3fc;" @click="openEditFolderIcon(node)">图标</button>
-                  <button class="btn btn-danger" style="padding:2px 8px;font-size:11px;" @click="deleteBmNode(node)">删除</button>
-                </div>
-                <div v-if="node.type === 'folder' && bm.expandedFolders[node.id] && node.children" style="margin-left:16px;">
-                  <div v-for="child in renderBmChildren(node.children)" :key="child.node.id" :style="{ paddingLeft: (child.depth * 16 + 12) + 'px' }" class="bm-node">
-                    <div class="bm-node-row">
-                      <span class="bm-toggle" v-if="child.node.type === 'folder'" @click="toggleBmFolder(child.node.id)" style="cursor:pointer;margin-right:6px;">
-                        <span v-if="child.node.favicon_url && isIconUrl(child.node.favicon_url)"><img :src="child.node.favicon_url" style="width:16px;height:16px;vertical-align:middle;border-radius:3px;" @error="onAdminIconError($event, child.node)" /></span>
-                        <span v-else>{{ bm.expandedFolders[child.node.id] ? (child.node.favicon_url||'📂') : (child.node.favicon_url||'📁') }}</span>
-                      </span>
-                      <span v-else style="margin-right:6px;">📎</span>
-                      <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ child.node.title }}</span>
-                      <span v-if="child.node.type === 'bookmark' && child.node.url" style="font-size:11px;color:#888;margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">{{ child.node.url }}</span>
-                      <span v-if="child.node.type === 'folder'" style="font-size:11px;color:#1a73e8;margin:0 8px;">({{ child.node.bookmark_count || 0 }})</span>
-                      <button class="btn btn-sm" style="padding:2px 8px;font-size:11px;background:#e8f0fe;color:#1a73e8;border:1px solid #d2e3fc;" @click="openEditFolderIcon(child.node)">图标</button>
-                      <button class="btn btn-danger" style="padding:2px 8px;font-size:11px;" @click="deleteBmNode(child.node)">删除</button>
-                    </div>
-                  </div>
+            <div v-for="item in bmFlattened" :key="item.node.id" class="bm-node">
+              <div class="bm-node-row"
+                :style="{ paddingLeft: (item.depth * 20 + 8) + 'px' }"
+                :class="{ 'bm-row-selected': bm.selectedNodeId === item.node.id }"
+                @click="bmSelectNode(item.node)">
+                <span class="bm-toggle" v-if="item.node.type === 'folder'" @click.stop="toggleBmFolder(item.node.id)" style="cursor:pointer;margin-right:6px;font-size:12px;">
+                  {{ bm.expandedFolders[item.node.id] ? '▼' : '▶' }}
+                </span>
+                <span v-else style="margin-right:6px;font-size:12px;opacity:0.4;">•</span>
+                <span style="margin-right:4px;font-size:15px;line-height:1;">
+                  <span v-if="item.node.favicon_url && isIconUrl(item.node.favicon_url)"><img :src="item.node.favicon_url" style="width:14px;height:14px;border-radius:3px;vertical-align:middle;" @error="onAdminIconError($event, item.node)" /></span>
+                  <span v-else-if="item.node.type === 'folder'">{{ bm.expandedFolders[item.node.id] ? (item.node.favicon_url||'📂') : (item.node.favicon_url||'📁') }}</span>
+                  <span v-else>📎</span>
+                </span>
+                <span class="bm-title" :title="item.node.title" style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bm.selectedNodeId===item.node.id?600:400;">{{ item.node.title }}</span>
+                <span v-if="item.node.type === 'bookmark' && item.node.url" class="bm-url" :title="item.node.url">{{ item.node.url }}</span>
+                <span v-if="item.node.type === 'folder'" class="bm-count">({{ item.node.bookmark_count || 0 }})</span>
+                <div class="bm-actions" style="display:flex;gap:3px;flex-shrink:0;">
+                  <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:#e8f0fe;color:#1a73e8;border:1px solid #d2e3fc;" title="上移" @click.stop="bmMoveNode(item.node, 'up')" :disabled="item.isFirst">⬆</button>
+                  <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:#e8f0fe;color:#1a73e8;border:1px solid #d2e3fc;" title="下移" @click.stop="bmMoveNode(item.node, 'down')" :disabled="item.isLast">⬇</button>
+                  <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:#e8f0fe;color:#1a73e8;border:1px solid #d2e3fc;" title="编辑" @click.stop="bmEditNode(item.node)">✏️</button>
+                  <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:#fef3e2;color:#e65100;border:1px solid #ffe0b2;" title="设置图标" @click.stop="openEditFolderIcon(item.node)">🎨</button>
+                  <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:#fce8e6;color:#c5221f;border:1px solid #f5c6c2;" title="删除" @click.stop="deleteBmNode(item.node)">🗑️</button>
                 </div>
               </div>
-            </template>
+            </div>
           </div>
         </div>
       </div>
@@ -1078,6 +1078,96 @@
     </div>
   </transition>
 
+  <!-- Edit Node Modal (Bookmarks tab) -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="bmEditModal.visible" @click="closeBmEditModal">
+      <div class="modal" @click.stop>
+        <h3>✏️ {{ bmEditModal.isFolder ? '编辑文件夹' : '编辑书签' }}</h3>
+        <div class="form-group">
+          <label>名称 <span style="color:#d93025">*</span></label>
+          <input type="text" v-model="bmEditModal.title" placeholder="名称" />
+        </div>
+        <div class="form-group" v-if="!bmEditModal.isFolder">
+          <label>网址 <span style="color:#d93025">*</span></label>
+          <input type="url" v-model="bmEditModal.url" placeholder="https://" />
+        </div>
+        <div class="form-group">
+          <label>图标</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" v-model="bmEditModal.favicon_url" placeholder="Emoji 或图片 URL" style="flex:1;" />
+            <span v-if="bmEditModal.favicon_url" style="font-size:22px;min-width:30px;text-align:center;">
+              <img v-if="isIconUrl(bmEditModal.favicon_url)" :src="bmEditModal.favicon_url" style="width:22px;height:22px;border-radius:4px;vertical-align:middle;" @error="onPreviewError" />
+              <span v-else>{{ bmEditModal.favicon_url }}</span>
+            </span>
+          </div>
+        </div>
+        <p v-if="bmEditModal.error" class="modal-error">{{ bmEditModal.error }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closeBmEditModal">取消</button>
+          <button class="btn btn-primary" @click="saveBmEditNode" :disabled="bmEditModal.loading">{{ bmEditModal.loading ? '保存中...' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Create Folder Modal (Bookmarks tab) -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="bmCreateFolderModal.visible" @click="closeBmCreateFolderModal">
+      <div class="modal" @click.stop>
+        <h3>📂 新建文件夹</h3>
+        <div class="form-group">
+          <label>文件夹名称 <span style="color:#d93025">*</span></label>
+          <input type="text" v-model="bmCreateFolderModal.title" placeholder="请输入文件夹名称" @keyup.enter="confirmBmCreateFolder" />
+        </div>
+        <div class="form-group">
+          <label>父文件夹</label>
+          <select v-model="bmCreateFolderModal.parentId" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:100%;">
+            <option :value="null">根目录</option>
+            <option v-for="f in bmFolderList" :key="f.id" :value="f.id">{{ f.path }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>图标</label>
+          <input type="text" v-model="bmCreateFolderModal.icon" placeholder="Emoji 或图片 URL（选填）" />
+        </div>
+        <p v-if="bmCreateFolderModal.error" class="modal-error">{{ bmCreateFolderModal.error }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closeBmCreateFolderModal">取消</button>
+          <button class="btn btn-primary" @click="confirmBmCreateFolder" :disabled="bmCreateFolderModal.loading">{{ bmCreateFolderModal.loading ? '创建中...' : '确认创建' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Create Bookmark Modal (Bookmarks tab) -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="bmCreateBookmarkModal.visible" @click="closeBmCreateBookmarkModal">
+      <div class="modal" @click.stop>
+        <h3>🔖 新建书签</h3>
+        <div class="form-group">
+          <label>网址 <span style="color:#d93025">*</span></label>
+          <input type="url" v-model="bmCreateBookmarkModal.url" placeholder="https://" @keyup.enter="confirmBmCreateBookmark" />
+        </div>
+        <div class="form-group">
+          <label>名称</label>
+          <input type="text" v-model="bmCreateBookmarkModal.title" placeholder="留空则自动获取" />
+        </div>
+        <div class="form-group">
+          <label>父文件夹</label>
+          <select v-model="bmCreateBookmarkModal.parentId" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:100%;">
+            <option :value="null">根目录</option>
+            <option v-for="f in bmFolderList" :key="f.id" :value="f.id">{{ f.path }}</option>
+          </select>
+        </div>
+        <p v-if="bmCreateBookmarkModal.error" class="modal-error">{{ bmCreateBookmarkModal.error }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closeBmCreateBookmarkModal">取消</button>
+          <button class="btn btn-primary" @click="confirmBmCreateBookmark" :disabled="bmCreateBookmarkModal.loading">{{ bmCreateBookmarkModal.loading ? '创建中...' : '确认创建' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <!-- Hidden file inputs -->
   <input type="file" ref="adminImportFile" accept=".json" style="display:none" @change="importBookmarks" />
   <input type="file" ref="adminEdgeImportFile" accept=".html" style="display:none" @change="importEdgeBookmarks" />
@@ -1147,6 +1237,20 @@ const app = createApp({
       bm: {
         selectedUserId: null, userList: [], tree: [], loading: false,
         expandedFolders: {}, totalBookmarks: 0, totalFolders: 0,
+        selectedNodeId: null,
+      },
+      bmEditModal: {
+        visible: false, node: null, isFolder: false,
+        title: '', url: '', favicon_url: '',
+        loading: false, error: '',
+      },
+      bmCreateFolderModal: {
+        visible: false, title: '', parentId: null, icon: '',
+        loading: false, error: '',
+      },
+      bmCreateBookmarkModal: {
+        visible: false, url: '', title: '', parentId: null,
+        loading: false, error: '',
       },
       folderIconDialog: {
         visible: false, node: null, selectedIcon: '', customIcon: '',
@@ -1161,7 +1265,6 @@ const app = createApp({
           '📊','📈','📉','📋','📅','📆','🗓️','⏰','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚','🕛',
           '🔖','🏷️','💱','💹','🧮','📇','📁','🖥️','🖨️','🔋','🔌','💻',
           '🤖','👾','👽','🛸','🚀','🧠','💻','📱','🔬','🔭','🧬','🦠','🧪','⚗️','🔮','🧿',
-        ],
           '⭐','🌟','✨','💫','🔥','⚡','💡','🌈','🎨','🎯','🎪','🎭','🎨','🎵','🎶','🎬','🎤','🎧','🎹','🥁',
           '💎','👑','🏆','🥇','🥈','🥉','🏅','🎖️','🎗️','🏵️','🎫','🎀','🎁','🎊','🎉','🎃',
           '🚀','✈️','🚁','🚂','🚗','🚌','🚲','🛴','🛵','🏍️','⛵','🚢','🛸','🪐','🌍','🌎','🌏','🗺️','🧭',
@@ -1205,6 +1308,36 @@ const app = createApp({
         pages.push(total);
       }
       return pages;
+    },
+    bmFlattened() {
+      const result = [];
+      const walk = (nodes, depth) => {
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i];
+          const isFirst = i === 0;
+          const isLast = i === nodes.length - 1;
+          result.push({ node, depth, isFirst, isLast });
+          if (node.type === 'folder' && this.bm.expandedFolders[node.id] && node.children) {
+            walk(node.children, depth + 1);
+          }
+        }
+      };
+      if (this.bm.tree) walk(this.bm.tree, 0);
+      return result;
+    },
+    bmFolderList() {
+      const result = [];
+      const walk = (nodes, path) => {
+        for (const node of nodes) {
+          if (node.type === 'folder') {
+            const fullPath = path ? path + ' / ' + node.title : node.title;
+            result.push({ id: node.id, title: node.title, path: fullPath });
+            if (node.children) walk(node.children, fullPath);
+          }
+        }
+      };
+      if (this.bm.tree) walk(this.bm.tree, '');
+      return result;
     },
     allFolders() {
       const result = [];
@@ -1793,6 +1926,7 @@ const app = createApp({
     async loadBookmarkUserTree() {
       if (!this.bm.selectedUserId) { this.bm.tree = []; return; }
       this.bm.loading = true;
+      this.bm.selectedNodeId = null;
       try {
         const res = await fetch('/api/admin/users/' + this.bm.selectedUserId + '/tree', { headers: this.getHeaders() });
         if (res.ok) {
@@ -1802,7 +1936,6 @@ const app = createApp({
           const counts = this.countBmNodes(tree);
           this.bm.totalBookmarks = counts.bookmarks;
           this.bm.totalFolders = counts.folders;
-          // 自动展开第一层文件夹
           for (const node of tree) {
             if (node.type === 'folder') this.bm.expandedFolders[node.id] = true;
           }
@@ -1821,16 +1954,17 @@ const app = createApp({
     toggleBmFolder(id) {
       this.bm.expandedFolders = { ...this.bm.expandedFolders, [id]: !this.bm.expandedFolders[id] };
     },
-    renderBmChildren(nodes) {
-      const result = [];
-      const walk = (ns, depth) => {
-        for (const n of ns) {
-          result.push({ node: n, depth });
-          if (n.type === 'folder' && n.children && this.bm.expandedFolders[n.id]) walk(n.children, depth + 1);
-        }
-      };
-      walk(nodes, 1);
-      return result;
+    expandAllBm() {
+      const exp = {};
+      const walk = (nodes) => { for (const n of nodes) { if (n.type === 'folder') { exp[n.id] = true; if (n.children) walk(n.children); } } };
+      walk(this.bm.tree);
+      this.bm.expandedFolders = exp;
+    },
+    collapseAllBm() {
+      this.bm.expandedFolders = {};
+    },
+    bmSelectNode(node) {
+      this.bm.selectedNodeId = this.bm.selectedNodeId === node.id ? null : node.id;
     },
     async deleteBmNode(node) {
       if (!confirm('确定要删除"' + node.title + '"吗？' + (node.type === 'folder' ? '该文件夹下的所有内容将被一并删除。' : ''))) return;
@@ -1842,6 +1976,36 @@ const app = createApp({
       } catch (e) { this.showToast(e.message, 'error'); }
     },
     isIconUrl(s) { return s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:')); },
+    /* Edit node */
+    bmEditNode(node) {
+      this.bmEditModal = {
+        visible: true, node: node, isFolder: node.type === 'folder',
+        title: node.title || '', url: node.url || '', favicon_url: node.favicon_url || '',
+        loading: false, error: '',
+      };
+    },
+    closeBmEditModal() { this.bmEditModal.visible = false; },
+    async saveBmEditNode() {
+      const m = this.bmEditModal;
+      if (!m.title.trim()) { m.error = '名称不能为空'; return; }
+      if (!m.isFolder && !m.url.trim()) { m.error = '网址不能为空'; return; }
+      m.loading = true; m.error = '';
+      try {
+        const body = { title: m.title.trim(), favicon_url: m.favicon_url || null };
+        if (!m.isFolder) body.url = m.url.trim();
+        const res = await fetch('/api/admin/nodes/' + m.node.id, {
+          method: 'PUT',
+          headers: this.getHeaders('application/json'),
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '保存失败'); }
+        this.showToast('已更新', 'success');
+        this.closeBmEditModal();
+        this.loadBookmarkUserTree();
+      } catch (e) { m.error = e.message; }
+      m.loading = false;
+    },
+    /* Folder icon */
     openEditFolderIcon(node) {
       this.folderIconDialog.node = node;
       this.folderIconDialog.selectedIcon = '';
@@ -1876,6 +2040,98 @@ const app = createApp({
       } catch (e) { this.showToast(e.message, 'error'); }
     },
     onAdminIconError(e, node) { e.target.style.display = 'none'; e.target.parentElement.textContent = '📁'; },
+    /* Move node */
+    async bmMoveNode(node, direction) {
+      const parentId = node.parent_id;
+      const url = '/api/admin/nodes/reorder';
+      const tree = this.bm.tree;
+      let siblings = [];
+      const findSiblings = (nodes) => {
+        for (const n of nodes) {
+          if (n.id === node.id) { siblings = nodes; return true; }
+          if (n.children && findSiblings(n.children)) return true;
+        }
+        return false;
+      };
+      findSiblings(tree);
+      if (siblings.length < 2) return;
+      const ids = siblings.map(n => n.id);
+      const idx = ids.indexOf(node.id);
+      if (idx < 0) return;
+      if (direction === 'up' && idx > 0) {
+        [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+      } else if (direction === 'down' && idx < ids.length - 1) {
+        [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+      } else { return; }
+      const currentTree = this.bm.expandedFolders;
+      const expandedSnapshot = { ...currentTree };
+      try {
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: this.getHeaders('application/json'),
+          body: JSON.stringify({ user_id: this.bm.selectedUserId, parent_id: parentId, ordered_ids: ids }),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '排序失败'); }
+        await this.loadBookmarkUserTree();
+        this.bm.expandedFolders = { ...this.bm.expandedFolders, ...expandedSnapshot };
+        this.showToast('排序成功', 'success');
+      } catch (e) { this.showToast(e.message, 'error'); }
+    },
+    /* Add folder */
+    bmAddFolder() {
+      this.bmCreateFolderModal = { visible: true, title: '', parentId: null, icon: '', loading: false, error: '' };
+    },
+    closeBmCreateFolderModal() { this.bmCreateFolderModal.visible = false; },
+    async confirmBmCreateFolder() {
+      const m = this.bmCreateFolderModal;
+      if (!m.title.trim()) { m.error = '文件夹名称不能为空'; return; }
+      m.loading = true; m.error = '';
+      try {
+        const res = await fetch('/api/admin/folders', {
+          method: 'POST',
+          headers: this.getHeaders('application/json'),
+          body: JSON.stringify({
+            user_id: this.bm.selectedUserId,
+            title: m.title.trim(),
+            parent_id: m.parentId,
+            icon: m.icon.trim(),
+          }),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); }
+        this.showToast('文件夹已创建', 'success');
+        this.closeBmCreateFolderModal();
+        this.loadBookmarkUserTree();
+      } catch (e) { m.error = e.message; }
+      m.loading = false;
+    },
+    /* Add bookmark */
+    bmAddBookmark() {
+      this.bmCreateBookmarkModal = { visible: true, url: '', title: '', parentId: null, loading: false, error: '' };
+    },
+    closeBmCreateBookmarkModal() { this.bmCreateBookmarkModal.visible = false; },
+    async confirmBmCreateBookmark() {
+      const m = this.bmCreateBookmarkModal;
+      if (!m.url.trim()) { m.error = '网址不能为空'; return; }
+      m.loading = true; m.error = '';
+      try {
+        const res = await fetch('/api/admin/bookmarks', {
+          method: 'POST',
+          headers: this.getHeaders('application/json'),
+          body: JSON.stringify({
+            user_id: this.bm.selectedUserId,
+            url: m.url.trim(),
+            title: m.title.trim(),
+            parent_id: m.parentId,
+          }),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); }
+        this.showToast('书签已创建', 'success');
+        this.closeBmCreateBookmarkModal();
+        this.loadBookmarkUserTree();
+      } catch (e) { m.error = e.message; }
+      m.loading = false;
+    },
+    onPreviewError(e) { e.target.style.display = 'none'; },
     /* Audit Log */
     switchToLogsTab() {
       this.currentTab = 'logs';

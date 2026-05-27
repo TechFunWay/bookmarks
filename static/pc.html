@@ -105,12 +105,27 @@
         </button>
         <div class="user-info" style="margin-left: 1rem; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
           <template v-if="guestMode">
-            <span class="user-name" style="color: #FF9800;">免登录模式</span>
-            <a href="javascript:void(0)" class="guest-action-link" @click="openPluginAPIKeyModal">🔌API Key</a>
-            <a href="javascript:void(0)" class="guest-action-link" @click="openExtensionModal">🧩插件</a>
-            <a href="javascript:void(0)" class="guest-action-link" @click="supportModal.visible = true">❤️支持</a>
-            <a href="javascript:void(0)" class="guest-action-link" style="font-weight:600;" @click="openAdminPage">🛠️后台管理</a>
-            <a href="javascript:void(0)" class="guest-action-link guest-login" @click="goToLogin">登录</a>
+            <div class="user-dropdown" :class="{ 'active': guestDropdownVisible }">
+              <button class="user-dropdown-btn" @click="guestDropdownVisible = !guestDropdownVisible">
+                <span class="user-name" style="color:#FF9800;">免登录模式</span>
+                <span class="dropdown-arrow">▼</span>
+              </button>
+              <div class="user-dropdown-menu" v-if="guestDropdownVisible" @click.stop>
+                <button class="dropdown-item" @click="guestDropdownVisible=false; openPluginAPIKeyModal()">
+                  <span class="dropdown-icon">🔌</span><span>API Key</span>
+                </button>
+                <button class="dropdown-item" @click="guestDropdownVisible=false; openExtensionModal()">
+                  <span class="dropdown-icon">🧩</span><span>下载插件</span>
+                </button>
+                <button class="dropdown-item" @click="guestDropdownVisible=false; supportModal.visible = true">
+                  <span class="dropdown-icon">❤️</span><span>支持项目</span>
+                </button>
+                <div class="dropdown-divider"></div>
+                <button class="dropdown-item" @click="guestDropdownVisible=false; goToLogin()">
+                  <span class="dropdown-icon">🔐</span><span>登录</span>
+                </button>
+              </div>
+            </div>
           </template>
           <div v-else class="user-dropdown" :class="{ 'active': userDropdownVisible }">
             <button class="user-dropdown-btn" @click="toggleUserDropdown">
