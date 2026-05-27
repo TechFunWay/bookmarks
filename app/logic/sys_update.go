@@ -211,7 +211,7 @@ func CompareVersions(v1, v2 string) (int, error) {
 // GetAvailableVersions 获取可用的升级版本列表
 func (u *Upgrade) GetAvailableVersions(fromVersion string) ([]string, error) {
 	// 硬编码所有可用版本
-	allVersions := []string{"v1.7.0", "v1.8.0", "v1.9.0", "v2.0.0", "v2.2.0"}
+	allVersions := []string{"v1.7.0", "v1.8.0", "v1.9.0", "v2.0.0", "v2.2.0", "v2.3.0"}
 
 	versions := []string{}
 	for _, version := range allVersions {
@@ -289,6 +289,8 @@ func (u *Upgrade) executeSQLForVersion(version string) error {
 		return u.executeSQLForV2_0_0()
 	case "v2.2.0":
 		return u.executeSQLForV2_2_0()
+	case "v2.3.0":
+		return u.executeSQLForV2_3_0()
 	default:
 		return fmt.Errorf("未找到版本 %s 的SQL语句", version)
 	}
@@ -400,6 +402,8 @@ func (u *Upgrade) executeDataProcessingLogic(version string) error {
 		return u.processDataForV2_0_0()
 	case "v2.2.0":
 		return u.processDataForV2_2_0()
+	case "v2.3.0":
+		return u.processDataForV2_3_0()
 	default:
 		// 对于未特殊处理的版本，可以执行通用数据处理逻辑
 		u.LogUpgrade("执行版本 %s 的通用数据处理逻辑", version)
@@ -515,6 +519,42 @@ func (u *Upgrade) executeSQLForV2_2_0() error {
 		}
 	}
 
+	return nil
+}
+
+// executeSQLForV2_3_0 执行v2.3.0版本的SQL语句
+func (u *Upgrade) executeSQLForV2_3_0() error {
+	sqlStatements := []string{
+		`CREATE TABLE IF NOT EXISTS audit_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			username TEXT NOT NULL DEFAULT '',
+			action TEXT NOT NULL,
+			target_type TEXT NOT NULL DEFAULT '',
+			target_id INTEGER NOT NULL DEFAULT 0,
+			detail TEXT NOT NULL DEFAULT '',
+			ip_address TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);",
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);",
+	}
+
+	for i, stmt := range sqlStatements {
+		u.LogUpgrade("执行SQL语句 #%d/%d: %s", i+1, len(sqlStatements), truncateString(stmt, 100))
+		_, err := u.db.Exec(stmt)
+		if err != nil {
+			u.LogUpgrade("执行SQL语句失败: %v, 语句: %s", err, truncateString(stmt, 100))
+		}
+	}
+
+	return nil
+}
+
+// processDataForV2_3_0 版本 2.3.0 的数据处理业务逻辑
+func (u *Upgrade) processDataForV2_3_0() error {
+	u.LogUpgrade("执行版本 v2.3.0 的数据处理业务逻辑")
 	return nil
 }
 
