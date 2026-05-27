@@ -329,6 +329,7 @@ const app = createApp({
         ],
         // 用户下拉菜单状态
         userDropdownVisible: false,
+        guestDropdownVisible: false,
         // 修改密码模态框状态
         changePasswordModal: {
           visible: false,
