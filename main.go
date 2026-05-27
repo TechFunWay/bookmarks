@@ -48,7 +48,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v2.2.0"
+	appVersion = "v2.3.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -131,6 +131,33 @@ type changePasswordRequest struct {
 type authResponse struct {
 	Token string `json:"token"`
 	User  *user  `json:"user"`
+}
+
+type createUserRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Nickname string `json:"nickname,omitempty"`
+	Email    string `json:"email,omitempty"`
+	IsAdmin  bool   `json:"is_admin"`
+}
+
+type auditLogEntry struct {
+	ID         int64  `json:"id"`
+	UserID     int64  `json:"user_id"`
+	Username   string `json:"username"`
+	Action     string `json:"action"`
+	TargetType string `json:"target_type"`
+	TargetID   int64  `json:"target_id"`
+	Detail     string `json:"detail"`
+	IPAddress  string `json:"ip_address"`
+	CreatedAt  string `json:"created_at"`
+}
+
+type auditLogResponse struct {
+	Logs  []auditLogEntry `json:"logs"`
+	Total int64           `json:"total"`
+	Page  int             `json:"page"`
+	Limit int             `json:"limit"`
 }
 
 // 用户上下文键
@@ -332,12 +359,23 @@ func main() {
 			r.Post("/verify-and-reset", s.handleVerifyAndResetPassword)
 		})
 		r.Route("/users", func(r chi.Router) {
+			r.Post("/", s.tokenAuthMiddleware(s.adminMiddleware(s.handleCreateUser)))
 			r.Get("/", s.tokenAuthMiddleware(s.adminMiddleware(s.handleGetUsers)))
 			r.Get("/{id}", s.tokenAuthMiddleware(s.adminMiddleware(s.handleGetUser)))
 			r.Put("/{id}", s.tokenAuthMiddleware(s.adminMiddleware(s.handleUpdateUser)))
 			r.Delete("/{id}", s.tokenAuthMiddleware(s.adminMiddleware(s.handleDeleteUser)))
 			r.Post("/{id}/reset-password", s.tokenAuthMiddleware(s.adminMiddleware(s.handleResetPassword)))
 			r.Post("/batch", s.tokenAuthMiddleware(s.adminMiddleware(s.handleBatchUsers)))
+		})
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(s.tokenAuthMiddlewareChi)
+			r.Use(s.adminMiddlewareChi)
+			r.Get("/stats", s.handleAdminStats)
+			r.Get("/users/{userId}/tree", s.handleAdminGetUserTree)
+			r.Get("/users/{userId}/export", s.handleAdminExportUser)
+			r.Put("/nodes/{id}", s.handleAdminUpdateNode)
+			r.Delete("/nodes/{id}", s.handleAdminDeleteNode)
+			r.Get("/audit-log", s.handleGetAuditLog)
 		})
 		r.Get("/tree", s.optionalAuthMiddleware(s.handleGetTree))
 		r.Get("/public-tree", s.handleGetPublicTree)
@@ -356,7 +394,6 @@ func main() {
 		r.Get("/config", s.optionalAuthMiddleware(s.handleGetConfig))
 		r.Post("/config", s.optionalAuthMiddleware(s.handleUpdateConfig))
 		r.Get("/check-duplicates", s.optionalAuthMiddleware(s.handleCheckDuplicates))
-	r.Get("/admin/stats", s.tokenAuthMiddleware(s.adminMiddleware(s.handleAdminStats)))
 	})
 
 	// 浏览器书签同步接口（使用 API Key 认证）
@@ -556,6 +593,7 @@ func (s *server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 type createFolderRequest struct {
 	Title    string `json:"title"`
 	ParentID *int64 `json:"parent_id"`
+	Icon     string `json:"icon"`
 }
 
 func (s *server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
@@ -570,7 +608,11 @@ func (s *server) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, errors.New("title is required"))
 		return
 	}
-	newNode, err := s.insertNode(r.Context(), userID, nodeTypeFolder, req.Title, req.ParentID, nil, nil, "", "private")
+	var icon *string
+	if req.Icon != "" {
+		icon = &req.Icon
+	}
+	newNode, err := s.insertNode(r.Context(), userID, nodeTypeFolder, req.Title, req.ParentID, nil, icon, "", "private")
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) {
 			respondError(w, http.StatusBadRequest, err)
@@ -1969,9 +2011,6 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 	}
 
 	if req.FaviconURL != nil {
-		if current.Type != nodeTypeBookmark {
-			return ErrInvalidUpdate
-		}
 		favicon := strings.TrimSpace(*req.FaviconURL)
 		if favicon == "" {
 			faviconValid = false
@@ -2077,17 +2116,17 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 			fields = append(fields, "url = ?")
 			args = append(args, targetURL)
 		}
-		if faviconSet {
-			fields = append(fields, "favicon_url = ?")
-			if faviconValid {
-				args = append(args, targetFavicon)
-			} else {
-				args = append(args, nil)
-			}
-		}
 		if visibilitySet {
 			fields = append(fields, "visibility = ?")
 			args = append(args, targetVisibility)
+		}
+	}
+	if faviconSet {
+		fields = append(fields, "favicon_url = ?")
+		if faviconValid {
+			args = append(args, targetFavicon)
+		} else {
+			args = append(args, nil)
 		}
 	}
 
@@ -2995,6 +3034,8 @@ func (s *server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logAudit(r.Context(), currentUserID, "", "user_update", "user", targetUserID, "修改用户信息", r.RemoteAddr)
+
 	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
 }
 
@@ -3047,6 +3088,8 @@ func (s *server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logAudit(r.Context(), currentUserID, "", "user_delete", "user", targetUserID, "删除用户", r.RemoteAddr)
+
 	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
 }
 
@@ -3077,6 +3120,9 @@ func (s *server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	currentUserID := getUserID(r)
+	s.logAudit(r.Context(), currentUserID, "", "password_reset", "user", targetUserID, "管理员重置密码", r.RemoteAddr)
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
 }
@@ -3177,6 +3223,9 @@ func (s *server) handleBatchUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logAudit(r.Context(), currentUserID, "", "batch_"+req.Action, "user", 0,
+		fmt.Sprintf("批量操作: %s, 用户数: %d", req.Action, len(req.UserIDs)), r.RemoteAddr)
+
 	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
 }
 
@@ -3197,6 +3246,367 @@ func (s *server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes").Scan(&stats.TotalNodes)
 
 	respondJSON(w, http.StatusOK, stats)
+}
+
+// handleCreateUser 管理员创建用户
+func (s *server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	var req createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+	req.Nickname = strings.TrimSpace(req.Nickname)
+	req.Email = strings.TrimSpace(req.Email)
+
+	if req.Username == "" || req.Password == "" {
+		respondError(w, http.StatusBadRequest, errors.New("用户名和密码不能为空"))
+		return
+	}
+
+	if len(req.Password) < 6 {
+		respondError(w, http.StatusBadRequest, errors.New("密码长度不能少于6位"))
+		return
+	}
+
+	doubleHashedPassword := utils.MD5Hash(req.Password, "bookmarks")
+
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback()
+
+	nickname := req.Nickname
+	if nickname == "" {
+		nickname = req.Username
+	}
+
+	isAdmin := 0
+	if req.IsAdmin {
+		isAdmin = 1
+	}
+
+	result, err := tx.Exec(`
+		INSERT INTO users (username, password, nickname, email, is_admin)
+		VALUES (?, ?, ?, ?, ?)
+	`, req.Username, doubleHashedPassword, nickname, req.Email, isAdmin)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			respondError(w, http.StatusBadRequest, errors.New("用户名已存在"))
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	userID, err := result.LastInsertId()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	token := uuid.New().String()
+	apiKey := strings.ReplaceAll(uuid.New().String(), "-", "")
+	_, err = tx.Exec("UPDATE users SET token = ?, api_key = ? WHERE id = ?", token, apiKey, userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	adminUserID := getUserID(r)
+	s.logAudit(r.Context(), adminUserID, "", "user_create", "user", userID,
+		fmt.Sprintf("管理员创建用户: %s", req.Username), r.RemoteAddr)
+
+	user := &user{
+		ID:       userID,
+		Username: req.Username,
+		Nickname: nickname,
+		Email:    req.Email,
+		IsAdmin:  req.IsAdmin,
+		IsActive: true,
+	}
+
+	respondJSON(w, http.StatusCreated, user)
+}
+
+// handleAdminGetUserTree 查看任意用户书签树
+func (s *server) handleAdminGetUserTree(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "userId")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid user id"))
+		return
+	}
+
+	tree, err := s.loadTree(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, tree)
+}
+
+// handleAdminDeleteNode 删除任意用户书签
+func (s *server) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
+		return
+	}
+
+	var ownerUserID int64
+	err = s.db.QueryRowContext(r.Context(), "SELECT user_id FROM nodes WHERE id = ?", id).Scan(&ownerUserID)
+	if err == sql.ErrNoRows {
+		respondError(w, http.StatusNotFound, errors.New("node not found"))
+		return
+	}
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	var nodeType string
+	err = s.db.QueryRowContext(r.Context(), "SELECT type FROM nodes WHERE id = ?", id).Scan(&nodeType)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	rows, err := s.db.QueryContext(r.Context(), `
+		WITH RECURSIVE subtree(id, type) AS (
+			SELECT id, type FROM nodes WHERE id = ? AND user_id = ?
+			UNION ALL
+			SELECT n.id, n.type FROM nodes n
+			INNER JOIN subtree s ON n.parent_id = s.id
+			WHERE n.user_id = ?
+		)
+		SELECT id, type FROM subtree
+	`, id, ownerUserID, ownerUserID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	var allIDs []int64
+	var folders, bookmarks int64
+	for rows.Next() {
+		var nid int64
+		var ntype string
+		if err := rows.Scan(&nid, &ntype); err != nil {
+			rows.Close()
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		allIDs = append(allIDs, nid)
+		if ntype == "folder" {
+			folders++
+		} else {
+			bookmarks++
+		}
+	}
+	rows.Close()
+
+	idStrs := make([]string, len(allIDs))
+	for i, nid := range allIDs {
+		idStrs[i] = strconv.FormatInt(nid, 10)
+	}
+
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.ExecContext(r.Context(), "DELETE FROM nodes WHERE id IN ("+strings.Join(idStrs, ",")+")"); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	adminUserID := getUserID(r)
+	s.logAudit(r.Context(), adminUserID, "", "admin_delete_node", "node", id,
+		fmt.Sprintf("管理员删除节点, 文件夹: %d, 书签: %d", folders, bookmarks), r.RemoteAddr)
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"message":   "删除成功",
+		"folders":   folders,
+		"bookmarks": bookmarks,
+	})
+}
+
+// handleAdminUpdateNode 管理员更新任意用户节点
+func (s *server) handleAdminUpdateNode(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid id"))
+		return
+	}
+
+	var ownerUserID int64
+	err = s.db.QueryRowContext(r.Context(), "SELECT user_id FROM nodes WHERE id = ?", id).Scan(&ownerUserID)
+	if err == sql.ErrNoRows {
+		respondError(w, http.StatusNotFound, errors.New("node not found"))
+		return
+	}
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	var req struct {
+		FaviconURL *string `json:"favicon_url"`
+		Title      *string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+
+	if req.FaviconURL == nil && req.Title == nil {
+		respondError(w, http.StatusBadRequest, errors.New("no fields to update"))
+		return
+	}
+
+	fields := make([]string, 0, 2)
+	args := make([]any, 0, 2)
+
+	if req.FaviconURL != nil {
+		favicon := strings.TrimSpace(*req.FaviconURL)
+		fields = append(fields, "favicon_url = ?")
+		if favicon == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, favicon)
+		}
+	}
+
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			respondError(w, http.StatusBadRequest, errors.New("title cannot be empty"))
+			return
+		}
+		fields = append(fields, "title = ?")
+		args = append(args, title)
+	}
+
+	args = append(args, id)
+	query := fmt.Sprintf("UPDATE nodes SET %s WHERE id = ?", strings.Join(fields, ", "))
+	if _, err = s.db.ExecContext(r.Context(), query, args...); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	adminUserID := getUserID(r)
+	s.logAudit(r.Context(), adminUserID, "", "admin_update_node", "node", id, "管理员更新节点", r.RemoteAddr)
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{"message": "更新成功"})
+}
+
+// handleGetAuditLog 查询操作日志
+func (s *server) handleGetAuditLog(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	whereClause := "WHERE 1=1"
+	var args []interface{}
+
+	if userIDStr := r.URL.Query().Get("user_id"); userIDStr != "" {
+		whereClause += " AND user_id = ?"
+		args = append(args, userIDStr)
+	}
+	if action := r.URL.Query().Get("action"); action != "" {
+		whereClause += " AND action = ?"
+		args = append(args, action)
+	}
+	if dateFrom := r.URL.Query().Get("date_from"); dateFrom != "" {
+		whereClause += " AND created_at >= ?"
+		args = append(args, dateFrom)
+	}
+	if dateTo := r.URL.Query().Get("date_to"); dateTo != "" {
+		whereClause += " AND created_at <= ?"
+		args = append(args, dateTo+" 23:59:59")
+	}
+
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM audit_log " + whereClause
+	err := s.db.QueryRow(countQuery, args...).Scan(&total)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	query := "SELECT id, user_id, username, action, target_type, target_id, detail, ip_address, created_at FROM audit_log " +
+		whereClause + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+
+	var logs []auditLogEntry
+	for rows.Next() {
+		var log auditLogEntry
+		if err := rows.Scan(&log.ID, &log.UserID, &log.Username, &log.Action, &log.TargetType, &log.TargetID, &log.Detail, &log.IPAddress, &log.CreatedAt); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		logs = append(logs, log)
+	}
+
+	respondJSON(w, http.StatusOK, auditLogResponse{
+		Logs:  logs,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	})
+}
+
+// handleAdminExportUser 导出任意用户书签
+func (s *server) handleAdminExportUser(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "userId")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, errors.New("invalid user id"))
+		return
+	}
+
+	tree, err := s.loadTree(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bookmarks_export_user_%d.json"`, userID))
+	json.NewEncoder(w).Encode(tree)
 }
 
 // 辅助函数：获取最小值
@@ -3591,6 +4001,24 @@ func (s *server) apiKeyAuthMiddlewareForChi(next http.Handler) http.Handler {
 	})
 }
 
+// tokenAuthMiddlewareChi 适配 Chi 路由器的 Token 认证中间件
+func (s *server) tokenAuthMiddlewareChi(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.tokenAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})(w, r)
+	})
+}
+
+// adminMiddlewareChi 适配 Chi 路由器的管理员权限中间件
+func (s *server) adminMiddlewareChi(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.adminMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})(w, r)
+	})
+}
+
 // corsMiddleware CORS 跨域中间件
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3616,6 +4044,14 @@ func getUserID(r *http.Request) int64 {
 		return userID
 	}
 	return 0
+}
+
+// logAudit 记录审计日志
+func (s *server) logAudit(ctx context.Context, userID int64, username, action, targetType string, targetID int64, detail, ip string) {
+	s.db.ExecContext(ctx, `INSERT INTO audit_log (user_id, username, action, target_type, target_id, detail, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		userID, username, action, targetType, targetID, detail, ip)
+	// 保留最近 10000 条
+	s.db.ExecContext(ctx, `DELETE FROM audit_log WHERE id <= (SELECT MAX(id) - 10000 FROM audit_log)`)
 }
 
 // adminMiddleware 管理员权限检查中间件
@@ -3745,6 +4181,8 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		IsActive: true,
 	}
 
+	s.logAudit(r.Context(), userID, req.Username, "user_register", "user", userID, "用户注册", r.RemoteAddr)
+
 	respondJSON(w, http.StatusCreated, authResponse{
 		Token: token,
 		User:  user,
@@ -3855,6 +4293,8 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		user.APIKey = &dbUser.APIKey.String
 	}
 
+	s.logAudit(r.Context(), dbUser.ID, dbUser.Username, "login", "user", dbUser.ID, "用户登录", r.RemoteAddr)
+
 	respondJSON(w, http.StatusOK, authResponse{
 		Token: token,
 		User:  user,
@@ -3869,9 +4309,15 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if token != "" {
+		var uid int64
+		var uname string
+		s.db.QueryRow("SELECT id, username FROM users WHERE token = ?", token).Scan(&uid, &uname)
 		_, err := s.db.Exec("UPDATE users SET token = NULL WHERE token = ?", token)
 		if err != nil {
 			Debug("清除token失败: %v", err)
+		}
+		if uid > 0 {
+			s.logAudit(r.Context(), uid, uname, "logout", "user", uid, "用户登出", r.RemoteAddr)
 		}
 	}
 
@@ -4029,6 +4475,8 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	s.logAudit(r.Context(), userID, "", "password_change", "user", userID, "修改密码", r.RemoteAddr)
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "密码修改成功"})
 }
