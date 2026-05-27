@@ -23,3 +23,5 @@ data.db
 release
 /logs
 /data
+/bookmarks
+bookmarks

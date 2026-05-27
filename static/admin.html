@@ -280,6 +280,10 @@
     .progress-text { color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .progress-count { color: #888; font-weight: 500; }
 
+    /* Bookmark tree */
+    .bm-node-row { display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; transition: background .15s; }
+    .bm-node-row:hover { background: #e8f0fe; }
+
     /* Responsive */
     @media (max-width: 768px) {
       .admin-header { padding: 0 12px; }
@@ -325,6 +329,7 @@
         <button class="back-btn" @click="showImportDialog">📥 导入</button>
         <button class="back-btn" @click="showEdgeImportDialog">🔄 导入Edge</button>
         <button class="back-btn" @click="showUpdateMetadataDialog">🔄 更新信息</button>
+        <button class="back-btn" onclick="window.location.href='/view.html'">📖 新版首页</button>
         <button class="back-btn" onclick="window.location.href='/pc.html'">← 返回首页</button>
         <button class="back-btn" @click="handleLogout" style="color:#f9ab00;">🚪 退出</button>
       </div>
@@ -336,6 +341,8 @@
     <div class="tab-bar">
       <button class="tab-item" :class="{ active: currentTab === 'dashboard' }" @click="currentTab = 'dashboard'">📊 仪表盘</button>
       <button class="tab-item" :class="{ active: currentTab === 'users' }" @click="currentTab = 'users'">👥 用户管理</button>
+      <button class="tab-item" :class="{ active: currentTab === 'bookmarks' }" @click="switchToBookmarksTab">📎 书签管理</button>
+      <button class="tab-item" :class="{ active: currentTab === 'logs' }" @click="switchToLogsTab">📋 操作日志</button>
       <button class="tab-item" :class="{ active: currentTab === 'settings' }" @click="currentTab = 'settings'">⚙️ 系统设置</button>
       <button class="tab-item" :class="{ active: currentTab === 'background' }" @click="currentTab = 'background'">🎨 背景</button>
     </div>
@@ -372,6 +379,7 @@
       <div class="table-container">
         <div class="table-toolbar">
           <div class="left">
+            <button class="btn btn-primary" @click="openCreateUserModal">➕ 创建用户</button>
             <button class="btn btn-danger" :disabled="selectedUsers.length === 0" @click="batchDelete">🗑️ 批量删除</button>
             <button class="btn btn-success" :disabled="selectedUsers.length === 0" @click="batchActivate">✅ 批量启用</button>
             <button class="btn btn-warning" :disabled="selectedUsers.length === 0" @click="batchDeactivate">⛔ 批量禁用</button>
@@ -557,7 +565,157 @@
       </div>
     </div>
 
+    <!-- Bookmarks Tab -->
+    <div v-if="currentTab === 'bookmarks'">
+      <div class="settings-section">
+        <h3>📎 用户书签管理</h3>
+        <div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px;">
+          <div class="label">选择用户</div>
+          <select v-model="bm.selectedUserId" @change="loadBookmarkUserTree" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;">
+            <option :value="null">-- 请选择用户 --</option>
+            <option v-for="bu in bm.userList" :key="bu.id" :value="bu.id">{{ bu.username }}{{ bu.nickname ? ' (' + bu.nickname + ')' : '' }}{{ bu.is_admin ? ' [管理员]' : '' }}</option>
+          </select>
+        </div>
+        <div v-if="bm.loading" class="loading-spinner"></div>
+        <div v-else-if="!bm.selectedUserId" class="empty-state"><div class="icon">👤</div><p>请选择要管理的用户</p></div>
+        <div v-else-if="bm.tree.length === 0" class="empty-state"><div class="icon">📂</div><p>该用户暂无书签</p></div>
+        <div v-else style="margin-top:12px;">
+          <div style="margin-bottom:10px;font-size:13px;color:#666;">
+            共 <strong>{{ bm.totalBookmarks }}</strong> 个书签，<strong>{{ bm.totalFolders }}</strong> 个文件夹
+          </div>
+          <div class="bm-tree" style="max-height:500px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:8px;background:#fafafa;">
+            <template v-for="node in bm.tree" :key="node.id">
+              <div class="bm-node" :style="{ paddingLeft: '12px' }">
+                <div class="bm-node-row">
+                  <span class="bm-toggle" v-if="node.type === 'folder'" @click="toggleBmFolder(node.id)" style="cursor:pointer;margin-right:6px;">
+                    <span v-if="node.favicon_url && isIconUrl(node.favicon_url)"><img :src="node.favicon_url" style="width:16px;height:16px;vertical-align:middle;border-radius:3px;" @error="onAdminIconError($event, node)" /></span>
+                    <span v-else>{{ bm.expandedFolders[node.id] ? (node.favicon_url||'📂') : (node.favicon_url||'📁') }}</span>
+                  </span>
+                  <span v-else style="margin-right:6px;">📎</span>
+                  <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ node.title }}</span>
+                  <span v-if="node.type === 'bookmark' && node.url" style="font-size:11px;color:#888;margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">{{ node.url }}</span>
+                  <span v-if="node.type === 'folder'" style="font-size:11px;color:#1a73e8;margin:0 8px;">({{ node.bookmark_count || 0 }})</span>
+                  <button class="btn btn-sm" style="padding:2px 8px;font-size:11px;background:#e8f0fe;color:#1a73e8;border:1px solid #d2e3fc;" @click="openEditFolderIcon(node)">图标</button>
+                  <button class="btn btn-danger" style="padding:2px 8px;font-size:11px;" @click="deleteBmNode(node)">删除</button>
+                </div>
+                <div v-if="node.type === 'folder' && bm.expandedFolders[node.id] && node.children" style="margin-left:16px;">
+                  <div v-for="child in renderBmChildren(node.children)" :key="child.node.id" :style="{ paddingLeft: (child.depth * 16 + 12) + 'px' }" class="bm-node">
+                    <div class="bm-node-row">
+                      <span class="bm-toggle" v-if="child.node.type === 'folder'" @click="toggleBmFolder(child.node.id)" style="cursor:pointer;margin-right:6px;">
+                        <span v-if="child.node.favicon_url && isIconUrl(child.node.favicon_url)"><img :src="child.node.favicon_url" style="width:16px;height:16px;vertical-align:middle;border-radius:3px;" @error="onAdminIconError($event, child.node)" /></span>
+                        <span v-else>{{ bm.expandedFolders[child.node.id] ? (child.node.favicon_url||'📂') : (child.node.favicon_url||'📁') }}</span>
+                      </span>
+                      <span v-else style="margin-right:6px;">📎</span>
+                      <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ child.node.title }}</span>
+                      <span v-if="child.node.type === 'bookmark' && child.node.url" style="font-size:11px;color:#888;margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">{{ child.node.url }}</span>
+                      <span v-if="child.node.type === 'folder'" style="font-size:11px;color:#1a73e8;margin:0 8px;">({{ child.node.bookmark_count || 0 }})</span>
+                      <button class="btn btn-sm" style="padding:2px 8px;font-size:11px;background:#e8f0fe;color:#1a73e8;border:1px solid #d2e3fc;" @click="openEditFolderIcon(child.node)">图标</button>
+                      <button class="btn btn-danger" style="padding:2px 8px;font-size:11px;" @click="deleteBmNode(child.node)">删除</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit Log Tab -->
+    <div v-if="currentTab === 'logs'">
+      <div class="settings-section">
+        <h3>📋 操作日志</h3>
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+          <select v-model="al.filterAction" @change="loadAuditLogs(1)" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+            <option value="">全部动作</option>
+            <option value="login">登录</option>
+            <option value="logout">登出</option>
+            <option value="password_change">修改密码</option>
+            <option value="password_reset">重置密码</option>
+            <option value="user_register">用户注册</option>
+            <option value="user_create">创建用户</option>
+            <option value="user_update">修改用户</option>
+            <option value="user_delete">删除用户</option>
+            <option value="batch_delete">批量删除</option>
+            <option value="batch_activate">批量启用</option>
+            <option value="batch_deactivate">批量禁用</option>
+            <option value="admin_delete_node">管理员删书签</option>
+          </select>
+          <input type="date" v-model="al.filterDateFrom" @change="loadAuditLogs(1)" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" />
+          <span style="line-height:32px;font-size:13px;color:#888;">至</span>
+          <input type="date" v-model="al.filterDateTo" @change="loadAuditLogs(1)" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" />
+          <button class="btn btn-secondary" @click="al.filterAction='';al.filterDateFrom='';al.filterDateTo='';loadAuditLogs(1);">重置筛选</button>
+        </div>
+        <div v-if="al.loading" class="loading-spinner"></div>
+        <div v-else-if="al.logs.length === 0" class="empty-state"><div class="icon">📋</div><p>暂无操作日志</p></div>
+        <div v-else style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>用户</th>
+                <th>动作</th>
+                <th>详情</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="log in al.logs" :key="log.id">
+                <td style="font-size:12px;color:#888;white-space:nowrap;">{{ formatDateTime(log.created_at) }}</td>
+                <td>{{ log.username || '用户#' + log.user_id }}</td>
+                <td><span class="badge" :class="getActionBadgeClass(log.action)">{{ getActionLabel(log.action) }}</span></td>
+                <td style="font-size:12px;">{{ log.detail }}</td>
+                <td style="font-size:11px;color:#888;">{{ log.ip_address }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="al.total > al.limit" class="pagination">
+            <button :disabled="al.page <= 1" @click="loadAuditLogs(al.page - 1)">&laquo; 上一页</button>
+            <span class="page-info">第 {{ al.page }} 页 / 共 {{ Math.ceil(al.total / al.limit) }} 页（{{ al.total }} 条）</span>
+            <button :disabled="al.page >= Math.ceil(al.total / al.limit)" @click="loadAuditLogs(al.page + 1)">下一页 &raquo;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
+
+  <!-- Create User Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="createUserModal.visible" @click="closeCreateUserModal">
+      <div class="modal" @click.stop>
+        <h3>➕ 创建用户</h3>
+        <div class="form-group">
+          <label>用户名 <span style="color:#d93025">*</span></label>
+          <input type="text" v-model="createUserModal.form.username" placeholder="请输入用户名" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>密码 <span style="color:#d93025">*</span></label>
+          <input type="password" v-model="createUserModal.form.password" placeholder="请输入密码（至少6位）" autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label>昵称</label>
+          <input type="text" v-model="createUserModal.form.nickname" placeholder="请输入昵称（选填）" />
+        </div>
+        <div class="form-group">
+          <label>邮箱</label>
+          <input type="email" v-model="createUserModal.form.email" placeholder="请输入邮箱（选填）" />
+        </div>
+        <div class="form-group" style="display:flex;align-items:center;justify-content:space-between;">
+          <label style="margin:0;">设为管理员</label>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="createUserModal.form.isAdmin" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p v-if="createUserModal.error" class="modal-error">{{ createUserModal.error }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closeCreateUserModal">取消</button>
+          <button class="btn btn-primary" @click="handleCreateUser" :disabled="createUserModal.loading">{{ createUserModal.loading ? '创建中...' : '确认创建' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
 
   <!-- Edit User Modal -->
   <transition name="fade">
@@ -886,6 +1044,40 @@
     </div>
   </transition>
 
+  <!-- Folder Icon Editor Modal -->
+  <transition name="fade">
+    <div class="modal-overlay" v-if="folderIconDialog.visible" @click="closeFolderIconDialog">
+      <div class="modal" @click.stop style="max-width:480px;">
+        <h3>🎨 设置文件夹图标</h3>
+        <div style="margin:16px 0;">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:16px;">
+            <span style="font-size:24px;">{{ folderIconDialog.selectedIcon || folderIconDialog.customIcon || '📁' }}</span>
+            <div>
+              <div style="font-weight:600;font-size:14px;">{{ folderIconDialog.node ? folderIconDialog.node.title : '' }}</div>
+              <div style="font-size:12px;color:#888;">选择或输入自定义图标</div>
+            </div>
+          </div>
+          <div style="margin-bottom:10px;font-size:13px;font-weight:600;color:#555;">选择一个图标</div>
+          <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin-bottom:16px;">
+            <div v-for="icon in folderIconDialog.presets" :key="icon"
+              @click="folderIconDialog.selectedIcon = icon; folderIconDialog.customIcon = ''"
+              style="font-size:22px;text-align:center;cursor:pointer;padding:6px 2px;border-radius:8px;transition:all .15s;border:2px solid transparent;"
+              :style="folderIconDialog.selectedIcon === icon ? 'background:#eef2ff;border-color:#6366f1;transform:scale(1.1);' : 'background:#f0f0f5;'"
+              @mouseenter="$event.target.style.background='#e0e7ff'" @mouseleave="$event.target.style.background=folderIconDialog.selectedIcon===icon?'#eef2ff':'#f0f0f5'">{{ icon }}</div>
+          </div>
+          <div style="margin-bottom:10px;font-size:13px;font-weight:600;color:#555;">或者输入自定义图标（Emoji 或图片URL）</div>
+          <input type="text" v-model="folderIconDialog.customIcon" placeholder="例如：🌟 或 https://example.com/icon.png"
+            style="width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;"
+            @input="folderIconDialog.selectedIcon = ''" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="saveFolderIcon">保存图标</button>
+          <button class="btn btn-secondary" @click="closeFolderIconDialog">取消</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <!-- Hidden file inputs -->
   <input type="file" ref="adminImportFile" accept=".json" style="display:none" @change="importBookmarks" />
   <input type="file" ref="adminEdgeImportFile" accept=".html" style="display:none" @change="importEdgeBookmarks" />
@@ -948,6 +1140,48 @@ const app = createApp({
       headerMenuOpen: false,
       saveSettingsTimer: null,
       saveConfigTimer: null,
+      createUserModal: {
+        visible: false, form: { username: '', password: '', nickname: '', email: '', isAdmin: false },
+        loading: false, error: '',
+      },
+      bm: {
+        selectedUserId: null, userList: [], tree: [], loading: false,
+        expandedFolders: {}, totalBookmarks: 0, totalFolders: 0,
+      },
+      folderIconDialog: {
+        visible: false, node: null, selectedIcon: '', customIcon: '',
+        presets: [
+          '📁','📂','🗂️','🗀','🗁','🗄️','📚','📖','📕','📗','📘','📙','📓','📔','📒','📃','📜','📝','📄','📑','📰','🗞️','📋','📌','📍','📎','🖇️','✂️','🔗','🖍️','🖊️','✏️','📐','📏','🧾','🗃️','🗳️','📦',
+          '🌐','🌍','🌎','🌏','🗺️','🧭','📡','🛰️','🔍','🔎','🔒','🔓','🔐','🔑','🛡️','🔏','🔒','🔓','🔏',
+          '📧','💌','✉️','📨','📩','📪','📫','📬','📭','📮','🗳️','💬','💭','🗯️','🕸️','🌐',
+          '💻','🖥️','⌨️','🖱️','🖨️','🖲️','💽','💾','💿','📀','📱','📲','📞','📟','📠','☎️','📺','📻','🎙️','🎚️','🎛️',
+          '📷','📸','📹','📽️','🎥','🎞️','📼','🔦','💡','🕯️',
+          '🎵','🎶','🎤','🎧','🎼','🎹','🥁','🪘','🎷','🎺','🎸','🪕','🎻','🎬','🎭','🎨','🎮','🕹️','🎰','🎲',
+          '🛒','🛍️','🏪','🏬','💳','💰','💵','💴','💶','💷','🪙','💎','🏦',
+          '📊','📈','📉','📋','📅','📆','🗓️','⏰','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚','🕛',
+          '🔖','🏷️','💱','💹','🧮','📇','📁','🖥️','🖨️','🔋','🔌','💻',
+          '🤖','👾','👽','🛸','🚀','🧠','💻','📱','🔬','🔭','🧬','🦠','🧪','⚗️','🔮','🧿',
+        ],
+          '⭐','🌟','✨','💫','🔥','⚡','💡','🌈','🎨','🎯','🎪','🎭','🎨','🎵','🎶','🎬','🎤','🎧','🎹','🥁',
+          '💎','👑','🏆','🥇','🥈','🥉','🏅','🎖️','🎗️','🏵️','🎫','🎀','🎁','🎊','🎉','🎃',
+          '🚀','✈️','🚁','🚂','🚗','🚌','🚲','🛴','🛵','🏍️','⛵','🚢','🛸','🪐','🌍','🌎','🌏','🗺️','🧭',
+          '🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','💒','🗼','⛪','🕌','🛕',
+          '🌲','🌳','🌴','🌵','🌾','🌿','🍀','🍁','🍂','🍃','🌺','🌸','🌼','🌻','🌹','🌷','🌱','🎋','🎍','🎄',
+          '⛰️','🏔️','🗻','🌋','🏕️','🏖️','🏝️','🏜️','🌊','🏞️','🎑','🌅','🌄','🌠','🎇','🌌',
+          '🐱','🐶','🐺','🦊','🐰','🐹','🐭','🐼','🐻','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🐤',
+          '🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦗','🐙','🦑','🐬','🐳','🐋','🦈','🐊','🐅','🦍','🦧',
+          '🍎','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🥑','🌽','🥕','🥦',
+          '🍕','🍔','🌭','🥪','🌮','🌯','🥗','🍜','🍝','🍣','🍱','🍛','🍚','🍙','🍘','🥟','🍢','🍡','🍧','🍨',
+          '☕','🧃','🥤','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧋','🍵','🍶',
+          '🖥️','💻','📱','📲','⌨️','🖱️','🖨️','🖥️','💽','💾','💿','📀','📷','📸','🎥','📹','📺','📻','🎙️',
+          '⚽','🏀','🏈','⚾','🎾','🏐','🏉','🎱','🏓','🏸','🥊','🥋','⛸️','🛹','🎿','⛷️','🏂','🏋️','🤸','⛹️',
+          '❤️','🧡','💛','💚','💙','💜','🖤','🤍','💝','💖','💗','💕','💞','💓',
+        ],
+      },
+      al: {
+        logs: [], total: 0, page: 1, limit: 20, loading: false,
+        filterAction: '', filterDateFrom: '', filterDateTo: '',
+      },
     };
   },
   computed: {
@@ -1520,6 +1754,169 @@ const app = createApp({
         await navigator.clipboard.writeText(this.pluginAPIKeyModal.apiKey);
         this.showToast('已复制到剪贴板', 'success');
       } catch { this.showToast('复制失败，请手动复制', 'error'); }
+    },
+    /* Create User */
+    openCreateUserModal() {
+      this.createUserModal = { visible: true, form: { username: '', password: '', nickname: '', email: '', isAdmin: false }, loading: false, error: '' };
+    },
+    closeCreateUserModal() { this.createUserModal.visible = false; },
+    async handleCreateUser() {
+      const f = this.createUserModal.form;
+      if (!f.username || !f.password) { this.createUserModal.error = '用户名和密码不能为空'; return; }
+      if (f.password.length < 6) { this.createUserModal.error = '密码长度不能少于6位'; return; }
+      this.createUserModal.loading = true;
+      this.createUserModal.error = '';
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST', headers: this.getHeaders('application/json'),
+          body: JSON.stringify({ username: f.username, password: MD5(f.password), nickname: f.nickname, email: f.email, is_admin: f.isAdmin }),
+        });
+        if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '创建失败'); }
+        this.showToast('用户创建成功', 'success');
+        this.closeCreateUserModal();
+        this.loadUsers();
+        this.loadStats();
+      } catch (e) { this.createUserModal.error = e.message; }
+      this.createUserModal.loading = false;
+    },
+    /* Bookmark Management */
+    async switchToBookmarksTab() {
+      this.currentTab = 'bookmarks';
+      if (this.bm.userList.length === 0) await this.loadBookmarkUsers();
+    },
+    async loadBookmarkUsers() {
+      try {
+        const res = await fetch('/api/users?limit=500', { headers: this.getHeaders() });
+        if (res.ok) { const data = await res.json(); this.bm.userList = data.users || []; }
+      } catch {}
+    },
+    async loadBookmarkUserTree() {
+      if (!this.bm.selectedUserId) { this.bm.tree = []; return; }
+      this.bm.loading = true;
+      try {
+        const res = await fetch('/api/admin/users/' + this.bm.selectedUserId + '/tree', { headers: this.getHeaders() });
+        if (res.ok) {
+          const tree = await res.json();
+          this.bm.tree = tree;
+          this.bm.expandedFolders = {};
+          const counts = this.countBmNodes(tree);
+          this.bm.totalBookmarks = counts.bookmarks;
+          this.bm.totalFolders = counts.folders;
+          // 自动展开第一层文件夹
+          for (const node of tree) {
+            if (node.type === 'folder') this.bm.expandedFolders[node.id] = true;
+          }
+        }
+      } catch {}
+      this.bm.loading = false;
+    },
+    countBmNodes(nodes) {
+      let b = 0, f = 0;
+      for (const n of nodes) {
+        if (n.type === 'folder') { f++; if (n.children) { const c = this.countBmNodes(n.children); b += c.bookmarks; f += c.folders; } }
+        else b++;
+      }
+      return { bookmarks: b, folders: f };
+    },
+    toggleBmFolder(id) {
+      this.bm.expandedFolders = { ...this.bm.expandedFolders, [id]: !this.bm.expandedFolders[id] };
+    },
+    renderBmChildren(nodes) {
+      const result = [];
+      const walk = (ns, depth) => {
+        for (const n of ns) {
+          result.push({ node: n, depth });
+          if (n.type === 'folder' && n.children && this.bm.expandedFolders[n.id]) walk(n.children, depth + 1);
+        }
+      };
+      walk(nodes, 1);
+      return result;
+    },
+    async deleteBmNode(node) {
+      if (!confirm('确定要删除"' + node.title + '"吗？' + (node.type === 'folder' ? '该文件夹下的所有内容将被一并删除。' : ''))) return;
+      try {
+        const res = await fetch('/api/admin/nodes/' + node.id, { method: 'DELETE', headers: this.getHeaders() });
+        if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '删除失败'); }
+        this.showToast('已删除', 'success');
+        this.loadBookmarkUserTree();
+      } catch (e) { this.showToast(e.message, 'error'); }
+    },
+    isIconUrl(s) { return s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:')); },
+    openEditFolderIcon(node) {
+      this.folderIconDialog.node = node;
+      this.folderIconDialog.selectedIcon = '';
+      this.folderIconDialog.customIcon = '';
+      if (node.favicon_url) {
+        if (this.isIconUrl(node.favicon_url)) {
+          this.folderIconDialog.customIcon = node.favicon_url;
+        } else {
+          this.folderIconDialog.selectedIcon = node.favicon_url;
+        }
+      }
+      this.folderIconDialog.visible = true;
+    },
+    closeFolderIconDialog() {
+      this.folderIconDialog.visible = false;
+      this.folderIconDialog.node = null;
+    },
+    async saveFolderIcon() {
+      const node = this.folderIconDialog.node;
+      if (!node) return;
+      const icon = this.folderIconDialog.selectedIcon || this.folderIconDialog.customIcon;
+      try {
+        const res = await fetch('/api/admin/nodes/' + node.id, {
+          method: 'PUT',
+          headers: this.getHeaders('application/json'),
+          body: JSON.stringify({ favicon_url: icon || null }),
+        });
+        if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '保存失败'); }
+        this.showToast('图标已更新', 'success');
+        this.closeFolderIconDialog();
+        this.loadBookmarkUserTree();
+      } catch (e) { this.showToast(e.message, 'error'); }
+    },
+    onAdminIconError(e, node) { e.target.style.display = 'none'; e.target.parentElement.textContent = '📁'; },
+    /* Audit Log */
+    switchToLogsTab() {
+      this.currentTab = 'logs';
+      if (this.al.logs.length === 0) this.loadAuditLogs(1);
+    },
+    async loadAuditLogs(page) {
+      this.al.page = page;
+      this.al.loading = true;
+      try {
+        const params = new URLSearchParams({ page: String(page), limit: String(this.al.limit) });
+        if (this.al.filterAction) params.set('action', this.al.filterAction);
+        if (this.al.filterDateFrom) params.set('date_from', this.al.filterDateFrom);
+        if (this.al.filterDateTo) params.set('date_to', this.al.filterDateTo);
+        const res = await fetch('/api/admin/audit-log?' + params.toString(), { headers: this.getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          this.al.logs = data.logs || [];
+          this.al.total = data.total || 0;
+        }
+      } catch {}
+      this.al.loading = false;
+    },
+    getActionLabel(action) {
+      const map = {
+        login: '登录', logout: '登出', password_change: '修改密码', password_reset: '重置密码',
+        user_register: '用户注册', user_create: '创建用户', user_update: '修改用户', user_delete: '删除用户',
+        batch_delete: '批量删除', batch_activate: '批量启用', batch_deactivate: '批量禁用',
+        admin_delete_node: '管理员删书签',
+      };
+      return map[action] || action;
+    },
+    getActionBadgeClass(action) {
+      if (action === 'login' || action === 'logout') return 'badge-active';
+      if (action.includes('delete')) return 'badge-inactive';
+      return 'badge-user';
+    },
+    formatDateTime(d) {
+      if (!d) return '-';
+      const t = new Date(d);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
     },
     formatDate(d) {
       if (!d) return '-';

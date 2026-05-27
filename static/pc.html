@@ -540,13 +540,20 @@
                     placeholder="请输入名称"
             />
           </div>
-          <div class="form-group" v-if="modal.type.includes('bookmark')">
-            <label>图标地址</label>
-            <input
-                    v-model="modal.form.favicon_url"
-                    type="text"
-                    placeholder="自动获取或手动输入（支持网址、base64、本地路径）"
-            />
+          <div class="form-group">
+            <label>{{ modal.type.includes('bookmark') ? '图标地址' : '文件夹图标' }}</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input
+                      v-model="modal.form.favicon_url"
+                      type="text"
+                      :placeholder="modal.type.includes('bookmark') ? '自动获取或手动输入（支持网址、base64、本地路径）' : '输入 Emoji 或图片 URL（如 🌟）'"
+                      style="flex:1;"
+              />
+              <span v-if="modal.form.favicon_url" style="font-size:22px;min-width:30px;text-align:center;line-height:1;">
+                <img v-if="isIconUrl(modal.form.favicon_url)" :src="modal.form.favicon_url" style="width:22px;height:22px;border-radius:4px;vertical-align:middle;" @error="onPreviewError" />
+                <span v-else>{{ modal.form.favicon_url }}</span>
+              </span>
+            </div>
           </div>
           <div class="form-group" v-if="modal.type.includes('bookmark')">
             <label>可见性</label>
