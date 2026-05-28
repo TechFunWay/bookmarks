@@ -3476,19 +3476,22 @@ func (s *server) handleAdminUpdateNode(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		FaviconURL *string `json:"favicon_url"`
 		Title      *string `json:"title"`
+		URL        *string `json:"url"`
+		Remark     *string `json:"remark"`
+		Visibility *string `json:"visibility"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
 		return
 	}
 
-	if req.FaviconURL == nil && req.Title == nil {
+	if req.FaviconURL == nil && req.Title == nil && req.URL == nil && req.Remark == nil && req.Visibility == nil {
 		respondError(w, http.StatusBadRequest, errors.New("no fields to update"))
 		return
 	}
 
-	fields := make([]string, 0, 2)
-	args := make([]any, 0, 2)
+	fields := make([]string, 0, 5)
+	args := make([]any, 0, 5)
 
 	if req.FaviconURL != nil {
 		favicon := strings.TrimSpace(*req.FaviconURL)
@@ -3508,6 +3511,36 @@ func (s *server) handleAdminUpdateNode(w http.ResponseWriter, r *http.Request) {
 		}
 		fields = append(fields, "title = ?")
 		args = append(args, title)
+	}
+
+	if req.URL != nil {
+		targetURL := strings.TrimSpace(*req.URL)
+		if targetURL == "" {
+			respondError(w, http.StatusBadRequest, errors.New("url cannot be empty"))
+			return
+		}
+		normalizedURL, err := normalizeURL(targetURL)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, fmt.Errorf("invalid url: %w", err))
+			return
+		}
+		fields = append(fields, "url = ?")
+		args = append(args, normalizedURL)
+	}
+
+	if req.Remark != nil {
+		fields = append(fields, "remark = ?")
+		args = append(args, *req.Remark)
+	}
+
+	if req.Visibility != nil {
+		vis := *req.Visibility
+		if vis != "public" && vis != "private" {
+			respondError(w, http.StatusBadRequest, errors.New("visibility must be 'public' or 'private'"))
+			return
+		}
+		fields = append(fields, "visibility = ?")
+		args = append(args, vis)
 	}
 
 	args = append(args, id)
@@ -3657,6 +3690,7 @@ func (s *server) handleAdminCreateBookmark(w http.ResponseWriter, r *http.Reques
 		ParentID   *int64 `json:"parent_id"`
 		FaviconURL string `json:"favicon_url"`
 		Visibility string `json:"visibility"`
+		Remark     string `json:"remark"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
@@ -3696,7 +3730,8 @@ func (s *server) handleAdminCreateBookmark(w http.ResponseWriter, r *http.Reques
 	if favicon != "" {
 		faviconPtr = &favicon
 	}
-	newNode, err := s.insertNode(r.Context(), req.UserID, nodeTypeBookmark, title, req.ParentID, &normalizedURL, faviconPtr, "", visibility)
+	remark := req.Remark
+	newNode, err := s.insertNode(r.Context(), req.UserID, nodeTypeBookmark, title, req.ParentID, &normalizedURL, faviconPtr, remark, visibility)
 	if err != nil {
 		if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrDuplicateFolderName) {
 			respondError(w, http.StatusBadRequest, err)
