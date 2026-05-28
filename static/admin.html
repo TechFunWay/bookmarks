@@ -1089,7 +1089,10 @@
         </div>
         <div class="form-group" v-if="!bmEditModal.isFolder">
           <label>网址 <span style="color:#d93025">*</span></label>
-          <input type="url" v-model="bmEditModal.url" placeholder="https://" />
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="url" v-model="bmEditModal.url" placeholder="https://" style="flex:1;" />
+            <button type="button" class="btn btn-sm btn-primary" @click="lookupBmMetadata('edit')" :disabled="bmEditModal.metadataLoading" style="white-space:nowrap;">{{ bmEditModal.metadataLoading ? '获取中...' : '🔍 获取信息' }}</button>
+          </div>
         </div>
         <div class="form-group">
           <label>图标</label>
@@ -1100,6 +1103,17 @@
               <span v-else>{{ bmEditModal.favicon_url }}</span>
             </span>
           </div>
+        </div>
+        <div class="form-group" v-if="!bmEditModal.isFolder">
+          <label>可见性</label>
+          <select v-model="bmEditModal.visibility" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+            <option value="private">🔒 私密</option>
+            <option value="public">🌐 公开</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea v-model="bmEditModal.remark" placeholder="备注信息" rows="3" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;"></textarea>
         </div>
         <p v-if="bmEditModal.error" class="modal-error">{{ bmEditModal.error }}</p>
         <div class="modal-actions">
@@ -1146,11 +1160,24 @@
         <h3>🔖 新建书签</h3>
         <div class="form-group">
           <label>网址 <span style="color:#d93025">*</span></label>
-          <input type="url" v-model="bmCreateBookmarkModal.url" placeholder="https://" @keyup.enter="confirmBmCreateBookmark" />
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="url" v-model="bmCreateBookmarkModal.url" placeholder="https://" @keyup.enter="confirmBmCreateBookmark" style="flex:1;" />
+            <button type="button" class="btn btn-sm btn-primary" @click="lookupBmMetadata('create')" :disabled="bmCreateBookmarkModal.metadataLoading" style="white-space:nowrap;">{{ bmCreateBookmarkModal.metadataLoading ? '获取中...' : '🔍 获取信息' }}</button>
+          </div>
         </div>
         <div class="form-group">
           <label>名称</label>
           <input type="text" v-model="bmCreateBookmarkModal.title" placeholder="留空则自动获取" />
+        </div>
+        <div class="form-group">
+          <label>图标</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" v-model="bmCreateBookmarkModal.favicon_url" placeholder="自动获取或手动输入" style="flex:1;" />
+            <span v-if="bmCreateBookmarkModal.favicon_url" style="font-size:22px;min-width:30px;text-align:center;">
+              <img v-if="isIconUrl(bmCreateBookmarkModal.favicon_url)" :src="bmCreateBookmarkModal.favicon_url" style="width:22px;height:22px;border-radius:4px;vertical-align:middle;" @error="onPreviewError" />
+              <span v-else>{{ bmCreateBookmarkModal.favicon_url }}</span>
+            </span>
+          </div>
         </div>
         <div class="form-group">
           <label>父文件夹</label>
@@ -1158,6 +1185,17 @@
             <option :value="null">根目录</option>
             <option v-for="f in bmFolderList" :key="f.id" :value="f.id">{{ f.path }}</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label>可见性</label>
+          <select v-model="bmCreateBookmarkModal.visibility" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+            <option value="private">🔒 私密</option>
+            <option value="public">🌐 公开</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea v-model="bmCreateBookmarkModal.remark" placeholder="备注信息" rows="3" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;"></textarea>
         </div>
         <p v-if="bmCreateBookmarkModal.error" class="modal-error">{{ bmCreateBookmarkModal.error }}</p>
         <div class="modal-actions">
@@ -1241,8 +1279,9 @@ const app = createApp({
       },
       bmEditModal: {
         visible: false, node: null, isFolder: false,
-        title: '', url: '', favicon_url: '',
-        loading: false, error: '',
+        title: '', url: '', favicon_url: '', remark: '',
+        visibility: 'private',
+        metadataLoading: false, loading: false, error: '',
       },
       bmCreateFolderModal: {
         visible: false, title: '', parentId: null, icon: '',
@@ -1250,7 +1289,8 @@ const app = createApp({
       },
       bmCreateBookmarkModal: {
         visible: false, url: '', title: '', parentId: null,
-        loading: false, error: '',
+        favicon_url: '', visibility: 'private', remark: '',
+        metadataLoading: false, loading: false, error: '',
       },
       folderIconDialog: {
         visible: false, node: null, selectedIcon: '', customIcon: '',
@@ -1981,7 +2021,8 @@ const app = createApp({
       this.bmEditModal = {
         visible: true, node: node, isFolder: node.type === 'folder',
         title: node.title || '', url: node.url || '', favicon_url: node.favicon_url || '',
-        loading: false, error: '',
+        remark: node.remark || '', visibility: node.visibility || 'private',
+        metadataLoading: false, loading: false, error: '',
       };
     },
     closeBmEditModal() { this.bmEditModal.visible = false; },
@@ -1992,7 +2033,11 @@ const app = createApp({
       m.loading = true; m.error = '';
       try {
         const body = { title: m.title.trim(), favicon_url: m.favicon_url || null };
-        if (!m.isFolder) body.url = m.url.trim();
+        if (!m.isFolder) {
+          body.url = m.url.trim();
+          body.visibility = m.visibility;
+        }
+        body.remark = m.remark;
         const res = await fetch('/api/admin/nodes/' + m.node.id, {
           method: 'PUT',
           headers: this.getHeaders('application/json'),
@@ -2004,6 +2049,23 @@ const app = createApp({
         this.loadBookmarkUserTree();
       } catch (e) { m.error = e.message; }
       m.loading = false;
+    },
+    /* Metadata lookup */
+    async lookupBmMetadata(mode) {
+      const modal = mode === 'edit' ? this.bmEditModal : this.bmCreateBookmarkModal;
+      const url = modal.url.trim();
+      if (!url) { modal.error = '请先输入网址'; return; }
+      modal.metadataLoading = true;
+      modal.error = '';
+      try {
+        const res = await fetch('/api/metadata?url=' + encodeURIComponent(url));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.title && !modal.title) modal.title = data.title;
+          if (data.icon && !modal.favicon_url) modal.favicon_url = data.icon;
+        }
+      } catch {}
+      modal.metadataLoading = false;
     },
     /* Folder icon */
     openEditFolderIcon(node) {
@@ -2121,7 +2183,10 @@ const app = createApp({
             user_id: this.bm.selectedUserId,
             url: m.url.trim(),
             title: m.title.trim(),
+            favicon_url: m.favicon_url.trim(),
             parent_id: m.parentId,
+            visibility: m.visibility,
+            remark: m.remark,
           }),
         });
         if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); }
