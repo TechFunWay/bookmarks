@@ -248,6 +248,19 @@
           <h2 class="card-title">极简</h2>
           <p class="card-tagline">纯粹的列表，专注内容</p>
         </a>
+
+        <a href="/template-grid.html" class="card" onclick="selectTemplate(event, 'grid')">
+          <div class="preview-container">
+            <svg viewBox="0 0 80 60" fill="currentColor">
+              <rect x="8" y="8" width="28" height="20" rx="3" opacity="0.8"/>
+              <rect x="44" y="8" width="28" height="20" rx="3" opacity="0.6"/>
+              <rect x="8" y="34" width="28" height="20" rx="3" opacity="0.6"/>
+              <rect x="44" y="34" width="28" height="20" rx="3" opacity="0.4"/>
+            </svg>
+          </div>
+          <h2 class="card-title">卡片网格</h2>
+          <p class="card-tagline">响应式网格，悬停交互</p>
+        </a>
       </div>
     </main>
 
@@ -270,7 +283,7 @@
     async function init() {
       const urlParams = new URLSearchParams(window.location.search);
       const tParam = urlParams.get('t');
-      const validTemplates = ['magazine', 'masonry', 'timeline', 'minimal'];
+      const validTemplates = ['magazine', 'masonry', 'timeline', 'minimal', 'grid'];
 
       // a) ?t=name 强制指定
       if (tParam && validTemplates.includes(tParam)) {
