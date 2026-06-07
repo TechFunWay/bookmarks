@@ -237,7 +237,7 @@
       let html = '';
       
       for (const bm of bookmarks) {
-        const folderName = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb[0] : '';
+        const folderName = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb[bm.breadcrumb.length - 1] : '';
         
         let iconHtml = '';
         if (bm.favicon_url) {
