@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>选择展示模板 - Bookmarks</title>
+  <link rel="stylesheet" href="/template-common.css">
+  <style>
+    /* Inline styles for chooser UI */
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .t-header {
+      padding: 20px 40px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-elev-1);
+    }
+    .brand {
+      font-size: 20px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .theme-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .theme-toggle:hover {
+      background: var(--bg-elev-3);
+    }
+    .theme-toggle svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .main-content {
+      flex: 1;
+      padding: 60px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .page-title {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .page-subtitle {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 60px;
+      max-width: 600px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 30px;
+      width: 100%;
+      max-width: 1200px;
+    }
+    .card {
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-decoration: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--gradient-card);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .card:hover {
+      transform: translateY(-8px);
+      border-color: var(--accent);
+      box-shadow: var(--shadow-lg);
+    }
+    .card:hover::before {
+      opacity: 1;
+    }
+    .preview-container {
+      width: 120px;
+      height: 90px;
+      background: var(--bg-elev-2);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      position: relative;
+      z-index: 1;
+    }
+    .preview-container svg {
+      width: 80px;
+      height: 60px;
+    }
+    .card-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+      position: relative;
+      z-index: 1;
+    }
+    .card-tagline {
+      font-size: 14px;
+      color: var(--text-secondary);
+      position: relative;
+      z-index: 1;
+    }
+    .footer {
+      padding: 40px 20px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .footer a:hover {
+      color: var(--cyan);
+    }
+    
+    /* Hide UI initially to prevent flash before redirect */
+    #app {
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #app.ready {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="t-header">
+      <div class="brand">
+        <svg class="t-favicon size-24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+        </svg>
+        Bookmarks
+      </div>
+      <button class="theme-toggle" onclick="TemplateShell.toggleTheme()" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+    </header>
+
+    <main class="main-content">
+      <h1 class="page-title">选择展示模板</h1>
+      <p class="page-subtitle">选一个最符合你审美的展示方式，可以随时在右下角切换</p>
+
+      <div class="grid">
+        <a href="/template-magazine.html" class="card" onclick="selectTemplate(event, 'magazine')">
+          <div class="preview-container">
+            <svg viewBox="0 0 80 60" fill="currentColor">
+              <rect x="10" y="10" width="60" height="20" rx="2" opacity="0.8"/>
+              <rect x="10" y="35" width="28" height="15" rx="2" opacity="0.5"/>
+              <rect x="42" y="35" width="28" height="15" rx="2" opacity="0.5"/>
+            </svg>
+          </div>
+          <h2 class="card-title">杂志 Magazine</h2>
+          <p class="card-tagline">编辑式封面 + 部门式栏位</p>
+        </a>
+
+        <a href="/template-masonry.html" class="card" onclick="selectTemplate(event, 'masonry')">
+          <div class="preview-container">
+            <svg viewBox="0 0 80 60" fill="currentColor">
+              <rect x="10" y="10" width="18" height="25" rx="2" opacity="0.8"/>
+              <rect x="31" y="10" width="18" height="15" rx="2" opacity="0.5"/>
+              <rect x="52" y="10" width="18" height="30" rx="2" opacity="0.6"/>
+              <rect x="10" y="38" width="18" height="12" rx="2" opacity="0.4"/>
+              <rect x="31" y="28" width="18" height="22" rx="2" opacity="0.7"/>
+              <rect x="52" y="43" width="18" height="7" rx="2" opacity="0.3"/>
+            </svg>
+          </div>
+          <h2 class="card-title">瀑布流 Masonry</h2>
+          <p class="card-tagline">错落有致的视觉盛宴</p>
+        </a>
+
+        <a href="/template-timeline.html" class="card" onclick="selectTemplate(event, 'timeline')">
+          <div class="preview-container">
+            <svg viewBox="0 0 80 60" fill="currentColor">
+              <rect x="30" y="15" width="40" height="8" rx="2" opacity="0.8"/>
+              <rect x="30" y="30" width="40" height="8" rx="2" opacity="0.6"/>
+              <rect x="30" y="45" width="40" height="8" rx="2" opacity="0.4"/>
+              <circle cx="15" cy="19" r="4" opacity="0.8"/>
+              <circle cx="15" cy="34" r="4" opacity="0.6"/>
+              <circle cx="15" cy="49" r="4" opacity="0.4"/>
+              <path d="M15 23v7M15 38v7" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+            </svg>
+          </div>
+          <h2 class="card-title">时间轴 Timeline</h2>
+          <p class="card-tagline">按时间线记录的足迹</p>
+        </a>
+
+        <a href="/template-minimal.html" class="card" onclick="selectTemplate(event, 'minimal')">
+          <div class="preview-container">
+            <svg viewBox="0 0 80 60" fill="currentColor">
+              <rect x="10" y="15" width="60" height="6" rx="2" opacity="0.8"/>
+              <rect x="10" y="27" width="60" height="6" rx="2" opacity="0.6"/>
+              <rect x="10" y="39" width="60" height="6" rx="2" opacity="0.4"/>
+            </svg>
+          </div>
+          <h2 class="card-title">极简 Minimal</h2>
+          <p class="card-tagline">纯粹的列表，专注内容</p>
+        </a>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p><a href="/pc.html">← 返回主应用</a></p>
+    </footer>
+  </div>
+
+  <script src="/template-shell.js"></script>
+  <script>
+    // Initialize theme
+    TemplateShell.initTheme();
+
+    // Handle template selection
+    function selectTemplate(e, name) {
+      e.preventDefault();
+      TemplateShell.setUserTemplate(name);
+    }
+
+    // Main logic
+    async function init() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tParam = urlParams.get('t');
+      const validTemplates = ['magazine', 'masonry', 'timeline', 'minimal'];
+
+      // a) If ?t=name query param exists
+      if (tParam && validTemplates.includes(tParam)) {
+        TemplateShell.setUserTemplate(tParam);
+        return;
+      }
+
+      // b) If localStorage has 'bookmark_template'
+      const localTemplate = localStorage.getItem('bookmark_template');
+      if (localTemplate && validTemplates.includes(localTemplate)) {
+        window.location.replace('/template-' + localTemplate + '.html');
+        return;
+      }
+
+      // c) If /api/config/system has default_template
+      let sysConfig = {};
+      try {
+        const r = await fetch('/api/config/system');
+        if (r.ok) sysConfig = await r.json();
+      } catch (e) {}
+      
+      if (sysConfig && sysConfig.default_template && validTemplates.includes(sysConfig.default_template)) {
+        window.location.replace('/template-' + sysConfig.default_template + '.html');
+        return;
+      }
+
+      // d) Otherwise render the chooser UI
+      document.getElementById('app').classList.add('ready');
+    }
+
+    init();
+  </script>
+</body>
+</html>
