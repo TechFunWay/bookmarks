@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmarks 时间线</title>
+  <link rel="stylesheet" href="template-common.css">
+  <style>
+    /* Timeline specific styles */
+    body {
+      padding-bottom: 100px;
+    }
+    
+    .t-header {
+      padding: 16px 24px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 32px;
+    }
+    
+    .t-header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .t-theme-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+    }
+    
+    .t-theme-toggle:hover {
+      background: var(--bg-elev-2);
+      color: var(--text-primary);
+    }
+    
+    .t-tl {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+    }
+    
+    /* Center vertical line */
+    .t-tl::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 64px; /* 24px padding + 40px (half of 80px rail) */
+      width: 2px;
+      background: var(--border);
+      z-index: 0;
+    }
+    
+    @media (max-width: 640px) {
+      .t-tl::before {
+        left: 44px; /* 24px padding + 20px (half of 40px rail) */
+      }
+    }
+    
+    .t-tl-month {
+      position: sticky;
+      top: 64px;
+      z-index: 10;
+      background: var(--bg-base);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 12px 0;
+      margin: 24px 0 16px 0;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      cursor: pointer;
+    }
+    
+    /* Add a pseudo-element to cover the line behind the sticky header */
+    .t-tl-month::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-base);
+      opacity: 0.85;
+      z-index: -1;
+    }
+    
+    .t-tl-month h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 0;
+    }
+    
+    .t-tl-month .t-tl-count {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .t-tl-entries {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .t-tl-entry {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    
+    @media (max-width: 640px) {
+      .t-tl-entry {
+        grid-template-columns: 40px 1fr;
+        gap: 16px;
+      }
+    }
+    
+    .t-tl-rail {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      padding-top: 24px; /* Align dot with card content */
+    }
+    
+    .t-tl-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--bg-base);
+      position: relative;
+      z-index: 2;
+    }
+    
+    /* Connecting line to the card */
+    .t-tl-rail::after {
+      content: '';
+      position: absolute;
+      top: 31px; /* 24px + 7px (half dot) */
+      right: -12px; /* Half of gap */
+      width: 24px;
+      height: 1px;
+      background: var(--border);
+      z-index: 1;
+    }
+    
+    @media (max-width: 640px) {
+      .t-tl-rail::after {
+        right: -8px;
+        width: 16px;
+      }
+    }
+    
+    .t-tl-card {
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      text-decoration: none;
+      color: inherit;
+    }
+    
+    .t-tl-card:hover {
+      border-color: var(--accent);
+      box-shadow: var(--shadow-sm);
+      transform: translateY(-1px);
+    }
+    
+    .t-tl-card-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .t-tl-card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .t-tl-card-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    
+    .t-tl-card-bottom {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+    
+    .t-tl-card-folder {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    .t-tl-card-folder::after {
+      content: '/';
+      color: var(--border-strong);
+    }
+    
+    .t-tl-card-url {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .t-tl-card-remark {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .t-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 64px 24px;
+      color: var(--text-muted);
+      text-align: center;
+      background: var(--bg-elev-1);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      margin-top: 32px;
+    }
+    
+    .t-empty svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+  <header class="t-header">
+    <h1>Bookmarks 时间线</h1>
+    <button class="t-theme-toggle" id="themeToggle" aria-label="Toggle theme">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+      </svg>
+    </button>
+  </header>
+
+  <main class="t-tl" id="timelineContainer">
+    <!-- Content will be injected here -->
+  </main>
+
+  <script src="template-shell.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      TemplateShell.initTheme();
+      TemplateShell.mountSwitcher(document.body, 'timeline');
+      
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        TemplateShell.toggleTheme();
+      });
+      
+      const container = document.getElementById('timelineContainer');
+      
+      try {
+        const tree = await TemplateShell.loadPublicTree();
+        const flat = TemplateShell.flattenTree(tree);
+        
+        if (!flat || flat.length === 0) {
+          renderEmpty(container);
+          return;
+        }
+        
+        const months = TemplateShell.groupByMonth(flat);
+        renderTimeline(container, months);
+      } catch (err) {
+        console.error('Failed to load timeline:', err);
+        renderEmpty(container);
+      }
+    });
+    
+    function relativeTime(dateStr) {
+      if (!dateStr) return '未知';
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return '未知';
+      
+      const now = new Date();
+      const diffMs = now - date;
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHour = Math.floor(diffMin / 60);
+      const diffDay = Math.floor(diffHour / 24);
+      const diffWeek = Math.floor(diffDay / 7);
+      const diffMonth = Math.floor(diffDay / 30);
+      const diffYear = Math.floor(diffDay / 365);
+      
+      if (diffSec < 60) return '刚刚';
+      if (diffMin < 60) return `${diffMin}分钟前`;
+      if (diffHour < 24) return `${diffHour}小时前`;
+      if (diffDay < 7) return `${diffDay}天前`;
+      if (diffWeek < 4) return `${diffWeek}周前`;
+      if (diffMonth < 12) return `${diffMonth}个月前`;
+      return `${diffYear}年前`;
+    }
+    
+    function renderEmpty(container) {
+      container.innerHTML = `
+        <div class="t-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+          <p>暂无公开书签</p>
+        </div>
+      `;
+    }
+    
+    function renderTimeline(container, months) {
+      container.innerHTML = '';
+      
+      months.forEach(month => {
+        // Month Header
+        const monthHeader = document.createElement('div');
+        monthHeader.className = 't-tl-month';
+        monthHeader.innerHTML = `
+          <h2>${month.label}</h2>
+          <span class="t-tl-count">${month.items.length} 条</span>
+        `;
+        
+        monthHeader.addEventListener('click', () => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        
+        container.appendChild(monthHeader);
+        
+        // Entries Container
+        const entriesContainer = document.createElement('div');
+        entriesContainer.className = 't-tl-entries';
+        
+        month.items.forEach(item => {
+          const entry = document.createElement('div');
+          entry.className = 't-tl-entry';
+          
+          const timeStr = item.updated_at || item.created_at;
+          const relTime = relativeTime(timeStr);
+          
+          const breadcrumb = item.breadcrumb && item.breadcrumb.length > 0 
+            ? item.breadcrumb.join(' / ') 
+            : '根目录';
+            
+          const faviconHtml = item.favicon_url 
+            ? `<img src="${item.favicon_url}" class="t-favicon size-32" alt="" loading="lazy" onerror="this.classList.add('missing');this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'%236a6a85\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'2\\' y1=\\'12\\' x2=\\'22\\' y2=\\'12\\'/><path d=\\'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z\\'/></svg>'">`
+            : `<div class="t-favicon size-32 missing"></div>`;
+            
+          const remarkHtml = item.remark 
+            ? `<div class="t-tl-card-remark">${escapeHtml(item.remark)}</div>` 
+            : '';
+            
+          entry.innerHTML = `
+            <div class="t-tl-rail">
+              <div class="t-tl-dot"></div>
+            </div>
+            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="t-tl-card">
+              <div class="t-tl-card-top">
+                ${faviconHtml}
+                <div class="t-tl-card-title">${escapeHtml(item.title)}</div>
+                <div class="t-tl-card-time">${relTime}</div>
+              </div>
+              <div class="t-tl-card-bottom">
+                <div class="t-tl-card-folder">${escapeHtml(breadcrumb)}</div>
+                <div class="t-tl-card-url mono">${escapeHtml(item.url)}</div>
+              </div>
+              ${remarkHtml}
+            </a>
+          `;
+          
+          entriesContainer.appendChild(entry);
+        });
+        
+        container.appendChild(entriesContainer);
+      });
+    }
+    
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
