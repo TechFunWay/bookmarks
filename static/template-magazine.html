@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmarks 杂志</title>
+  <link rel="stylesheet" href="template-common.css">
+  <style>
+    /* Magazine specific styles */
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    
+    .t-header {
+      padding: 24px 48px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: transparent;
+    }
+    
+    .t-brand {
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+    
+    .t-theme-toggle {
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    
+    .t-theme-toggle:hover {
+      background: var(--bg-elev-2);
+      border-color: var(--border-strong);
+    }
+    
+    .t-mag-hero {
+      min-height: 70vh;
+      display: flex;
+      align-items: center;
+      padding: 120px 48px 60px;
+      position: relative;
+      overflow: hidden;
+      background: radial-gradient(circle at 80% 20%, var(--accent-soft) 0%, transparent 40%),
+                  radial-gradient(circle at 20% 80%, var(--cyan-soft) 0%, transparent 40%),
+                  var(--bg-base);
+    }
+    
+    .t-mag-hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)" opacity="0.05"/%3E%3C/svg%3E');
+      pointer-events: none;
+      z-index: 0;
+    }
+    
+    .t-mag-hero-content {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 64px;
+      align-items: center;
+    }
+    
+    .t-mag-hero-text {
+      max-width: 800px;
+    }
+    
+    .t-mag-hero-title {
+      font-size: clamp(48px, 8vw, 96px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .t-mag-hero-subtitle {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--text-muted);
+      font-weight: 400;
+      line-height: 1.6;
+    }
+    
+    .t-mag-hero-featured {
+      width: 320px;
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+    
+    .t-mag-hero-featured::before {
+      content: 'FEATURED';
+      position: absolute;
+      top: -10px;
+      right: 24px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+    
+    .t-mag-empty {
+      padding: 48px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 18px;
+      background: var(--bg-elev-1);
+      border: 1px dashed var(--border-strong);
+      border-radius: 12px;
+      grid-column: 1 / -1;
+    }
+    
+    .t-mag-main {
+      flex: 1;
+      padding: 80px 48px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 80px;
+    }
+    
+    .t-mag-departments {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    
+    .t-mag-department-header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+    
+    .t-mag-department-eyebrow {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    
+    .t-mag-department-title {
+      font-size: clamp(24px, 4vw, 32px);
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+    
+    .t-mag-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    
+    .t-mag-overflow .t-mag-grid {
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+    
+    .t-mag-card {
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none;
+      height: 100%;
+    }
+    
+    .t-mag-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-glow);
+      border-color: var(--border-strong);
+      background: var(--bg-elev-2);
+    }
+    
+    .t-mag-card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    
+    .t-mag-card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      background: var(--bg-elev-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    
+    .t-mag-card-icon img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+    
+    .t-mag-card-content {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .t-mag-card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .t-mag-card-url {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .t-mag-card-remark {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px dashed var(--border);
+    }
+    
+    .t-footer {
+      padding: 48px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+    }
+    
+    .t-footer-link {
+      color: var(--text-secondary);
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    
+    .t-footer-link:hover {
+      color: var(--text-primary);
+    }
+    
+    .t-footer-version {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    
+    @media (max-width: 768px) {
+      .t-header {
+        padding: 20px 24px;
+      }
+      .t-mag-hero {
+        padding: 100px 24px 40px;
+      }
+      .t-mag-hero-content {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+      .t-mag-hero-featured {
+        width: 100%;
+      }
+      .t-mag-main {
+        padding: 40px 24px;
+        gap: 48px;
+      }
+      .t-mag-grid, .t-mag-overflow .t-mag-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="t-header">
+    <div class="t-brand">Bookmarks 杂志</div>
+    <button class="t-theme-toggle" id="themeToggle">切换主题</button>
+  </header>
+
+  <section class="t-mag-hero">
+    <div class="t-mag-hero-content" id="heroContent">
+      <div class="t-mag-hero-text">
+        <h1 class="t-mag-hero-title">网址收藏 · 杂志</h1>
+        <p class="t-mag-hero-subtitle">由你的书签编织的编辑式刊</p>
+      </div>
+      <!-- Featured bookmark will be injected here -->
+    </div>
+  </section>
+
+  <main class="t-mag-main" id="mainContent">
+    <!-- Departments will be injected here -->
+  </main>
+
+  <footer class="t-footer">
+    <a href="/" class="t-footer-link">← 返回主应用</a>
+    <div class="t-footer-version">Bookmarks v2.1.0</div>
+  </footer>
+
+  <script src="template-shell.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      TemplateShell.initTheme();
+      
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        TemplateShell.toggleTheme();
+      });
+
+      const tree = await TemplateShell.loadPublicTree();
+      const groups = TemplateShell.groupByFolder(tree);
+      const folderNames = Object.keys(groups);
+      
+      const heroContent = document.getElementById('heroContent');
+      const mainContent = document.getElementById('mainContent');
+      
+      if (folderNames.length === 0) {
+        const emptyHtml = `
+          <div class="t-mag-empty">暂无公开书签</div>
+        `;
+        heroContent.insertAdjacentHTML('beforeend', emptyHtml);
+        TemplateShell.mountSwitcher(document.body, 'magazine');
+        return;
+      }
+      
+      const featuredFolder = folderNames[0];
+      const featuredBookmark = groups[featuredFolder][0];
+      
+      if (featuredBookmark) {
+        const featuredHtml = `
+          <a href="${escapeHtml(featuredBookmark.url)}" target="_blank" rel="noopener noreferrer" class="t-mag-hero-featured t-mag-card">
+            <div class="t-mag-card-header">
+              <div class="t-mag-card-icon">
+                <img src="${escapeHtml(featuredBookmark.favicon_url || '')}" alt="" loading="lazy" onerror="this.style.display='none'">
+              </div>
+              <div class="t-mag-card-content">
+                <div class="t-mag-card-title">${escapeHtml(featuredBookmark.title)}</div>
+                <div class="t-mag-card-url">${escapeHtml(featuredBookmark.url)}</div>
+              </div>
+            </div>
+            ${featuredBookmark.remark ? `<div class="t-mag-card-remark">${escapeHtml(featuredBookmark.remark)}</div>` : ''}
+          </a>
+        `;
+        heroContent.insertAdjacentHTML('beforeend', featuredHtml);
+      }
+      
+      // Render departments
+      const maxDepartments = 6;
+      let deptCount = 0;
+      
+      const renderCard = (bm) => `
+        <a href="${escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-mag-card">
+          <div class="t-mag-card-header">
+            <div class="t-mag-card-icon">
+              <img src="${escapeHtml(bm.favicon_url || '')}" alt="" loading="lazy" onerror="this.style.display='none'">
+            </div>
+            <div class="t-mag-card-content">
+              <div class="t-mag-card-title">${escapeHtml(bm.title)}</div>
+              <div class="t-mag-card-url">${escapeHtml(bm.url)}</div>
+            </div>
+          </div>
+          ${bm.remark ? `<div class="t-mag-card-remark">${escapeHtml(bm.remark)}</div>` : ''}
+        </a>
+      `;
+      
+      const renderDepartment = (folderName, bookmarks, isOverflow = false) => {
+        if (!bookmarks || bookmarks.length === 0) return '';
+        
+        const cardsHtml = bookmarks.map(renderCard).join('');
+        
+        return `
+          <section class="t-mag-departments ${isOverflow ? 't-mag-overflow' : ''}">
+            <div class="t-mag-department-header">
+              <div class="t-mag-department-eyebrow">${escapeHtml(folderName)}</div>
+              <h2 class="t-mag-department-title">${escapeHtml(folderName)}</h2>
+            </div>
+            <div class="t-mag-grid">
+              ${cardsHtml}
+            </div>
+          </section>
+        `;
+      };
+      
+      let html = '';
+      
+      // Skip the first folder (used in hero)
+      for (let i = 1; i < folderNames.length; i++) {
+        const folder = folderNames[i];
+        if (deptCount < maxDepartments) {
+          html += renderDepartment(folder, groups[folder]);
+          deptCount++;
+        } else {
+          html += renderDepartment(folder, groups[folder], true);
+        }
+      }
+      
+      mainContent.innerHTML = html;
+      
+      TemplateShell.mountSwitcher(document.body, 'magazine');
+    });
+    
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return (unsafe + '')
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
