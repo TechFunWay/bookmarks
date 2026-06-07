@@ -237,7 +237,7 @@
       let html = '';
       
       for (const bm of bookmarks) {
-        const folderName = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb[bm.breadcrumb.length - 1] : '';
+        const folderPath = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb.join(' / ') : '';
         
         let iconHtml = '';
         if (bm.favicon_url) {
@@ -248,7 +248,7 @@
         
         html += `
           <a href="${escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-grid-card">
-            ${folderName ? `<div class="t-grid-card-folder">${escapeHtml(folderName)}</div>` : ''}
+            ${folderPath ? `<div class="t-grid-card-folder">${escapeHtml(folderPath)}</div>` : ''}
             <div class="t-grid-card-favicon">
               ${iconHtml}
             </div>
