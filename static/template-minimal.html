@@ -22,6 +22,7 @@
       padding: 0 24px;
       max-width: 720px;
       margin: 0 auto;
+      gap: 16px;
     }
 
     .t-brand {
@@ -29,6 +30,7 @@
       font-size: 16px;
       letter-spacing: -0.02em;
       color: var(--text-primary);
+      flex-shrink: 0;
     }
 
     .t-theme-toggle {
@@ -158,12 +160,84 @@
     .t-footer a:hover {
       color: var(--text-primary);
     }
+    
+    .t-search {
+      position: relative;
+      flex: 1;
+      max-width: 320px;
+    }
+    .t-search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-search-input {
+      width: 100%;
+      padding: 6px 32px 6px 32px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-search-input::placeholder {
+      color: var(--text-muted);
+    }
+    .t-search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .t-search-clear:hover {
+      color: var(--text-primary);
+    }
+    .t-min-item mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+    .t-min-collection-title mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
   </style>
 </head>
 <body>
 
   <header class="t-header thin">
     <div class="t-brand">书签 · 极简</div>
+    <div class="t-search" id="searchContainer">
+      <svg class="t-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接..." aria-label="搜索书签">
+      <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
+    </div>
     <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">Toggle Theme</button>
   </header>
 
@@ -185,54 +259,88 @@
       TemplateShell.initTheme();
 
       const app = document.getElementById('app');
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
       const tree = await TemplateShell.loadPublicTree();
+      const allGroups = tree && tree.length > 0 ? TemplateShell.groupByFolder(tree) : {};
+      let currentSearch = '';
       
-      if (!tree || tree.length === 0) {
-        app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
-      } else {
-        const groups = TemplateShell.groupByFolder(tree);
-        const folderNames = Object.keys(groups);
+      const render = () => {
+        const q = currentSearch;
+        const filteredGroups = {};
+        Object.keys(allGroups).forEach(folder => {
+          if (q) {
+            const matches = TemplateShell.searchBookmarks(allGroups[folder], q);
+            if (matches.length > 0) filteredGroups[folder] = matches;
+          } else {
+            filteredGroups[folder] = allGroups[folder];
+          }
+        });
         
+        const folderNames = Object.keys(filteredGroups);
         if (folderNames.length === 0) {
-          app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
-        } else {
-          let html = '';
-          for (const folder of folderNames) {
-            const items = groups[folder];
-            if (!items || items.length === 0) continue;
+          app.innerHTML = `<div class="t-empty">${q ? '没有匹配的书签' : '暂无公开书签'}</div>`;
+          return;
+        }
+        
+        let html = '';
+        for (const folder of folderNames) {
+          const items = filteredGroups[folder];
+          if (!items || items.length === 0) continue;
+          
+          const folderHtml = q ? TemplateShell.highlightText(folder, q) : escapeHtml(folder);
+          
+          html += `
+            <section class="t-min-collection">
+              <h2 class="t-min-collection-title">${folderHtml}</h2>
+              <ul class="t-min-list">
+          `;
+          
+          for (const item of items) {
+            const favicon = item.favicon_url 
+              ? `<img src="${escapeHtml(item.favicon_url)}" class="t-favicon size-16" alt="" onerror="this.classList.add('missing');this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'16\\' height=\\'16\\'></svg>'">`
+              : `<div class="t-favicon size-16 missing"></div>`;
+              
+            const titleHtml = q ? TemplateShell.highlightText(item.title || '', q) : escapeHtml(item.title);
+            const urlHtml = q ? TemplateShell.highlightText(item.url || '', q) : escapeHtml(item.url);
             
             html += `
-              <section class="t-min-collection">
-                <h2 class="t-min-collection-title">${escapeHtml(folder)}</h2>
-                <ul class="t-min-list">
-            `;
-            
-            for (const item of items) {
-              const favicon = item.favicon_url 
-                ? `<img src="${escapeHtml(item.favicon_url)}" class="t-favicon size-16" alt="" onerror="this.classList.add('missing');this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'16\\' height=\\'16\\'></svg>'">`
-                : `<div class="t-favicon size-16 missing"></div>`;
-                
-              html += `
-                <li class="t-min-item">
-                  <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
-                    <div class="t-min-item-left">
-                      ${favicon}
-                      <span class="t-min-item-title">${escapeHtml(item.title)}</span>
-                    </div>
-                    <span class="t-min-item-url">${escapeHtml(item.url)}</span>
-                  </a>
-                </li>
-              `;
-            }
-            
-            html += `
-                </ul>
-              </section>
+              <li class="t-min-item">
+                <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+                  <div class="t-min-item-left">
+                    ${favicon}
+                    <span class="t-min-item-title">${titleHtml}</span>
+                  </div>
+                  <span class="t-min-item-url">${urlHtml}</span>
+                </a>
+              </li>
             `;
           }
-          app.innerHTML = html;
+          
+          html += `
+              </ul>
+            </section>
+          `;
         }
-      }
+        app.innerHTML = html;
+      };
+      
+      render();
+      
+      let searchTimer;
+      searchInput.addEventListener('input', (e) => {
+        currentSearch = e.target.value.trim();
+        searchClear.style.display = currentSearch ? 'flex' : 'none';
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(render, 120);
+      });
+      searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        currentSearch = '';
+        searchClear.style.display = 'none';
+        render();
+        searchInput.focus();
+      });
 
       TemplateShell.mountSwitcher(document.body, 'minimal');
     });

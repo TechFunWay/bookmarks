@@ -299,6 +299,12 @@
     @media (max-width: 768px) {
       .t-header {
         padding: 20px 24px;
+        flex-wrap: wrap;
+      }
+      .t-search {
+        order: 3;
+        max-width: none;
+        margin: 12px 0 0;
       }
       .t-mag-hero {
         padding: 48px 24px 28px;
@@ -318,11 +324,78 @@
         grid-template-columns: 1fr;
       }
     }
+    .t-search {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+      margin: 0 24px;
+    }
+    .t-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-search-input {
+      width: 100%;
+      padding: 10px 44px 10px 40px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-search-input::placeholder {
+      color: var(--text-muted);
+    }
+    .t-search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-search-clear {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .t-search-clear:hover {
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+    }
+    .t-mag-card mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
   </style>
 </head>
 <body>
   <header class="t-header">
     <div class="t-brand">书签 · 杂志</div>
+    <div class="t-search" id="searchContainer">
+      <svg class="t-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
+      <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
+    </div>
     <button class="t-theme-toggle" id="themeToggle">切换主题</button>
   </header>
 
@@ -356,70 +429,45 @@
 
       const tree = await TemplateShell.loadPublicTree();
       const groups = TemplateShell.groupByFolder(tree);
-      const folderNames = Object.keys(groups);
+      const allBookmarks = [];
+      Object.keys(groups).forEach(folder => {
+        groups[folder].forEach(bm => allBookmarks.push({...bm, _folder: folder}));
+      });
       
       const heroContent = document.getElementById('heroContent');
       const mainContent = document.getElementById('mainContent');
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
       
-      if (folderNames.length === 0) {
-        const emptyHtml = `
-          <div class="t-mag-empty">暂无公开书签</div>
-        `;
-        heroContent.insertAdjacentHTML('beforeend', emptyHtml);
-        TemplateShell.mountSwitcher(document.body, 'magazine');
-        return;
-      }
-      
-      const featuredFolder = folderNames[0];
-      const featuredBookmark = groups[featuredFolder][0];
-      
-      if (featuredBookmark) {
-        const featuredHtml = `
-          <a href="${escapeHtml(featuredBookmark.url)}" target="_blank" rel="noopener noreferrer" class="t-mag-hero-featured t-mag-card">
-            <div class="t-mag-card-header">
-              <div class="t-mag-card-icon">
-                <img src="${escapeHtml(featuredBookmark.favicon_url || '')}" alt="" loading="lazy" onerror="this.style.display='none'">
-              </div>
-              <div class="t-mag-card-content">
-                <div class="t-mag-card-title">${escapeHtml(featuredBookmark.title)}</div>
-                <div class="t-mag-card-url">${escapeHtml(featuredBookmark.url)}</div>
-              </div>
-            </div>
-            ${featuredBookmark.remark ? `<div class="t-mag-card-remark">${escapeHtml(featuredBookmark.remark)}</div>` : ''}
-          </a>
-        `;
-        heroContent.insertAdjacentHTML('beforeend', featuredHtml);
-      }
-      
-      // Render departments
-      const maxDepartments = 6;
-      let deptCount = 0;
-      
-      const renderCard = (bm) => `
+      const renderCard = (bm, q) => {
+        const titleHtml = q ? TemplateShell.highlightText(bm.title || '', q) : escapeHtml(bm.title);
+        const urlHtml = q ? TemplateShell.highlightText(bm.url || '', q) : escapeHtml(bm.url);
+        const remarkHtml = bm.remark ? (q ? TemplateShell.highlightText(bm.remark, q) : escapeHtml(bm.remark)) : '';
+        return `
         <a href="${escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-mag-card">
           <div class="t-mag-card-header">
             <div class="t-mag-card-icon">
               <img src="${escapeHtml(bm.favicon_url || '')}" alt="" loading="lazy" onerror="this.style.display='none'">
             </div>
             <div class="t-mag-card-content">
-              <div class="t-mag-card-title">${escapeHtml(bm.title)}</div>
-              <div class="t-mag-card-url">${escapeHtml(bm.url)}</div>
+              <div class="t-mag-card-title">${titleHtml}</div>
+              <div class="t-mag-card-url">${urlHtml}</div>
             </div>
           </div>
-          ${bm.remark ? `<div class="t-mag-card-remark">${escapeHtml(bm.remark)}</div>` : ''}
+          ${remarkHtml ? `<div class="t-mag-card-remark">${remarkHtml}</div>` : ''}
         </a>
       `;
+      };
       
-      const renderDepartment = (folderName, bookmarks, isOverflow = false) => {
+      const renderDepartment = (folderName, bookmarks, isOverflow = false, q = '') => {
         if (!bookmarks || bookmarks.length === 0) return '';
-        
-        const cardsHtml = bookmarks.map(renderCard).join('');
-        
+        const cardsHtml = bookmarks.map(bm => renderCard(bm, q)).join('');
+        const folderHtml = q ? TemplateShell.highlightText(folderName, q) : escapeHtml(folderName);
         return `
           <section class="t-mag-departments ${isOverflow ? 't-mag-overflow' : ''}">
             <div class="t-mag-department-header">
-              <div class="t-mag-department-eyebrow">${escapeHtml(folderName)}</div>
-              <h2 class="t-mag-department-title">${escapeHtml(folderName)}</h2>
+              <div class="t-mag-department-eyebrow">${folderHtml}</div>
+              <h2 class="t-mag-department-title">${folderHtml}</h2>
             </div>
             <div class="t-mag-grid">
               ${cardsHtml}
@@ -428,20 +476,77 @@
         `;
       };
       
-      let html = '';
-      
-      // Skip the first folder (used in hero)
-      for (let i = 1; i < folderNames.length; i++) {
-        const folder = folderNames[i];
-        if (deptCount < maxDepartments) {
-          html += renderDepartment(folder, groups[folder]);
-          deptCount++;
-        } else {
-          html += renderDepartment(folder, groups[folder], true);
+      const render = (q = '') => {
+        const filtered = q ? TemplateShell.searchBookmarks(allBookmarks, q) : allBookmarks;
+        const filteredGroups = {};
+        filtered.forEach(bm => {
+          if (!filteredGroups[bm._folder]) filteredGroups[bm._folder] = [];
+          filteredGroups[bm._folder].push(bm);
+        });
+        const folderNames = Object.keys(filteredGroups);
+        
+        if (folderNames.length === 0) {
+          heroContent.innerHTML = '';
+          mainContent.innerHTML = `<div class="t-mag-empty">${q ? '没有匹配的书签' : '暂无公开书签'}</div>`;
+          return;
         }
-      }
+        
+        if (!q) {
+          const featuredFolder = folderNames[0];
+          const featuredBookmark = filteredGroups[featuredFolder][0];
+          if (featuredBookmark) {
+            heroContent.innerHTML = `
+              <a href="${escapeHtml(featuredBookmark.url)}" target="_blank" rel="noopener noreferrer" class="t-mag-hero-featured t-mag-card">
+                <div class="t-mag-card-header">
+                  <div class="t-mag-card-icon">
+                    <img src="${escapeHtml(featuredBookmark.favicon_url || '')}" alt="" loading="lazy" onerror="this.style.display='none'">
+                  </div>
+                  <div class="t-mag-card-content">
+                    <div class="t-mag-card-title">${escapeHtml(featuredBookmark.title)}</div>
+                    <div class="t-mag-card-url">${escapeHtml(featuredBookmark.url)}</div>
+                  </div>
+                </div>
+                ${featuredBookmark.remark ? `<div class="t-mag-card-remark">${escapeHtml(featuredBookmark.remark)}</div>` : ''}
+              </a>
+            `;
+          } else {
+            heroContent.innerHTML = '';
+          }
+        } else {
+          heroContent.innerHTML = '';
+        }
+        
+        const maxDepartments = 6;
+        let deptCount = 0;
+        let html = '';
+        const startIdx = q ? 0 : 1;
+        for (let i = startIdx; i < folderNames.length; i++) {
+          const folder = folderNames[i];
+          if (deptCount < maxDepartments) {
+            html += renderDepartment(folder, filteredGroups[folder], false, q);
+            deptCount++;
+          } else {
+            html += renderDepartment(folder, filteredGroups[folder], true, q);
+          }
+        }
+        mainContent.innerHTML = html;
+      };
       
-      mainContent.innerHTML = html;
+      render();
+      
+      let searchTimer;
+      searchInput.addEventListener('input', (e) => {
+        const q = e.target.value.trim();
+        searchClear.style.display = q ? 'flex' : 'none';
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => render(q), 120);
+      });
+      searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        searchClear.style.display = 'none';
+        render('');
+        searchInput.focus();
+      });
       
       TemplateShell.mountSwitcher(document.body, 'magazine');
     });

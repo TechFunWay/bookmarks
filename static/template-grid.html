@@ -182,6 +182,12 @@
     @media (max-width: 768px) {
       .t-header {
         padding: 20px 24px;
+        flex-wrap: wrap;
+      }
+      .t-search {
+        order: 3;
+        max-width: none;
+        margin: 12px 0 0;
       }
       .t-grid {
         grid-template-columns: 1fr;
@@ -194,11 +200,78 @@
         padding: 24px;
       }
     }
+    .t-search {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+      margin: 0 24px;
+    }
+    .t-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-search-input {
+      width: 100%;
+      padding: 10px 44px 10px 40px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-search-input::placeholder {
+      color: var(--text-muted);
+    }
+    .t-search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-search-clear {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .t-search-clear:hover {
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+    }
+    .t-grid-card mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
   </style>
 </head>
 <body>
   <header class="t-header">
     <div class="t-brand">书签 · 卡片网格</div>
+    <div class="t-search" id="searchContainer">
+      <svg class="t-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
+      <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
+    </div>
     <button class="t-theme-toggle" id="themeToggle">切换主题</button>
   </header>
 
@@ -222,10 +295,12 @@
       });
 
       const tree = await TemplateShell.loadPublicTree();
-      const bookmarks = TemplateShell.flattenTree(tree);
+      const allBookmarks = TemplateShell.flattenTree(tree);
       const gridContainer = document.getElementById('gridContainer');
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
       
-      if (!bookmarks || bookmarks.length === 0) {
+      if (!allBookmarks || allBookmarks.length === 0) {
         gridContainer.style.display = 'block';
         gridContainer.innerHTML = '<div class="t-empty">暂无公开书签</div>';
         TemplateShell.mountSwitcher(document.body, 'grid');
@@ -234,45 +309,68 @@
       
       const fallbackSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
       
-      let html = '';
-      
-      for (const bm of bookmarks) {
-        const folderPath = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb.join(' / ') : '';
-        
-        let iconHtml = '';
-        if (bm.favicon_url) {
-          iconHtml = `<img src="${escapeHtml(bm.favicon_url)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><div style="display:none;">${fallbackSvg}</div>`;
-        } else {
-          iconHtml = fallbackSvg;
+      function render(list) {
+        if (!list || list.length === 0) {
+          gridContainer.innerHTML = '<div class="t-empty">无匹配结果</div>';
+          return;
         }
         
-        html += `
-          <a href="${escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-grid-card">
-            ${folderPath ? `<div class="t-grid-card-folder">${escapeHtml(folderPath)}</div>` : ''}
-            <div class="t-grid-card-favicon">
-              ${iconHtml}
-            </div>
-            <div class="t-grid-card-title">${escapeHtml(bm.title)}</div>
-            <div class="t-grid-card-url">${escapeHtml(bm.url)}</div>
-            ${bm.remark ? `<div class="t-grid-card-remark">${escapeHtml(bm.remark)}</div>` : ''}
-          </a>
-        `;
+        let html = '';
+        for (const bm of list) {
+          const folderPath = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb.join(' / ') : '';
+          
+          let iconHtml = '';
+          if (bm.favicon_url) {
+            iconHtml = `<img src="${TemplateShell.escapeHtml(bm.favicon_url)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><div style="display:none;">${fallbackSvg}</div>`;
+          } else {
+            iconHtml = fallbackSvg;
+          }
+          
+          const q = searchInput.value.trim();
+          const title = q ? TemplateShell.highlightText(bm.title, q) : TemplateShell.escapeHtml(bm.title);
+          const url = q ? TemplateShell.highlightText(bm.url, q) : TemplateShell.escapeHtml(bm.url);
+          const remark = bm.remark ? (q ? TemplateShell.highlightText(bm.remark, q) : TemplateShell.escapeHtml(bm.remark)) : '';
+          const folder = TemplateShell.escapeHtml(bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb.join(' / ') : '');
+          
+          html += `
+            <a href="${TemplateShell.escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-grid-card">
+              ${folder ? `<div class="t-grid-card-folder">${folder}</div>` : ''}
+              <div class="t-grid-card-favicon">
+                ${iconHtml}
+              </div>
+              <div class="t-grid-card-title">${title}</div>
+              <div class="t-grid-card-url">${url}</div>
+              ${remark ? `<div class="t-grid-card-remark">${remark}</div>` : ''}
+            </a>
+          `;
+        }
+        
+        gridContainer.innerHTML = html;
       }
       
-      gridContainer.innerHTML = html;
+      function doSearch() {
+        const q = searchInput.value.trim();
+        const filtered = TemplateShell.searchBookmarks(allBookmarks, q);
+        render(filtered);
+        searchClear.style.display = q ? 'flex' : 'none';
+      }
+      
+      searchInput.addEventListener('input', doSearch);
+      searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        doSearch();
+        searchInput.focus();
+      });
+      
+      // Initial render
+      render(allBookmarks);
       
       TemplateShell.mountSwitcher(document.body, 'grid');
     });
     
-    function escapeHtml(unsafe) {
-      if (!unsafe) return '';
-      return (unsafe + '')
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      TemplateShell.toggleTheme();
+    });
   </script>
 </body>
 </html>
