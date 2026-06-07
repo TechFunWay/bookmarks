@@ -16,12 +16,21 @@
       background: var(--bg-base);
       border-bottom: 1px solid var(--border);
       margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
     
     .t-header h1 {
       font-size: 20px;
       font-weight: 600;
       color: var(--text-primary);
+      margin: 0;
+      flex-shrink: 0;
+    }
+    
+    .t-header-spacer {
+      flex: 1;
     }
     
     .t-theme-toggle {
@@ -268,11 +277,85 @@
       margin-bottom: 16px;
       opacity: 0.5;
     }
+    
+    .t-search {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+    }
+    .t-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-search-input {
+      width: 100%;
+      padding: 8px 44px 8px 40px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-search-input::placeholder {
+      color: var(--text-muted);
+    }
+    .t-search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-search-clear {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .t-search-clear:hover {
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+    }
+    .t-tl-card-title mark,
+    .t-tl-card-url mark,
+    .t-tl-card-folder mark,
+    .t-tl-card-remark mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+    @media (max-width: 640px) {
+      .t-header { flex-wrap: wrap; }
+      .t-search { order: 3; max-width: none; flex-basis: 100%; }
+    }
   </style>
 </head>
 <body>
   <header class="t-header">
     <h1>书签 · 时间线</h1>
+    <div class="t-search" id="searchContainer">
+      <svg class="t-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
+      <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
+    </div>
     <button class="t-theme-toggle" id="themeToggle" aria-label="Toggle theme">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="5"></circle>
@@ -294,6 +377,8 @@
 
   <script src="template-shell.js"></script>
   <script>
+    let currentSearch = '';
+    
     document.addEventListener('DOMContentLoaded', async () => {
       TemplateShell.initTheme();
       TemplateShell.mountSwitcher(document.body, 'timeline');
@@ -303,22 +388,43 @@
       });
       
       const container = document.getElementById('timelineContainer');
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
+      let allFlat = [];
+      
+      const render = () => {
+        const filtered = currentSearch ? TemplateShell.searchBookmarks(allFlat, currentSearch) : allFlat;
+        if (!filtered || filtered.length === 0) {
+          renderEmpty(container, currentSearch);
+          return;
+        }
+        const months = TemplateShell.groupByMonth(filtered);
+        renderTimeline(container, months);
+      };
       
       try {
         const tree = await TemplateShell.loadPublicTree();
-        const flat = TemplateShell.flattenTree(tree);
-        
-        if (!flat || flat.length === 0) {
-          renderEmpty(container);
-          return;
-        }
-        
-        const months = TemplateShell.groupByMonth(flat);
-        renderTimeline(container, months);
+        allFlat = TemplateShell.flattenTree(tree);
+        render();
       } catch (err) {
         console.error('Failed to load timeline:', err);
-        renderEmpty(container);
+        renderEmpty(container, '');
       }
+      
+      let searchTimer;
+      searchInput.addEventListener('input', (e) => {
+        currentSearch = e.target.value.trim();
+        searchClear.style.display = currentSearch ? 'flex' : 'none';
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(render, 120);
+      });
+      searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        currentSearch = '';
+        searchClear.style.display = 'none';
+        render();
+        searchInput.focus();
+      });
     });
     
     function relativeTime(dateStr) {
@@ -345,7 +451,7 @@
       return `${diffYear}年前`;
     }
     
-    function renderEmpty(container) {
+    function renderEmpty(container, q) {
       container.innerHTML = `
         <div class="t-empty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -354,30 +460,27 @@
             <line x1="8" y1="2" x2="8" y2="6"></line>
             <line x1="3" y1="10" x2="21" y2="10"></line>
           </svg>
-          <p>暂无公开书签</p>
+          <p>${q ? '没有匹配的书签' : '暂无公开书签'}</p>
         </div>
       `;
     }
     
     function renderTimeline(container, months) {
       container.innerHTML = '';
+      const q = currentSearch;
       
       months.forEach(month => {
-        // Month Header
         const monthHeader = document.createElement('div');
         monthHeader.className = 't-tl-month';
         monthHeader.innerHTML = `
           <h2>${month.label}</h2>
           <span class="t-tl-count">${month.items.length} 条</span>
         `;
-        
         monthHeader.addEventListener('click', () => {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         });
-        
         container.appendChild(monthHeader);
         
-        // Entries Container
         const entriesContainer = document.createElement('div');
         entriesContainer.className = 't-tl-entries';
         
@@ -395,9 +498,12 @@
           const faviconHtml = item.favicon_url 
             ? `<img src="${item.favicon_url}" class="t-favicon size-32" alt="" loading="lazy" onerror="this.classList.add('missing');this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'%236a6a85\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'2\\' y1=\\'12\\' x2=\\'22\\' y2=\\'12\\'/><path d=\\'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z\\'/></svg>'">`
             : `<div class="t-favicon size-32 missing"></div>`;
-            
+          
+          const titleHtml = q ? TemplateShell.highlightText(item.title || '', q) : escapeHtml(item.title);
+          const urlHtml = q ? TemplateShell.highlightText(item.url || '', q) : escapeHtml(item.url);
+          const folderHtml = q ? TemplateShell.highlightText(breadcrumb, q) : escapeHtml(breadcrumb);
           const remarkHtml = item.remark 
-            ? `<div class="t-tl-card-remark">${escapeHtml(item.remark)}</div>` 
+            ? (q ? TemplateShell.highlightText(item.remark, q) : escapeHtml(item.remark))
             : '';
             
           entry.innerHTML = `
@@ -407,14 +513,14 @@
             <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="t-tl-card">
               <div class="t-tl-card-top">
                 ${faviconHtml}
-                <div class="t-tl-card-title">${escapeHtml(item.title)}</div>
+                <div class="t-tl-card-title">${titleHtml}</div>
                 <div class="t-tl-card-time">${relTime}</div>
               </div>
               <div class="t-tl-card-bottom">
-                <div class="t-tl-card-folder">${escapeHtml(breadcrumb)}</div>
-                <div class="t-tl-card-url mono">${escapeHtml(item.url)}</div>
+                <div class="t-tl-card-folder">${folderHtml}</div>
+                <div class="t-tl-card-url mono">${urlHtml}</div>
               </div>
-              ${remarkHtml}
+              ${remarkHtml ? `<div class="t-tl-card-remark">${remarkHtml}</div>` : ''}
             </a>
           `;
           
