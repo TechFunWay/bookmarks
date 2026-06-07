@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>书签 · 表格</title>
+  <link rel="stylesheet" href="template-common.css">
+  <style>
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+    }
+    .t-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 60px;
+      padding: 0 24px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .t-brand {
+      font-weight: 600;
+      font-size: 16px;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+    .t-theme-toggle {
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 4px 8px;
+    }
+    .t-theme-toggle:hover {
+      color: var(--text-primary);
+    }
+    .t-tbl-container {
+      width: 100%;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+    .t-tbl {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .t-tbl-header {
+      display: none;
+    }
+    .t-tbl-row {
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr 80px;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      transition: background 0.2s ease;
+    }
+    .t-tbl-row:hover {
+      background: var(--bg-elev-1);
+    }
+    .t-tbl-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      text-decoration: none;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .t-tbl-title:hover {
+      color: var(--accent);
+    }
+    .t-tbl-url {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .t-tbl-folder {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .t-tbl-date {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .t-tbl-favicon {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .t-empty {
+      text-align: center;
+      padding: 80px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .t-footer {
+      padding: 48px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .t-footer a {
+      color: var(--text-muted);
+      font-size: 13px;
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    .t-footer a:hover {
+      color: var(--text-primary);
+    }
+    @media (max-width: 640px) {
+      .t-tbl-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 16px;
+        align-items: start;
+      }
+      .t-tbl-date {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="t-header">
+    <div class="t-brand">书签 · 表格</div>
+    <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">切换主题</button>
+  </header>
+
+  <main class="t-tbl-container" id="app">
+  </main>
+
+  <footer class="t-footer">
+    <a href="/">← 返回主应用</a>
+  </footer>
+
+  <script src="template-shell.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const s = localStorage.getItem('bookmark_theme');
+      if (!s) {
+        localStorage.setItem('bookmark_theme', 'light');
+      }
+      TemplateShell.initTheme();
+
+      const app = document.getElementById('app');
+      const tree = await TemplateShell.loadPublicTree();
+      
+      if (!tree || tree.length === 0) {
+        app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
+      } else {
+        const flat = TemplateShell.flattenTree(tree);
+        if (flat.length === 0) {
+          app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
+        } else {
+          flat.sort((a, b) => {
+            const pathA = (a.breadcrumb || []).join(' / ');
+            const pathB = (b.breadcrumb || []).join(' / ');
+            if (pathA !== pathB) return pathA.localeCompare(pathB);
+            return (a.title || '').localeCompare(b.title || '');
+          });
+
+          let html = '<div class="t-tbl">';
+          for (const item of flat) {
+            const path = (item.breadcrumb || []).join(' / ');
+            const dateStr = formatDate(item.updated_at || item.created_at);
+            
+            const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
+            
+            const favicon = item.favicon_url 
+              ? `<img src="${escapeHtml(item.favicon_url)}" class="t-tbl-favicon" alt="" onerror="this.src='${fallbackSvg}'">`
+              : `<img src="${fallbackSvg}" class="t-tbl-favicon" alt="">`;
+              
+            html += `
+              <div class="t-tbl-row">
+                <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="t-tbl-title">
+                  ${favicon}
+                  <span>${escapeHtml(item.title)}</span>
+                </a>
+                <div class="t-tbl-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>
+                <div class="t-tbl-folder" title="${escapeHtml(path)}">${escapeHtml(path)}</div>
+                <div class="t-tbl-date">${escapeHtml(dateStr)}</div>
+              </div>
+            `;
+          }
+          html += '</div>';
+          app.innerHTML = html;
+        }
+      }
+
+      TemplateShell.mountSwitcher(document.body, 'table');
+    });
+
+    function formatDate(str) {
+      if (!str) return '';
+      try {
+        const d = new Date(str);
+        if (isNaN(d.getTime())) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
