@@ -278,26 +278,36 @@
         return;
       }
 
-      // b) 管理员默认模板优先
+      // b) 获取管理员默认值
       let sysConfig = {};
       try {
         const r = await fetch('/api/config/system');
         if (r.ok) sysConfig = await r.json();
       } catch (e) {}
+      const adminDefault = sysConfig && sysConfig.default_template;
 
-      if (sysConfig && sysConfig.default_template && validTemplates.includes(sysConfig.default_template)) {
-        window.location.replace('/template-' + sysConfig.default_template + '.html');
-        return;
+      // c) 检测管理员是否换了默认值，清掉用户旧缓存
+      const lastSeen = localStorage.getItem('bookmark_admin_default');
+      if (adminDefault && adminDefault !== lastSeen) {
+        localStorage.removeItem('bookmark_template');
+        localStorage.setItem('bookmark_admin_default', adminDefault);
       }
+      if (adminDefault) localStorage.setItem('bookmark_admin_default', adminDefault);
 
-      // c) 用户本地选择兜底
+      // d) 用户本地选择优先
       const localTemplate = localStorage.getItem('bookmark_template');
       if (localTemplate && validTemplates.includes(localTemplate)) {
         window.location.replace('/template-' + localTemplate + '.html');
         return;
       }
 
-      // d) 显示选择器
+      // e) 管理员默认值兜底
+      if (adminDefault && validTemplates.includes(adminDefault)) {
+        window.location.replace('/template-' + adminDefault + '.html');
+        return;
+      }
+
+      // f) 显示选择器
       document.getElementById('app').classList.add('ready');
     }
 
