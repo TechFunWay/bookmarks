@@ -218,6 +218,54 @@ html[data-theme="light"] .t-sw{--bg:#fff;--tc:#111;--bc:#e5e5e5;--hc:#f5f5f5;--a
       if(!q)return TemplateShell.escapeHtml(text);
       const parts=text.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`,'gi'));
       return parts.map(p=>p.toLowerCase()===q.toLowerCase()?'<mark>'+TemplateShell.escapeHtml(p)+'</mark>':TemplateShell.escapeHtml(p)).join('');
+    },
+    sortBookmarks(bms,mode){
+      if(!bms||!Array.isArray(bms))return[];
+      if(!mode||mode==='default')return bms;
+      const desc=mode.endsWith('-desc');
+      const base=mode.replace(/-asc$|-desc$/,'');
+      const validBases=['folder','bookmark','folder-bookmark','time-created','time-updated'];
+      if(!validBases.includes(base))return bms;
+      const dir=desc?-1:1;
+      const path=b=>(b.breadcrumb&&b.breadcrumb.length)?b.breadcrumb.join(' / '):'';
+      const title=b=>(b.title||'').toLowerCase();
+      const c=new Intl.Collator('zh-CN',{sensitivity:'base',numeric:true});
+      if(base==='folder')return[...bms].sort((a,b)=>dir*c.compare(path(a),path(b)));
+      if(base==='bookmark')return[...bms].sort((a,b)=>dir*c.compare(title(a),title(b)));
+      if(base==='folder-bookmark')return[...bms].sort((a,b)=>{const p=dir*c.compare(path(a),path(b));if(p!==0)return p;return dir*c.compare(title(a),title(b));});
+      if(base==='time-created'||base==='time-updated'){
+        const field=base==='time-created'?'created_at':'updated_at';
+        const withTime=[],withoutTime=[];
+        for(const b of bms){
+          const t=b[field]?new Date(b[field]).getTime():null;
+          if(t===null||isNaN(t))withoutTime.push(b);
+          else withTime.push({b,t});
+        }
+        withTime.sort((a,b)=>dir*(a.t-b.t));
+        return[...withTime.map(x=>x.b),...withoutTime];
+      }
+      return bms;
+    },
+    sortFolderNames(names,mode){
+      if(!names||!Array.isArray(names))return[];
+      const desc=mode&&mode.endsWith('-desc');
+      const base=mode?mode.replace(/-asc$|-desc$/,''):'';
+      if(base!=='folder'&&base!=='folder-bookmark')return names;
+      const c=new Intl.Collator('zh-CN',{sensitivity:'base',numeric:true});
+      const sorted=[...names].sort((a,b)=>c.compare(a,b));
+      return desc?sorted.reverse():sorted;
+    },
+    mountSortControl(target,onChange){
+      if(!target||target.querySelector('.t-sort'))return'default';
+      const wrap=document.createElement('div');
+      wrap.className='t-sort';
+      wrap.innerHTML='<svg class="t-sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M6 12h12M10 18h4"/></svg><select class="t-sort-select" aria-label="排序方式"><option value="default">默认顺序</option><option value="folder-asc">按文件夹 ↑</option><option value="folder-desc">按文件夹 ↓</option><option value="bookmark-asc">按书签 ↑</option><option value="bookmark-desc">按书签 ↓</option><option value="folder-bookmark-asc">文件夹+书签 ↑</option><option value="folder-bookmark-desc">文件夹+书签 ↓</option><option value="time-created-asc">创建时间 ↑</option><option value="time-created-desc">创建时间 ↓</option><option value="time-updated-asc">更新时间 ↑</option><option value="time-updated-desc">更新时间 ↓</option></select>';
+      target.appendChild(wrap);
+      const sel=wrap.querySelector('.t-sort-select');
+      const saved=localStorage.getItem('bookmark_sort')||'default';
+      sel.value=saved;
+      sel.addEventListener('change',()=>{localStorage.setItem('bookmark_sort',sel.value);if(onChange)onChange(sel.value);});
+      return sel.value;
     }
   };
 })();
