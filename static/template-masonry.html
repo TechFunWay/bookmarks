@@ -197,12 +197,84 @@
     .t-empty-link:hover {
       text-decoration: underline;
     }
+    
+    .t-search {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+      margin: 0 16px;
+    }
+    .t-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-search-input {
+      width: 100%;
+      padding: 10px 44px 10px 40px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-search-input::placeholder {
+      color: var(--text-muted);
+    }
+    .t-search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-search-clear {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .t-search-clear:hover {
+      color: var(--text-primary);
+      background: var(--bg-elev-2);
+    }
+    .t-mas-pin mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+    @media (max-width: 639px) {
+      .t-header { flex-wrap: wrap; }
+      .t-search { order: 3; max-width: none; margin: 12px 0 0; flex-basis: 100%; }
+    }
   </style>
 </head>
 <body>
   <div class="t-container">
     <header class="t-header">
       <div class="t-brand">书签 · 瀑布流</div>
+      <div class="t-search" id="searchContainer">
+        <svg class="t-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
+        <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
+      </div>
       <button class="t-theme-toggle" id="themeToggle" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24">
           <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm0-2V4c4.418 0 8 3.582 8 8s-3.582 8-8 8z"/>
@@ -232,6 +304,8 @@
       const tagCloud = document.getElementById('tagCloud');
       const gridContainer = document.getElementById('gridContainer');
       const emptyState = document.getElementById('emptyState');
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
       
       if (allBookmarks.length === 0) {
         emptyState.innerHTML = `
@@ -245,6 +319,7 @@
       }
       
       const folders = Object.keys(groups).sort();
+      let currentSearch = '';
       
       function renderTags(activeFilter) {
         tagCloud.innerHTML = '';
@@ -269,15 +344,18 @@
         
         let filtered = allBookmarks;
         if (filter !== 'all') {
-          filtered = allBookmarks.filter(b => b.breadcrumb && b.breadcrumb[0] === filter);
+          filtered = filtered.filter(b => b.breadcrumb && b.breadcrumb[0] === filter);
+        }
+        if (currentSearch) {
+          filtered = TemplateShell.searchBookmarks(filtered, currentSearch);
         }
         
         if (filtered.length === 0) {
           gridContainer.style.display = 'none';
           emptyState.innerHTML = `
             <div class="t-empty">
-              <h3>当前筛选下没有书签</h3>
-              <p>该分类下暂无公开书签</p>
+              <h3>${currentSearch ? '没有匹配的书签' : '当前筛选下没有书签'}</h3>
+              <p>${currentSearch ? '试试其他关键词' : '该分类下暂无公开书签'}</p>
               <a class="t-empty-link" onclick="window.location.hash='#all'">查看全部</a>
             </div>
           `;
@@ -299,26 +377,26 @@
           
           let faviconHtml = '';
           if (b.favicon_url) {
-            faviconHtml = `<img src="${b.favicon_url}" class="t-favicon t-favicon-48" loading="lazy" alt="" onerror="this.classList.add('missing');this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWE5YWIwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxsGluZSB4MT0iMiIgeTE9IjEyIiB4Mj0iMjIiIHkyPSIxMiI+PC9saW5lPjxwYXRoIGQ9Ik0xMiAyYTE1LjMgMTUuMyAwIDAgMSA0IDEwIDE1LjMgMTUuMyAwIDAgMS00IDEwIDE1LjMgMTUuMyAwIDAgMS00LTEwIDE1LjMgMTUuMyAwIDAgMSA0LTEweiI+PC9wYXRoPjwvc3ZnPg=='">`;
+            faviconHtml = `<img src="${b.favicon_url}" class="t-favicon t-favicon-48" loading="lazy" alt="" onerror="this.classList.add('missing');this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWE5YWIwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxsaW5lIHgxPSIyIiB5MT0iMTIiIHgyPSIyMiIgeTI9IjEyIj48L2xpbmU+PHBhdGggZD0iTTEyIDJhMTUuMyAxNS4zIDAgMCAxIDQgMTAgMTUuMyAxNS4zIDAgMCAxLTQgMTAgMTUuMyAxNS4zIDAgMCAxLTQtMTAgMTUuMyAxNS4zIDAgMCAxIDQtMTB6Ij48L3BhdGg+PC9zdmc+'">`;
           } else {
             faviconHtml = `<div class="t-favicon t-favicon-48 missing" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>`;
           }
           
-          let remarkHtml = '';
-          if (b.remark) {
-            remarkHtml = `<div class="t-mas-pin-remark">${b.remark.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
-          }
+          const titleHtml = currentSearch ? TemplateShell.highlightText(b.title || '', currentSearch) : TemplateShell.escapeHtml(b.title);
+          const urlHtml = currentSearch ? TemplateShell.highlightText(b.url || '', currentSearch) : TemplateShell.escapeHtml(b.url);
+          const remarkHtml = b.remark ? (currentSearch ? TemplateShell.highlightText(b.remark, currentSearch) : TemplateShell.escapeHtml(b.remark)) : '';
+          const folderHtml = currentSearch ? TemplateShell.highlightText(folderName, currentSearch) : TemplateShell.escapeHtml(folderName);
           
           pin.innerHTML = `
             <div class="t-mas-pin-top">
               ${faviconHtml}
-              <div class="t-mas-pin-title">${b.title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+              <div class="t-mas-pin-title">${titleHtml}</div>
             </div>
-            <div class="t-mas-pin-url mono">${b.url.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-            ${remarkHtml}
+            <div class="t-mas-pin-url mono">${urlHtml}</div>
+            ${remarkHtml ? `<div class="t-mas-pin-remark">${remarkHtml}</div>` : ''}
             <div class="t-mas-pin-bottom">
               <div class="t-mas-pin-dot"></div>
-              <span>${folderName.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+              <span>${folderHtml}</span>
             </div>
           `;
           
@@ -330,18 +408,36 @@
         window.location.hash = filter === 'all' ? '#all' : `#${encodeURIComponent(filter)}`;
       }
       
-      function handleHashChange() {
+      function getCurrentHash() {
         let hash = window.location.hash.substring(1);
         if (!hash) hash = 'all';
         else hash = decodeURIComponent(hash);
-        
-        if (hash !== 'all' && !folders.includes(hash)) {
-          hash = 'all';
-        }
-        
+        if (hash !== 'all' && !folders.includes(hash)) hash = 'all';
+        return hash;
+      }
+      
+      function handleHashChange() {
+        const hash = getCurrentHash();
         renderTags(hash);
         renderGrid(hash);
       }
+      
+      let searchTimer;
+      searchInput.addEventListener('input', (e) => {
+        currentSearch = e.target.value.trim();
+        searchClear.style.display = currentSearch ? 'flex' : 'none';
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          renderGrid(getCurrentHash());
+        }, 120);
+      });
+      searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        currentSearch = '';
+        searchClear.style.display = 'none';
+        renderGrid(getCurrentHash());
+        searchInput.focus();
+      });
       
       window.addEventListener('hashchange', handleHashChange);
       handleHashChange();
