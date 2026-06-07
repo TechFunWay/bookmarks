@@ -267,38 +267,37 @@
       TemplateShell.setUserTemplate(name);
     }
 
-    // Main logic
     async function init() {
       const urlParams = new URLSearchParams(window.location.search);
       const tParam = urlParams.get('t');
       const validTemplates = ['magazine', 'masonry', 'timeline', 'minimal'];
 
-      // a) If ?t=name query param exists
+      // a) ?t=name 强制指定
       if (tParam && validTemplates.includes(tParam)) {
         TemplateShell.setUserTemplate(tParam);
         return;
       }
 
-      // b) If localStorage has 'bookmark_template'
+      // b) 管理员默认模板优先
+      let sysConfig = {};
+      try {
+        const r = await fetch('/api/config/system');
+        if (r.ok) sysConfig = await r.json();
+      } catch (e) {}
+
+      if (sysConfig && sysConfig.default_template && validTemplates.includes(sysConfig.default_template)) {
+        window.location.replace('/template-' + sysConfig.default_template + '.html');
+        return;
+      }
+
+      // c) 用户本地选择兜底
       const localTemplate = localStorage.getItem('bookmark_template');
       if (localTemplate && validTemplates.includes(localTemplate)) {
         window.location.replace('/template-' + localTemplate + '.html');
         return;
       }
 
-      // c) If /api/config/system has default_template
-      let sysConfig = {};
-      try {
-        const r = await fetch('/api/config/system');
-        if (r.ok) sysConfig = await r.json();
-      } catch (e) {}
-      
-      if (sysConfig && sysConfig.default_template && validTemplates.includes(sysConfig.default_template)) {
-        window.location.replace('/template-' + sysConfig.default_template + '.html');
-        return;
-      }
-
-      // d) Otherwise render the chooser UI
+      // d) 显示选择器
       document.getElementById('app').classList.add('ready');
     }
 
