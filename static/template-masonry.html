@@ -254,6 +254,57 @@
       color: var(--text-primary);
       background: var(--bg-elev-2);
     }
+    .t-sort {
+      position: relative;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+    .t-sort-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-sort-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding: 10px 32px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-sort-select:hover {
+      border-color: var(--border-strong);
+    }
+    .t-sort-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-sort::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--text-muted);
+      pointer-events: none;
+    }
     .t-mas-pin mark {
       background: var(--accent-soft);
       color: var(--accent);
@@ -275,6 +326,7 @@
         <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
         <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
       </div>
+      <div class="t-sort" id="sortContainer"></div>
       <button class="t-theme-toggle" id="themeToggle" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24">
           <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm0-2V4c4.418 0 8 3.582 8 8s-3.582 8-8 8z"/>
@@ -306,6 +358,8 @@
       const emptyState = document.getElementById('emptyState');
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
+      const sortContainer = document.getElementById('sortContainer');
+      let currentSort = 'default';
       
       if (allBookmarks.length === 0) {
         emptyState.innerHTML = `
@@ -349,6 +403,7 @@
         if (currentSearch) {
           filtered = TemplateShell.searchBookmarks(filtered, currentSearch);
         }
+        filtered = TemplateShell.sortBookmarks(filtered, currentSort);
         
         if (filtered.length === 0) {
           gridContainer.style.display = 'none';
@@ -437,6 +492,11 @@
         searchClear.style.display = 'none';
         renderGrid(getCurrentHash());
         searchInput.focus();
+      });
+      
+      currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
+        currentSort = m;
+        renderGrid(getCurrentHash());
       });
       
       window.addEventListener('hashchange', handleHashChange);
