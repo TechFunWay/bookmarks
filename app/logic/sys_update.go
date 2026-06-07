@@ -539,6 +539,7 @@ func (u *Upgrade) executeSQLForV2_3_0() error {
 		"CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);",
 		"CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);",
 		"CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);",
+		"ALTER TABLE users ADD COLUMN last_login_at DATETIME;",
 	}
 
 	for i, stmt := range sqlStatements {
