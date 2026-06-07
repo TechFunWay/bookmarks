@@ -380,6 +380,57 @@
       color: var(--text-primary);
       background: var(--bg-elev-1);
     }
+    .t-sort {
+      position: relative;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+    .t-sort-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-sort-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding: 10px 32px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-sort-select:hover {
+      border-color: var(--border-strong);
+    }
+    .t-sort-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-sort::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--text-muted);
+      pointer-events: none;
+    }
     .t-mag-card mark {
       background: var(--accent-soft);
       color: var(--accent);
@@ -396,6 +447,7 @@
       <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
+    <div class="t-sort" id="sortContainer"></div>
     <button class="t-theme-toggle" id="themeToggle">切换主题</button>
   </header>
 
@@ -438,6 +490,8 @@
       const mainContent = document.getElementById('mainContent');
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
+      const sortContainer = document.getElementById('sortContainer');
+      let currentSort = 'default';
       
       const renderCard = (bm, q) => {
         const titleHtml = q ? TemplateShell.highlightText(bm.title || '', q) : escapeHtml(bm.title);
@@ -483,7 +537,12 @@
           if (!filteredGroups[bm._folder]) filteredGroups[bm._folder] = [];
           filteredGroups[bm._folder].push(bm);
         });
-        const folderNames = Object.keys(filteredGroups);
+        Object.keys(filteredGroups).forEach(folder => {
+          if (currentSort !== 'default') {
+            filteredGroups[folder] = TemplateShell.sortBookmarks(filteredGroups[folder], currentSort);
+          }
+        });
+        let folderNames = TemplateShell.sortFolderNames(Object.keys(filteredGroups), currentSort);
         
         if (folderNames.length === 0) {
           heroContent.innerHTML = '';
@@ -546,6 +605,11 @@
         searchClear.style.display = 'none';
         render('');
         searchInput.focus();
+      });
+      
+      currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
+        currentSort = m;
+        render(searchInput.value.trim());
       });
       
       TemplateShell.mountSwitcher(document.body, 'magazine');
