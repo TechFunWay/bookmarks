@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -99,16 +100,17 @@ type node struct {
 }
 
 type user struct {
-	ID                   int64   `json:"id"`
-	Username             string  `json:"username"`
-	Nickname             string  `json:"nickname"`
-	Email                string  `json:"email"`
-	Avatar               *string `json:"avatar"`
-	IsActive             bool    `json:"is_active"`
-	IsAdmin              bool    `json:"is_admin"`
-	APIKey               *string `json:"api_key,omitempty"`
-	CreatedAt            string  `json:"created_at"`
-	HasSecurityQuestions bool    `json:"has_security_questions"`
+	ID                   int64    `json:"id"`
+	Username             string   `json:"username"`
+	Nickname             string   `json:"nickname"`
+	Email                string   `json:"email"`
+	Avatar               *string  `json:"avatar"`
+	IsActive             bool     `json:"is_active"`
+	IsAdmin              bool     `json:"is_admin"`
+	APIKey               *string  `json:"api_key,omitempty"`
+	LastLoginAt          *string  `json:"last_login_at,omitempty"`
+	CreatedAt            string   `json:"created_at"`
+	HasSecurityQuestions bool     `json:"has_security_questions"`
 }
 
 type authRequest struct {
@@ -376,6 +378,7 @@ func main() {
 			r.Put("/nodes/{id}", s.handleAdminUpdateNode)
 			r.Delete("/nodes/{id}", s.handleAdminDeleteNode)
 			r.Get("/audit-log", s.handleGetAuditLog)
+			r.Get("/audit-log/export", s.handleExportAuditLog)
 				r.Post("/folders", s.handleAdminCreateFolder)
 				r.Post("/bookmarks", s.handleAdminCreateBookmark)
 				r.Put("/nodes/reorder", s.handleAdminReorderNodes)
@@ -1186,6 +1189,31 @@ func (s *server) handleEdgeImport(w http.ResponseWriter, r *http.Request) {
 }
 
 // 解析Edge导出的HTML书签
+// parseBoolFilter 解析布尔过滤参数
+func parseBoolFilter(s string) (int, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "1":
+		return 1, true
+	case "false", "0":
+		return 0, true
+	}
+	return 0, false
+}
+
+// parseUserSort 校验排序参数
+func parseUserSort(sort, order string) (string, string) {
+	col := "created_at"
+	switch sort {
+	case "created_at", "last_login_at", "username":
+		col = sort
+	}
+	dir := "DESC"
+	if strings.EqualFold(order, "asc") {
+		dir = "ASC"
+	}
+	return col, dir
+}
+
 func parseEdgeHTML(htmlContent string, iconPath string) ([]*node, error) {
 	// 解析HTML文档
 	doc, err := html.Parse(strings.NewReader(htmlContent))
@@ -2702,7 +2730,7 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	var err error
-	if req.Key == "allow_register" || req.Key == "require_login" {
+	if req.Key == "allow_register" || req.Key == "require_login" || req.Key == "default_template" {
 		var isAdmin int
 		err = s.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
 		if err != nil {
@@ -2890,12 +2918,30 @@ func (s *server) handleGetUsers(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * limit
 
 	var whereClause string
+	var whereParts []string
 	var args []interface{}
 
 	if search != "" {
-		whereClause = "WHERE username LIKE ? OR nickname LIKE ? OR email LIKE ?"
+		whereParts = append(whereParts, "(username LIKE ? OR nickname LIKE ? OR email LIKE ?)")
 		searchPattern := "%" + search + "%"
 		args = []interface{}{searchPattern, searchPattern, searchPattern}
+	}
+
+	if isActiveStr := r.URL.Query().Get("is_active"); isActiveStr != "" {
+		if v, ok := parseBoolFilter(isActiveStr); ok {
+			whereParts = append(whereParts, "is_active = ?")
+			args = append(args, v)
+		}
+	}
+	if isAdminStr := r.URL.Query().Get("is_admin"); isAdminStr != "" {
+		if v, ok := parseBoolFilter(isAdminStr); ok {
+			whereParts = append(whereParts, "is_admin = ?")
+			args = append(args, v)
+		}
+	}
+
+	if len(whereParts) > 0 {
+		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
 	}
 
 	countQuery := "SELECT COUNT(*) FROM users " + whereClause
@@ -2906,7 +2952,9 @@ func (s *server) handleGetUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "SELECT id, username, nickname, email, avatar, is_active, is_admin, created_at FROM users " + whereClause + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	sortCol, sortOrder := parseUserSort(r.URL.Query().Get("sort"), r.URL.Query().Get("order"))
+	query := "SELECT id, username, nickname, email, avatar, is_active, is_admin, last_login_at, created_at FROM users " +
+		whereClause + fmt.Sprintf(" ORDER BY %s %s LIMIT ? OFFSET ?", sortCol, sortOrder)
 	args = append(args, limit, offset)
 
 	rows, err := s.db.Query(query, args...)
@@ -2915,19 +2963,22 @@ func (s *server) handleGetUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
-
 	var users []user
 	for rows.Next() {
 		var u user
 		var isActive, isAdmin int
-		var avatar sql.NullString
-		err := rows.Scan(&u.ID, &u.Username, &u.Nickname, &u.Email, &avatar, &isActive, &isAdmin, &u.CreatedAt)
+		var avatar, lastLogin sql.NullString
+		err := rows.Scan(&u.ID, &u.Username, &u.Nickname, &u.Email, &avatar, &isActive, &isAdmin, &lastLogin, &u.CreatedAt)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err)
 			return
 		}
 		if avatar.Valid {
 			u.Avatar = &avatar.String
+		}
+		if lastLogin.Valid {
+			s := lastLogin.String
+			u.LastLoginAt = &s
 		}
 		u.IsActive = isActive == 1
 		u.IsAdmin = isAdmin == 1
@@ -2952,9 +3003,9 @@ func (s *server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 
 	var u user
 	var isActive, isAdmin int
-	var avatar sql.NullString
-	err = s.db.QueryRow("SELECT id, username, nickname, email, avatar, is_active, is_admin, created_at FROM users WHERE id = ?", userID).
-		Scan(&u.ID, &u.Username, &u.Nickname, &u.Email, &avatar, &isActive, &isAdmin, &u.CreatedAt)
+	var avatar, lastLogin sql.NullString
+	err = s.db.QueryRow("SELECT id, username, nickname, email, avatar, is_active, is_admin, last_login_at, created_at FROM users WHERE id = ?", userID).
+		Scan(&u.ID, &u.Username, &u.Nickname, &u.Email, &avatar, &isActive, &isAdmin, &lastLogin, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respondError(w, http.StatusNotFound, errors.New("user not found"))
@@ -2966,6 +3017,10 @@ func (s *server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 
 	if avatar.Valid {
 		u.Avatar = &avatar.String
+	}
+	if lastLogin.Valid {
+		s := lastLogin.String
+		u.LastLoginAt = &s
 	}
 	u.IsActive = isActive == 1
 	u.IsAdmin = isAdmin == 1
@@ -3242,11 +3297,22 @@ func (s *server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 		TotalNodes      int `json:"total_nodes"`
 	}
 
-	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
-	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark'").Scan(&stats.TotalBookmarks)
-	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes WHERE type = 'folder'").Scan(&stats.TotalFolders)
-	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark' AND visibility = 'public'").Scan(&stats.PublicBookmarks)
-	s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM nodes").Scan(&stats.TotalNodes)
+	queries := []struct {
+		dest *int
+		sql  string
+	}{
+		{&stats.TotalUsers, "SELECT COUNT(*) FROM users"},
+		{&stats.TotalBookmarks, "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark'"},
+		{&stats.TotalFolders, "SELECT COUNT(*) FROM nodes WHERE type = 'folder'"},
+		{&stats.PublicBookmarks, "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark' AND visibility = 'public'"},
+		{&stats.TotalNodes, "SELECT COUNT(*) FROM nodes"},
+	}
+	for _, q := range queries {
+		if err := s.db.QueryRowContext(r.Context(), q.sql).Scan(q.dest); err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Errorf("stats query failed: %w", err))
+			return
+		}
+	}
 
 	respondJSON(w, http.StatusOK, stats)
 }
@@ -3572,12 +3638,21 @@ func (s *server) handleGetAuditLog(w http.ResponseWriter, r *http.Request) {
 	var args []interface{}
 
 	if userIDStr := r.URL.Query().Get("user_id"); userIDStr != "" {
+		uid, parseErr := strconv.ParseInt(userIDStr, 10, 64)
+		if parseErr != nil || uid < 0 {
+			respondError(w, http.StatusBadRequest, errors.New("user_id must be a non-negative integer"))
+			return
+		}
 		whereClause += " AND user_id = ?"
-		args = append(args, userIDStr)
+		args = append(args, uid)
 	}
 	if action := r.URL.Query().Get("action"); action != "" {
 		whereClause += " AND action = ?"
 		args = append(args, action)
+	}
+	if search := r.URL.Query().Get("search"); search != "" {
+		whereClause += " AND detail LIKE ?"
+		args = append(args, "%"+search+"%")
 	}
 	if dateFrom := r.URL.Query().Get("date_from"); dateFrom != "" {
 		whereClause += " AND created_at >= ?"
@@ -3625,6 +3700,104 @@ func (s *server) handleGetAuditLog(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleExportAuditLog 导出操作日志为CSV
+func (s *server) handleExportAuditLog(w http.ResponseWriter, r *http.Request) {
+	whereClause := "WHERE 1=1"
+	var args []interface{}
+
+	if userIDStr := r.URL.Query().Get("user_id"); userIDStr != "" {
+		uid, parseErr := strconv.ParseInt(userIDStr, 10, 64)
+		if parseErr != nil || uid < 0 {
+			respondError(w, http.StatusBadRequest, errors.New("user_id must be a non-negative integer"))
+			return
+		}
+		whereClause += " AND user_id = ?"
+		args = append(args, uid)
+	}
+	if action := r.URL.Query().Get("action"); action != "" {
+		whereClause += " AND action = ?"
+		args = append(args, action)
+	}
+	if search := r.URL.Query().Get("search"); search != "" {
+		whereClause += " AND detail LIKE ?"
+		args = append(args, "%"+search+"%")
+	}
+	if dateFrom := r.URL.Query().Get("date_from"); dateFrom != "" {
+		whereClause += " AND created_at >= ?"
+		args = append(args, dateFrom)
+	}
+	if dateTo := r.URL.Query().Get("date_to"); dateTo != "" {
+		whereClause += " AND created_at <= ?"
+		args = append(args, dateTo+" 23:59:59")
+	}
+
+	query := "SELECT id, user_id, username, action, target_type, target_id, detail, ip_address, created_at FROM audit_log " +
+		whereClause + " ORDER BY created_at DESC"
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="audit-log.csv"`)
+
+	writer := csv.NewWriter(w)
+	if err := writer.Write([]string{
+		"id", "user_id", "username", "action", "target_type", "target_id", "detail", "ip_address", "created_at",
+	}); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	for rows.Next() {
+		var (
+			id         int64
+			userID     int64
+			username   sql.NullString
+			action     string
+			targetType sql.NullString
+			targetID   sql.NullInt64
+			detail     sql.NullString
+			ipAddress  sql.NullString
+			createdAt  string
+		)
+		if err := rows.Scan(&id, &userID, &username, &action, &targetType, &targetID, &detail, &ipAddress, &createdAt); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		row := []string{
+			strconv.FormatInt(id, 10),
+			strconv.FormatInt(userID, 10),
+			username.String,
+			action,
+			targetType.String,
+			func() string {
+				if targetID.Valid {
+					return strconv.FormatInt(targetID.Int64, 10)
+				}
+				return ""
+			}(),
+			detail.String,
+			ipAddress.String,
+			createdAt,
+		}
+		if err := writer.Write(row); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if err := rows.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+}
+
 // handleAdminExportUser 导出任意用户书签
 func (s *server) handleAdminExportUser(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "userId")
@@ -3655,6 +3828,10 @@ func (s *server) handleAdminCreateFolder(w http.ResponseWriter, r *http.Request)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	if !s.userExists(r.Context(), req.UserID) {
+		respondError(w, http.StatusNotFound, errors.New("user not found"))
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
@@ -3694,6 +3871,10 @@ func (s *server) handleAdminCreateBookmark(w http.ResponseWriter, r *http.Reques
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	if !s.userExists(r.Context(), req.UserID) {
+		respondError(w, http.StatusNotFound, errors.New("user not found"))
 		return
 	}
 	req.URL = strings.TrimSpace(req.URL)
@@ -3755,6 +3936,10 @@ func (s *server) handleAdminReorderNodes(w http.ResponseWriter, r *http.Request)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	if !s.userExists(r.Context(), req.UserID) {
+		respondError(w, http.StatusNotFound, errors.New("user not found"))
 		return
 	}
 	if len(req.OrderedIDs) == 0 {
@@ -4210,6 +4395,18 @@ func getUserID(r *http.Request) int64 {
 	return 0
 }
 
+// userExists reports whether the users table contains a row with the
+// given id. Used by admin endpoints to fail fast when a target user is
+// missing instead of creating orphan rows or no-op updates.
+func (s *server) userExists(ctx context.Context, userID int64) bool {
+	if userID <= 0 {
+		return false
+	}
+	var found int
+	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM users WHERE id = ?", userID).Scan(&found)
+	return err == nil
+}
+
 // logAudit 记录审计日志
 func (s *server) logAudit(ctx context.Context, userID int64, username, action, targetType string, targetID int64, detail, ip string) {
 	s.db.ExecContext(ctx, `INSERT INTO audit_log (user_id, username, action, target_type, target_id, detail, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -4226,6 +4423,10 @@ func (s *server) adminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		var isAdmin int
 		err := s.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				respondError(w, http.StatusForbidden, errors.New("需要管理员权限"))
+				return
+			}
 			respondError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -4439,6 +4640,11 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if _, err = s.db.Exec("UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?", dbUser.ID); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	user := &user{
 		ID:        dbUser.ID,
 		Username:  dbUser.Username,
@@ -4493,23 +4699,24 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 
 	var dbUser struct {
-		ID        int64
-		Username  string
-		Nickname  string
-		Email     string
-		Avatar    sql.NullString
-		IsActive  int
-		IsAdmin   int
-		APIKey    sql.NullString
-		CreatedAt string
+		ID          int64
+		Username    string
+		Nickname    string
+		Email       string
+		Avatar      sql.NullString
+		IsActive    int
+		IsAdmin     int
+		APIKey      sql.NullString
+		LastLoginAt sql.NullString
+		CreatedAt   string
 	}
 
 	err := s.db.QueryRow(`
-		SELECT id, username, nickname, email, avatar, is_active, is_admin, api_key, created_at
+		SELECT id, username, nickname, email, avatar, is_active, is_admin, api_key, last_login_at, created_at
 		FROM users WHERE id = ?
 	`, userID).Scan(
 		&dbUser.ID, &dbUser.Username, &dbUser.Nickname,
-		&dbUser.Email, &dbUser.Avatar, &dbUser.IsActive, &dbUser.IsAdmin, &dbUser.APIKey, &dbUser.CreatedAt,
+		&dbUser.Email, &dbUser.Avatar, &dbUser.IsActive, &dbUser.IsAdmin, &dbUser.APIKey, &dbUser.LastLoginAt, &dbUser.CreatedAt,
 	)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
@@ -4539,6 +4746,10 @@ func (s *server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if dbUser.APIKey.Valid {
 		user.APIKey = &dbUser.APIKey.String
+	}
+	if dbUser.LastLoginAt.Valid {
+		s := dbUser.LastLoginAt.String
+		user.LastLoginAt = &s
 	}
 
 	respondJSON(w, http.StatusOK, user)
