@@ -1,0 +1,254 @@
+/* 
+ * Shared design tokens and switcher styles for public display templates (/template-*.html).
+ * This file defines the core design language, base reset, and the floating theme/template switcher.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Dark theme (default) */
+  --bg-base: #0a0a14;
+  --bg-elev-1: #11111d;
+  --bg-elev-2: #1a1a2e;
+  --bg-elev-3: #232336;
+  --border: #2a2a3e;
+  --border-strong: #3a3a55;
+  --text-primary: #e8e8f0;
+  --text-secondary: #9a9ab0;
+  --text-muted: #6a6a85;
+  --accent: #6366f1;
+  --accent-soft: rgba(99, 102, 241, 0.15);
+  --accent-glow: rgba(99, 102, 241, 0.4);
+  --cyan: #06b6d4;
+  --cyan-soft: rgba(6, 182, 212, 0.15);
+  --emerald: #10b981;
+  --emerald-soft: rgba(16, 185, 129, 0.15);
+  --amber: #f59e0b;
+  --amber-soft: rgba(245, 158, 11, 0.15);
+  --rose: #f43f5e;
+  --rose-soft: rgba(244, 63, 94, 0.15);
+  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  --gradient-card: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(6, 182, 212, 0.04) 100%);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.4);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,.5);
+  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.25);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+
+[data-theme="light"] {
+  --bg-base: #f7f8fc;
+  --bg-elev-1: #ffffff;
+  --bg-elev-2: #fafafd;
+  --bg-elev-3: #f0f1f6;
+  --border: #e5e7ee;
+  --border-strong: #d0d3dc;
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5a75;
+  --text-muted: #8a8aa0;
+  --accent-soft: rgba(99, 102, 241, 0.10);
+  --accent-glow: rgba(99, 102, 241, 0.3);
+  --cyan-soft: rgba(6, 182, 212, 0.10);
+  --emerald-soft: rgba(16, 185, 129, 0.10);
+  --amber-soft: rgba(245, 158, 11, 0.10);
+  --rose-soft: rgba(244, 63, 94, 0.10);
+  --gradient-card: linear-gradient(135deg, rgba(99, 102, 241, 0.04) 0%, rgba(6, 182, 212, 0.02) 100%);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.06);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,.10);
+}
+
+/* Base Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background .25s ease, color .25s ease;
+  color-scheme: dark light;
+}
+
+code, .mono {
+  font-family: var(--font-mono);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  border: 2px solid var(--bg-base);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Common Utilities */
+.t-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.t-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.t-favicon {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.t-favicon.size-16, .t-favicon-16 { width: 16px; height: 16px; }
+.t-favicon.size-24, .t-favicon-24 { width: 24px; height: 24px; }
+.t-favicon.size-32, .t-favicon-32 { width: 32px; height: 32px; }
+.t-favicon.size-48, .t-favicon-48 { width: 48px; height: 48px; }
+.t-favicon.missing {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* Switcher Button & Menu */
+.t-switcher-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--gradient-primary);
+  box-shadow: var(--shadow-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  z-index: 1000;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  animation: pulse-idle 2s infinite;
+}
+
+.t-switcher-btn:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+  animation: none;
+}
+
+@keyframes pulse-idle {
+  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+.t-switcher-menu {
+  position: fixed;
+  bottom: 88px;
+  right: 24px;
+  width: 280px;
+  background: var(--bg-elev-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  padding: 6px;
+  animation: menuIn 0.15s ease forwards;
+  transform-origin: bottom right;
+}
+
+@keyframes menuIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.t-switcher-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+  gap: 10px;
+  text-align: left;
+}
+
+.t-switcher-item:hover {
+  background: var(--bg-elev-2);
+}
+
+.t-switcher-divider {
+  border-top: 1px solid var(--border);
+  margin: 6px 0;
+}
+
+.t-switcher-link {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.t-switcher-link:hover {
+  background: var(--bg-elev-2);
+  color: var(--text-primary);
+}
+
+/* Responsive & Accessibility */
+@media (max-width: 640px) {
+  .t-switcher-menu {
+    bottom: 84px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    transform-origin: bottom center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
