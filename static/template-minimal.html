@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmarks - Minimal</title>
+  <link rel="stylesheet" href="template-common.css">
+  <style>
+    /* Minimal specific styles */
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+    }
+
+    .t-header.thin {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 60px;
+      padding: 0 24px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .t-brand {
+      font-weight: 600;
+      font-size: 16px;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .t-theme-toggle {
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 4px 8px;
+    }
+    .t-theme-toggle:hover {
+      color: var(--text-primary);
+    }
+
+    .t-min {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 100px;
+    }
+
+    .t-min-collection {
+      margin-bottom: 60px;
+    }
+
+    .t-min-collection-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+
+    .t-min-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .t-min-item {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      transition: border-color 0.2s ease;
+    }
+
+    .t-min-item:last-child {
+      border-bottom: none;
+    }
+
+    .t-min-item a {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      color: var(--text-primary);
+      text-decoration: none;
+      overflow: hidden;
+    }
+
+    .t-min-item-left {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-shrink: 0;
+      max-width: 60%;
+    }
+
+    .t-favicon {
+      align-self: center;
+    }
+
+    .t-min-item-title {
+      font-size: 15px;
+      font-weight: 500;
+      transition: color 0.2s ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .t-min-item-url {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.2s ease;
+      flex-grow: 1;
+      text-align: right;
+    }
+
+    .t-min-item:hover .t-min-item-title {
+      color: var(--accent);
+    }
+
+    .t-min-item:hover .t-min-item-url {
+      color: var(--text-secondary);
+      text-decoration: underline;
+    }
+
+    .t-empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 40px 0;
+      font-size: 14px;
+    }
+
+    .t-footer {
+      text-align: center;
+      padding: 40px 24px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .t-footer a {
+      color: var(--text-muted);
+      font-size: 13px;
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    .t-footer a:hover {
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+
+  <header class="t-header thin">
+    <div class="t-brand">Bookmarks</div>
+    <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">Toggle Theme</button>
+  </header>
+
+  <main class="t-min" id="app">
+    <!-- Content injected here -->
+  </main>
+
+  <footer class="t-footer">
+    <a href="/">← 返回主应用</a>
+  </footer>
+
+  <script src="template-shell.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const s = localStorage.getItem('bookmark_theme');
+      if (!s) {
+        localStorage.setItem('bookmark_theme', 'light');
+      }
+      TemplateShell.initTheme();
+
+      const app = document.getElementById('app');
+      const tree = await TemplateShell.loadPublicTree();
+      
+      if (!tree || tree.length === 0) {
+        app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
+      } else {
+        const groups = TemplateShell.groupByFolder(tree);
+        const folderNames = Object.keys(groups);
+        
+        if (folderNames.length === 0) {
+          app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
+        } else {
+          let html = '';
+          for (const folder of folderNames) {
+            const items = groups[folder];
+            if (!items || items.length === 0) continue;
+            
+            html += `
+              <section class="t-min-collection">
+                <h2 class="t-min-collection-title">${escapeHtml(folder)}</h2>
+                <ul class="t-min-list">
+            `;
+            
+            for (const item of items) {
+              const favicon = item.favicon_url 
+                ? `<img src="${escapeHtml(item.favicon_url)}" class="t-favicon size-16" alt="" onerror="this.classList.add('missing');this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'16\\' height=\\'16\\'></svg>'">`
+                : `<div class="t-favicon size-16 missing"></div>`;
+                
+              html += `
+                <li class="t-min-item">
+                  <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+                    <div class="t-min-item-left">
+                      ${favicon}
+                      <span class="t-min-item-title">${escapeHtml(item.title)}</span>
+                    </div>
+                    <span class="t-min-item-url">${escapeHtml(item.url)}</span>
+                  </a>
+                </li>
+              `;
+            }
+            
+            html += `
+                </ul>
+              </section>
+            `;
+          }
+          app.innerHTML = html;
+        }
+      }
+
+      TemplateShell.mountSwitcher(document.body, 'minimal');
+    });
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
