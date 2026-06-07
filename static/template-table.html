@@ -140,12 +140,83 @@
       .t-tbl-date {
         text-align: left;
       }
+      .t-search {
+        max-width: none;
+        margin: 12px 0 0;
+      }
+    }
+    .t-search {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+      margin: 0 24px;
+    }
+    .t-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-search-input {
+      width: 100%;
+      padding: 10px 44px 10px 40px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-search-input::placeholder {
+      color: var(--text-muted);
+    }
+    .t-search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-search-clear {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .t-search-clear:hover {
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+    }
+    .t-tbl-row mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
     }
   </style>
 </head>
 <body>
   <header class="t-header">
     <div class="t-brand">书签 · 表格</div>
+    <div class="t-search" id="searchContainer">
+      <svg class="t-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
+      <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
+    </div>
     <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">切换主题</button>
   </header>
 
@@ -167,6 +238,8 @@
 
       const app = document.getElementById('app');
       const tree = await TemplateShell.loadPublicTree();
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
       
       if (!tree || tree.length === 0) {
         app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
@@ -175,38 +248,89 @@
         if (flat.length === 0) {
           app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
         } else {
-          flat.sort((a, b) => {
+          const allItems = flat.sort((a, b) => {
             const pathA = (a.breadcrumb || []).join(' / ');
             const pathB = (b.breadcrumb || []).join(' / ');
             if (pathA !== pathB) return pathA.localeCompare(pathB);
             return (a.title || '').localeCompare(b.title || '');
           });
 
-          let html = '<div class="t-tbl">';
-          for (const item of flat) {
-            const path = (item.breadcrumb || []).join(' / ');
-            const dateStr = formatDate(item.updated_at || item.created_at);
-            
-            const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
-            
-            const favicon = item.favicon_url 
-              ? `<img src="${escapeHtml(item.favicon_url)}" class="t-tbl-favicon" alt="" onerror="this.src='${fallbackSvg}'">`
-              : `<img src="${fallbackSvg}" class="t-tbl-favicon" alt="">`;
-              
-            html += `
-              <div class="t-tbl-row">
-                <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="t-tbl-title">
-                  ${favicon}
-                  <span>${escapeHtml(item.title)}</span>
-                </a>
-                <div class="t-tbl-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>
-                <div class="t-tbl-folder" title="${escapeHtml(path)}">${escapeHtml(path)}</div>
-                <div class="t-tbl-date">${escapeHtml(dateStr)}</div>
-              </div>
-            `;
+          function formatDate(str) {
+            if (!str) return '';
+            try {
+              const d = new Date(str);
+              if (isNaN(d.getTime())) return '';
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              const day = String(d.getDate()).padStart(2, '0');
+              return `${y}-${m}-${day}`;
+            } catch (e) {
+              return '';
+            }
           }
-          html += '</div>';
-          app.innerHTML = html;
+
+          const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
+
+          let allItemsCopy = [...allItems];
+
+          function render(list) {
+            if (!list || list.length === 0) {
+              app.innerHTML = '<div class="t-empty">无匹配结果</div>';
+              return;
+            }
+
+            let html = '<div class="t-tbl">';
+            for (const item of list) {
+              const path = (item.breadcrumb || []).join(' / ');
+              const dateStr = formatDate(item.updated_at || item.created_at);
+              
+              const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
+              
+              const favicon = item.favicon_url 
+                ? `<img src="${TemplateShell.escapeHtml(item.favicon_url)}" class="t-tbl-favicon" alt="" onerror="this.src='${fallbackSvg}'">`
+                : `<img src="${fallbackSvg}" class="t-tbl-favicon" alt="">`;
+              
+              const q = searchInput.value.trim();
+              const title = q ? TemplateShell.highlightText(item.title, q) : TemplateShell.escapeHtml(item.title);
+              const url = q ? TemplateShell.highlightText(item.url, q) : TemplateShell.escapeHtml(item.url);
+              const folder = q ? TemplateShell.highlightText((item.breadcrumb || []).join(' / '), q) : TemplateShell.escapeHtml((item.breadcrumb || []).join(' / '));
+              const date = TemplateShell.escapeHtml(formatDate(item.updated_at || item.created_at));
+              
+              const faviconHtml = item.favicon_url 
+                ? `<img src="${TemplateShell.escapeHtml(item.favicon_url)}" class="t-tbl-favicon" alt="" onerror="this.src='${fallbackSvg}'">`
+                : `<img src="${fallbackSvg}" class="t-tbl-favicon" alt="">`;
+              
+              html += `
+                <div class="t-tbl-row">
+                  <a href="${TemplateShell.escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="t-tbl-title">
+                    ${faviconHtml}
+                    <span>${title}</span>
+                  </a>
+                  <div class="t-tbl-url" title="${TemplateShell.escapeHtml(item.url)}">${url}</div>
+                  <div class="t-tbl-folder" title="${TemplateShell.escapeHtml((item.breadcrumb || []).join(' / '))}">${folder}</div>
+                  <div class="t-tbl-date">${date}</div>
+                </div>
+              `;
+            }
+            html += '</div>';
+            app.innerHTML = html;
+          }
+
+          function doSearch() {
+            const q = searchInput.value.trim();
+            const filtered = TemplateShell.searchBookmarks(allItems, q);
+            render(filtered);
+            searchClear.style.display = q ? 'flex' : 'none';
+          }
+
+          searchInput.addEventListener('input', doSearch);
+          searchClear.addEventListener('click', () => {
+            searchInput.value = '';
+            doSearch();
+            searchInput.focus();
+          });
+
+          render(allItems);
         }
       }
 
