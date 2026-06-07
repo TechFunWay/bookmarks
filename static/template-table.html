@@ -201,6 +201,57 @@
       color: var(--text-primary);
       background: var(--bg-elev-1);
     }
+    .t-sort {
+      position: relative;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+    .t-sort-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-sort-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding: 10px 32px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-sort-select:hover {
+      border-color: var(--border-strong);
+    }
+    .t-sort-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-sort::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--text-muted);
+      pointer-events: none;
+    }
     .t-tbl-row mark {
       background: var(--accent-soft);
       color: var(--accent);
@@ -217,6 +268,7 @@
       <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接、备注、文件夹..." aria-label="搜索书签">
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
+    <div class="t-sort" id="sortContainer"></div>
     <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">切换主题</button>
   </header>
 
@@ -240,7 +292,9 @@
       const tree = await TemplateShell.loadPublicTree();
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
-      
+      const sortContainer = document.getElementById('sortContainer');
+      let currentSort = 'default';
+
       if (!tree || tree.length === 0) {
         app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
       } else {
@@ -248,12 +302,7 @@
         if (flat.length === 0) {
           app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
         } else {
-          const allItems = flat.sort((a, b) => {
-            const pathA = (a.breadcrumb || []).join(' / ');
-            const pathB = (b.breadcrumb || []).join(' / ');
-            if (pathA !== pathB) return pathA.localeCompare(pathB);
-            return (a.title || '').localeCompare(b.title || '');
-          });
+          const allItems = flat;
 
           function formatDate(str) {
             if (!str) return '';
@@ -271,16 +320,15 @@
 
           const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
 
-          let allItemsCopy = [...allItems];
-
           function render(list) {
             if (!list || list.length === 0) {
               app.innerHTML = '<div class="t-empty">无匹配结果</div>';
               return;
             }
 
+            const sorted = TemplateShell.sortBookmarks(list, currentSort);
             let html = '<div class="t-tbl">';
-            for (const item of list) {
+            for (const item of sorted) {
               const path = (item.breadcrumb || []).join(' / ');
               const dateStr = formatDate(item.updated_at || item.created_at);
               
@@ -322,6 +370,11 @@
             render(filtered);
             searchClear.style.display = q ? 'flex' : 'none';
           }
+
+          currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
+            currentSort = m;
+            doSearch();
+          });
 
           searchInput.addEventListener('input', doSearch);
           searchClear.addEventListener('click', () => {
