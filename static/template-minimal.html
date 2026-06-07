@@ -215,6 +215,57 @@
     .t-search-clear:hover {
       color: var(--text-primary);
     }
+    .t-sort {
+      position: relative;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+    .t-sort-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 13px;
+      height: 13px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .t-sort-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding: 7px 28px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .t-sort-select:hover {
+      border-color: var(--border-strong);
+    }
+    .t-sort-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .t-sort::after {
+      content: '';
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 4px solid var(--text-muted);
+      pointer-events: none;
+    }
     .t-min-item mark {
       background: var(--accent-soft);
       color: var(--accent);
@@ -238,6 +289,7 @@
       <input type="search" class="t-search-input" id="searchInput" placeholder="搜索标题、链接..." aria-label="搜索书签">
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
+    <div class="t-sort" id="sortContainer"></div>
     <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">Toggle Theme</button>
   </header>
 
@@ -261,9 +313,11 @@
       const app = document.getElementById('app');
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
+      const sortContainer = document.getElementById('sortContainer');
       const tree = await TemplateShell.loadPublicTree();
       const allGroups = tree && tree.length > 0 ? TemplateShell.groupByFolder(tree) : {};
       let currentSearch = '';
+      let currentSort = 'default';
       
       const render = () => {
         const q = currentSearch;
@@ -277,7 +331,7 @@
           }
         });
         
-        const folderNames = Object.keys(filteredGroups);
+        let folderNames = TemplateShell.sortFolderNames(Object.keys(filteredGroups), currentSort);
         if (folderNames.length === 0) {
           app.innerHTML = `<div class="t-empty">${q ? '没有匹配的书签' : '暂无公开书签'}</div>`;
           return;
@@ -285,7 +339,7 @@
         
         let html = '';
         for (const folder of folderNames) {
-          const items = filteredGroups[folder];
+          const items = TemplateShell.sortBookmarks(filteredGroups[folder], currentSort);
           if (!items || items.length === 0) continue;
           
           const folderHtml = q ? TemplateShell.highlightText(folder, q) : escapeHtml(folder);
@@ -326,6 +380,11 @@
       };
       
       render();
+      
+      currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
+        currentSort = m;
+        render();
+      });
       
       let searchTimer;
       searchInput.addEventListener('input', (e) => {
