@@ -22,17 +22,17 @@
       }catch(e){return[];}
     },
     getCurrentTemplate(){
-      const m=window.location.pathname.match(/\/template-(magazine|masonry|timeline|minimal)\.html/);
+      const m=window.location.pathname.match(/\/template-(magazine|masonry|timeline|minimal|grid)\.html/);
       return m?m[1]:null;
     },
     getRememberedTemplate(sys){
       const s=localStorage.getItem('bookmark_template');
-      if(s&&['magazine','masonry','timeline','minimal'].includes(s))return s;
+      if(s&&['magazine','masonry','timeline','minimal','grid'].includes(s))return s;
       if(sys&&sys.default_template)return sys.default_template;
       return 'magazine';
     },
     setUserTemplate(n){
-      if(['magazine','masonry','timeline','minimal'].includes(n)){
+      if(['magazine','masonry','timeline','minimal','grid'].includes(n)){
         localStorage.setItem('bookmark_template',n);
         window.location.href=`/template-${n}.html`;
       }
@@ -124,7 +124,8 @@ html[data-theme="light"] .t-sw{--bg:#fff;--tc:#111;--bc:#e5e5e5;--hc:#f5f5f5;--a
         {id:'magazine',n:'杂志',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>'},
         {id:'masonry',n:'瀑布流',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="12" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="3" y="17" width="8" height="4" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/></svg>'},
         {id:'timeline',n:'时间线',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="8" y="4" width="12" height="4" rx="1"/><rect x="8" y="10" width="12" height="4" rx="1"/><rect x="8" y="16" width="12" height="4" rx="1"/><circle cx="4" cy="6" r="2"/><circle cx="4" cy="12" r="2"/><circle cx="4" cy="18" r="2"/><path d="M4 8v2M4 14v2" stroke="currentColor" stroke-width="2"/></svg>'},
-        {id:'minimal',n:'极简',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="6" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="16" width="18" height="2" rx="1"/></svg>'}
+        {id:'minimal',n:'极简',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="6" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="16" width="18" height="2" rx="1"/></svg>'},
+        {id:'grid',n:'卡片网格',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>'}
       ];
       const b=document.createElement('button');
       b.className='t-sw-b';
