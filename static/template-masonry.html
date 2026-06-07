@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmarks 瀑布流</title>
+  <link rel="stylesheet" href="/template-common.css">
+  <style>
+    /* Masonry specific styles */
+    body {
+      padding: 0 24px 80px;
+    }
+    
+    .t-header {
+      padding: 24px 0;
+      background: var(--bg-base);
+    }
+    
+    .t-brand {
+      font-size: 20px;
+      font-weight: 700;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .t-theme-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--bg-elev-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .t-theme-toggle:hover {
+      background: var(--bg-elev-3);
+    }
+    .t-theme-toggle svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+    
+    .t-mas-tags {
+      position: sticky;
+      top: 72px; /* Below header */
+      z-index: 90;
+      display: flex;
+      gap: 12px;
+      padding: 16px 0;
+      margin-bottom: 24px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      background: var(--bg-base);
+      /* Hide scrollbar */
+      scrollbar-width: none;
+    }
+    .t-mas-tags::-webkit-scrollbar {
+      display: none;
+    }
+    
+    .t-mas-tag {
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: var(--bg-elev-2);
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .t-mas-tag:hover {
+      background: var(--bg-elev-3);
+      color: var(--text-primary);
+    }
+    .t-mas-tag.active {
+      background: var(--gradient-primary);
+      color: #fff;
+      box-shadow: var(--shadow-glow);
+    }
+    
+    .t-mas-grid {
+      column-count: 4;
+      column-gap: 16px;
+    }
+    
+    @media (max-width: 1279px) {
+      .t-mas-grid { column-count: 3; }
+    }
+    @media (max-width: 959px) {
+      .t-mas-grid { column-count: 2; }
+    }
+    @media (max-width: 639px) {
+      .t-mas-grid { column-count: 1; }
+      body { padding: 0 16px 80px; }
+    }
+    
+    .t-mas-pin {
+      break-inside: avoid;
+      display: inline-block;
+      width: 100%;
+      margin-bottom: 16px;
+      padding: 14px;
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .t-mas-pin:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-glow);
+      border-color: var(--accent);
+    }
+    
+    .t-mas-pin-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .t-mas-pin-title {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--text-primary);
+      word-break: break-word;
+      margin-top: 2px;
+    }
+    
+    .t-mas-pin-url {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      word-break: break-all;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .t-mas-pin-remark {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-break: break-word;
+    }
+    
+    .t-mas-pin-bottom {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    
+    .t-mas-pin-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.5;
+    }
+    
+    .t-empty {
+      text-align: center;
+      padding: 64px 20px;
+      color: var(--text-secondary);
+    }
+    .t-empty h3 {
+      font-size: 18px;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+    .t-empty p {
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .t-empty-link {
+      color: var(--accent);
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .t-empty-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="t-container">
+    <header class="t-header">
+      <div class="t-brand">Bookmarks 瀑布流</div>
+      <button class="t-theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm0-2V4c4.418 0 8 3.582 8 8s-3.582 8-8 8z"/>
+        </svg>
+      </button>
+    </header>
+    
+    <div class="t-mas-tags" id="tagCloud"></div>
+    <div class="t-mas-grid" id="gridContainer"></div>
+    <div id="emptyState" style="display: none;"></div>
+  </div>
+
+  <script src="/template-shell.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      TemplateShell.initTheme();
+      TemplateShell.mountSwitcher(document.body, 'masonry');
+      
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        TemplateShell.toggleTheme();
+      });
+      
+      const tree = await TemplateShell.loadPublicTree();
+      const allBookmarks = TemplateShell.flattenTree(tree);
+      const groups = TemplateShell.groupByFolder(tree);
+      
+      const tagCloud = document.getElementById('tagCloud');
+      const gridContainer = document.getElementById('gridContainer');
+      const emptyState = document.getElementById('emptyState');
+      
+      if (allBookmarks.length === 0) {
+        emptyState.innerHTML = `
+          <div class="t-empty">
+            <h3>暂无公开书签</h3>
+            <p>请在后台将一些书签设置为公开</p>
+          </div>
+        `;
+        emptyState.style.display = 'block';
+        return;
+      }
+      
+      const folders = Object.keys(groups).sort();
+      
+      function renderTags(activeFilter) {
+        tagCloud.innerHTML = '';
+        
+        const allTag = document.createElement('button');
+        allTag.className = `t-mas-tag ${activeFilter === 'all' ? 'active' : ''}`;
+        allTag.textContent = '全部';
+        allTag.addEventListener('click', () => setFilter('all'));
+        tagCloud.appendChild(allTag);
+        
+        folders.forEach(folder => {
+          const tag = document.createElement('button');
+          tag.className = `t-mas-tag ${activeFilter === folder ? 'active' : ''}`;
+          tag.textContent = folder;
+          tag.addEventListener('click', () => setFilter(folder));
+          tagCloud.appendChild(tag);
+        });
+      }
+      
+      function renderGrid(filter) {
+        gridContainer.innerHTML = '';
+        
+        let filtered = allBookmarks;
+        if (filter !== 'all') {
+          filtered = allBookmarks.filter(b => b.breadcrumb && b.breadcrumb[0] === filter);
+        }
+        
+        if (filtered.length === 0) {
+          gridContainer.style.display = 'none';
+          emptyState.innerHTML = `
+            <div class="t-empty">
+              <h3>当前筛选下没有书签</h3>
+              <p>该分类下暂无公开书签</p>
+              <a class="t-empty-link" onclick="window.location.hash='#all'">查看全部</a>
+            </div>
+          `;
+          emptyState.style.display = 'block';
+          return;
+        }
+        
+        gridContainer.style.display = 'block';
+        emptyState.style.display = 'none';
+        
+        filtered.forEach(b => {
+          const pin = document.createElement('a');
+          pin.className = 't-mas-pin';
+          pin.href = b.url;
+          pin.target = '_blank';
+          pin.rel = 'noopener noreferrer';
+          
+          const folderName = b.breadcrumb && b.breadcrumb.length > 0 ? b.breadcrumb[0] : '未分类';
+          
+          let faviconHtml = '';
+          if (b.favicon_url) {
+            faviconHtml = `<img src="${b.favicon_url}" class="t-favicon t-favicon-48" loading="lazy" alt="" onerror="this.classList.add('missing');this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWE5YWIwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxsGluZSB4MT0iMiIgeTE9IjEyIiB4Mj0iMjIiIHkyPSIxMiI+PC9saW5lPjxwYXRoIGQ9Ik0xMiAyYTE1LjMgMTUuMyAwIDAgMSA0IDEwIDE1LjMgMTUuMyAwIDAgMS00IDEwIDE1LjMgMTUuMyAwIDAgMS00LTEwIDE1LjMgMTUuMyAwIDAgMSA0LTEweiI+PC9wYXRoPjwvc3ZnPg=='">`;
+          } else {
+            faviconHtml = `<div class="t-favicon t-favicon-48 missing" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>`;
+          }
+          
+          let remarkHtml = '';
+          if (b.remark) {
+            remarkHtml = `<div class="t-mas-pin-remark">${b.remark.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
+          }
+          
+          pin.innerHTML = `
+            <div class="t-mas-pin-top">
+              ${faviconHtml}
+              <div class="t-mas-pin-title">${b.title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            </div>
+            <div class="t-mas-pin-url mono">${b.url.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            ${remarkHtml}
+            <div class="t-mas-pin-bottom">
+              <div class="t-mas-pin-dot"></div>
+              <span>${folderName.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+            </div>
+          `;
+          
+          gridContainer.appendChild(pin);
+        });
+      }
+      
+      function setFilter(filter) {
+        window.location.hash = filter === 'all' ? '#all' : `#${encodeURIComponent(filter)}`;
+      }
+      
+      function handleHashChange() {
+        let hash = window.location.hash.substring(1);
+        if (!hash) hash = 'all';
+        else hash = decodeURIComponent(hash);
+        
+        if (hash !== 'all' && !folders.includes(hash)) {
+          hash = 'all';
+        }
+        
+        renderTags(hash);
+        renderGrid(hash);
+      }
+      
+      window.addEventListener('hashchange', handleHashChange);
+      handleHashChange();
+    });
+  </script>
+</body>
+</html>
