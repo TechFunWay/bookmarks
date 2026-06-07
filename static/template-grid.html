@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>书签 · 卡片网格</title>
+  <link rel="stylesheet" href="template-common.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    
+    .t-header {
+      padding: 24px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-base);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .t-brand {
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+    
+    .t-theme-toggle {
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    
+    .t-theme-toggle:hover {
+      background: var(--bg-elev-2);
+      border-color: var(--border-strong);
+    }
+    
+    .t-main {
+      flex: 1;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .t-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      padding: 48px;
+    }
+    
+    .t-grid-card {
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    
+    .t-grid-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+      border-color: var(--border-strong);
+    }
+    
+    .t-grid-card-favicon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      background: var(--bg-elev-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .t-grid-card-favicon img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .t-grid-card-favicon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--text-muted);
+    }
+    
+    .t-grid-card-folder {
+      font-size: 11px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .t-grid-card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .t-grid-card-url {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .t-grid-card-remark {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px dashed var(--border);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .t-empty {
+      text-align: center;
+      padding: 80px 40px;
+      color: var(--text-muted);
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      margin: 48px;
+      font-size: 16px;
+    }
+    
+    .t-footer {
+      padding: 48px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .t-footer-link {
+      color: var(--text-secondary);
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    
+    .t-footer-link:hover {
+      color: var(--text-primary);
+    }
+    
+    @media (max-width: 768px) {
+      .t-header {
+        padding: 20px 24px;
+      }
+      .t-grid {
+        grid-template-columns: 1fr;
+        padding: 20px;
+      }
+      .t-empty {
+        margin: 20px;
+      }
+      .t-footer {
+        padding: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="t-header">
+    <div class="t-brand">书签 · 卡片网格</div>
+    <button class="t-theme-toggle" id="themeToggle">切换主题</button>
+  </header>
+
+  <main class="t-main">
+    <div class="t-grid" id="gridContainer">
+      <!-- Cards will be injected here -->
+    </div>
+  </main>
+
+  <footer class="t-footer">
+    <a href="/" class="t-footer-link">← 返回主应用</a>
+  </footer>
+
+  <script src="template-shell.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      TemplateShell.initTheme();
+      
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        TemplateShell.toggleTheme();
+      });
+
+      const tree = await TemplateShell.loadPublicTree();
+      const bookmarks = TemplateShell.flattenTree(tree);
+      const gridContainer = document.getElementById('gridContainer');
+      
+      if (!bookmarks || bookmarks.length === 0) {
+        gridContainer.style.display = 'block';
+        gridContainer.innerHTML = '<div class="t-empty">暂无公开书签</div>';
+        TemplateShell.mountSwitcher(document.body, 'grid');
+        return;
+      }
+      
+      const fallbackSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
+      
+      let html = '';
+      
+      for (const bm of bookmarks) {
+        const folderName = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb[0] : '';
+        
+        let iconHtml = '';
+        if (bm.favicon_url) {
+          iconHtml = `<img src="${escapeHtml(bm.favicon_url)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><div style="display:none;">${fallbackSvg}</div>`;
+        } else {
+          iconHtml = fallbackSvg;
+        }
+        
+        html += `
+          <a href="${escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-grid-card">
+            ${folderName ? `<div class="t-grid-card-folder">${escapeHtml(folderName)}</div>` : ''}
+            <div class="t-grid-card-favicon">
+              ${iconHtml}
+            </div>
+            <div class="t-grid-card-title">${escapeHtml(bm.title)}</div>
+            <div class="t-grid-card-url">${escapeHtml(bm.url)}</div>
+            ${bm.remark ? `<div class="t-grid-card-remark">${escapeHtml(bm.remark)}</div>` : ''}
+          </a>
+        `;
+      }
+      
+      gridContainer.innerHTML = html;
+      
+      TemplateShell.mountSwitcher(document.body, 'grid');
+    });
+    
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return (unsafe + '')
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
