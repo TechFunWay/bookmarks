@@ -15,14 +15,19 @@
     }
 
     .t-header.thin {
+      position: sticky;
+      top: 0;
+      z-index: 100;
       display: flex;
       justify-content: space-between;
       align-items: center;
       height: 60px;
-      padding: 0 24px;
-      max-width: 720px;
-      margin: 0 auto;
+      padding: 0 32px;
       gap: 16px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
 
     .t-brand {
@@ -46,9 +51,7 @@
     }
 
     .t-min {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 40px 24px 100px;
+      padding: 40px 32px 100px;
     }
 
     .t-min-collection {
@@ -145,9 +148,7 @@
 
     .t-footer {
       text-align: center;
-      padding: 40px 24px;
-      max-width: 720px;
-      margin: 0 auto;
+      padding: 40px 32px;
     }
 
     .t-footer a {
@@ -278,6 +279,12 @@
       padding: 0 2px;
       border-radius: 2px;
     }
+    @media (max-width: 640px) {
+      .t-header.thin { padding: 0 16px; }
+      .t-min { padding: 24px 16px 80px; }
+      .t-footer { padding: 24px 16px; }
+      .t-search { max-width: none; }
+    }
   </style>
 </head>
 <body>
@@ -290,7 +297,8 @@
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
     <div class="t-sort" id="sortContainer"></div>
-    <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">Toggle Theme</button>
+    <div class="t-auth" id="authContainer"></div>
+    <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">切换主题</button>
   </header>
 
   <main class="t-min" id="app">
@@ -299,6 +307,7 @@
 
   <footer class="t-footer">
     <a href="/">← 返回主应用</a>
+    <span class="t-version"></span>
   </footer>
 
   <script src="template-shell.js"></script>
@@ -314,7 +323,8 @@
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
       const sortContainer = document.getElementById('sortContainer');
-      const tree = await TemplateShell.loadPublicTree();
+      const authContainer = document.getElementById('authContainer');
+      const tree = await TemplateShell.loadUserTree();
       const allGroups = tree && tree.length > 0 ? TemplateShell.groupByFolder(tree) : {};
       let currentSearch = '';
       let currentSort = 'default';
@@ -385,6 +395,8 @@
         currentSort = m;
         render();
       });
+      TemplateShell.mountAuthButton(authContainer);
+      TemplateShell.mountVersionFooter();
       
       let searchTimer;
       searchInput.addEventListener('input', (e) => {

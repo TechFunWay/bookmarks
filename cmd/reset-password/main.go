@@ -6,122 +6,112 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	"bookmark/app/utils"
+
+	_ "modernc.org/sqlite"
 )
-
-const (
-	minPasswordLength = 6
-)
-
-type App struct {
-	dbPath   string
-	username string
-	password string
-}
 
 func main() {
-	app := &App{}
-
-	// 解析命令行参数
-	flag.StringVar(&app.dbPath, "db", "./data/db/database.db", "数据库文件路径")
-	flag.StringVar(&app.username, "username", "", "要重置密码的用户名（必需）")
-	flag.StringVar(&app.password, "password", "", "新密码（必需，至少6位）")
-	
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "使用方法:\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "  reset-password -db <数据库路径> -username <用户名> -password <新密码>\n\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "参数说明:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(flag.CommandLine.Output(), "\n示例:\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "  重置 admin 用户的密码为 123456:\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "    reset-password -username admin -password 123456\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "  指定数据库路径:\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "    reset-password -db /path/to/database.db -username admin -password 123456\n")
-	}
-	
+	// 定义命令行参数
+	dbPath := flag.String("db", "./data/db/database.db", "数据库文件路径")
+	username := flag.String("username", "", "要重置密码的用户名（留空则查找管理员账号）")
+	newPassword := flag.String("password", "", "新密码")
 	flag.Parse()
 
-	// 验证必需参数
-	if app.username == "" || app.password == "" {
-		fmt.Println("错误: 必须提供用户名和密码")
-		fmt.Println("\n使用 -h 查看帮助信息")
+	// 验证密码参数
+	if *newPassword == "" {
+		fmt.Println("错误: 必须指定新密码")
+		fmt.Println("\n使用方法:")
+		fmt.Println("  1. 重置指定用户密码:")
+		fmt.Println("     ./reset-password -username <用户名> -password <新密码>")
+		fmt.Println("     ./reset-password -username admin -password 123456")
+		fmt.Println("\n  2. 重置管理员密码（自动查找管理员账号）:")
+		fmt.Println("     ./reset-password -password 123456")
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	// 验证密码长度
-	if len(app.password) < minPasswordLength {
-		fmt.Printf("错误: 密码长度不能少于 %d 位\n", minPasswordLength)
+	if len(*newPassword) < 6 {
+		fmt.Println("错误: 密码长度至少6位")
 		os.Exit(1)
 	}
 
-	// 执行密码重置
-	if err := app.resetPassword(); err != nil {
-		log.Fatalf("重置密码失败: %v", err)
-	}
-
-	fmt.Printf("✓ 用户 %s 的密码已成功重置\n", app.username)
-	fmt.Println("请使用新密码登录系统")
-}
-
-func (a *App) resetPassword() error {
-	// 打开数据库连接
-	db, err := sql.Open("sqlite3", a.dbPath)
+	// 连接数据库
+	db, err := sql.Open("sqlite", *dbPath+"?_foreign_keys=on")
 	if err != nil {
-		return fmt.Errorf("打开数据库失败: %w", err)
+		log.Fatalf("连接数据库失败: %v", err)
 	}
 	defer db.Close()
 
-	// 验证数据库连接
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("连接数据库失败: %w", err)
+	var userID int64
+	var existingUsername string
+	var isAdmin int
+
+	// 如果没有指定用户名，查找管理员账号
+	if *username == "" {
+		fmt.Println("未指定用户名，正在查找管理员账号...")
+
+		// 查询管理员账号（is_admin = 1 的用户）
+		err = db.QueryRow("SELECT id, username, is_admin FROM users WHERE is_admin = 1 LIMIT 1").Scan(&userID, &existingUsername, &isAdmin)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				fmt.Println("错误: 未找到管理员账号")
+				os.Exit(1)
+			}
+			log.Fatalf("查询管理员失败: %v", err)
+		}
+
+		fmt.Printf("✓ 找到管理员账号: %s\n", existingUsername)
+	} else {
+		// 检查用户是否存在
+		err = db.QueryRow("SELECT id, username, is_admin FROM users WHERE username = ?", strings.TrimSpace(*username)).Scan(&userID, &existingUsername, &isAdmin)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				fmt.Printf("错误: 用户 '%s' 不存在\n", *username)
+				os.Exit(1)
+			}
+			log.Fatalf("查询用户失败: %v", err)
+		}
+
+		if isAdmin == 1 {
+			fmt.Printf("✓ 找到管理员账号: %s\n", existingUsername)
+		} else {
+			fmt.Printf("✓ 找到用户账号: %s\n", existingUsername)
+		}
 	}
 
-	// 检查用户是否存在
-	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", a.username).Scan(&count)
+	// 前端已经 MD5 过一次，后端再进行一次 MD5（双重 MD5）
+	firstHash := utils.MD5Hash(strings.TrimSpace(*newPassword), "")
+	doubleHashedPassword := utils.MD5Hash(firstHash, "bookmarks")
+
+	// 更新密码
+	result, err := db.Exec(
+		"UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		doubleHashedPassword, userID,
+	)
 	if err != nil {
-		return fmt.Errorf("查询用户失败: %w", err)
+		log.Fatalf("更新密码失败: %v", err)
 	}
 
-	if count == 0 {
-		return fmt.Errorf("用户 %s 不存在", a.username)
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		fmt.Println("\n=========================================")
+		fmt.Println("  密码重置成功！")
+		fmt.Println("=========================================")
+		fmt.Printf("用户名: %s\n", existingUsername)
+		fmt.Printf("用户ID: %d\n", userID)
+		if isAdmin == 1 {
+			fmt.Printf("账号类型: 管理员\n")
+		} else {
+			fmt.Printf("账号类型: 普通用户\n")
+		}
+		fmt.Printf("新密码: %s\n", *newPassword)
+		fmt.Println("\n现在可以使用新密码登录了。")
+		fmt.Println("=========================================")
+	} else {
+		fmt.Println("错误: 密码重置失败")
+		os.Exit(1)
 	}
-
-	// 更新用户密码（使用 MD5 加密）
-	hashedPassword := md5Hash(a.password)
-	result, err := db.Exec("UPDATE users SET password = ? WHERE username = ?", hashedPassword, a.username)
-	if err != nil {
-		return fmt.Errorf("更新密码失败: %w", err)
-	}
-
-	// 验证是否成功更新
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("获取更新结果失败: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("未更新任何记录")
-	}
-
-	return nil
 }
-
-// MD5 哈希函数（与前端加密逻辑保持一致）
-func md5Hash(text string) string {
-	// 简单的 MD5 实现
-	// 注意：在实际生产环境中，建议使用更安全的哈希算法如 bcrypt、scrypt 或 Argon2
-	// 这里为了与现有系统保持兼容，使用 MD5
-	
-	// 导入 crypto/md5 包
-	h := crypto.MD5.New()
-	h.Write([]byte(text))
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-// 确保导入了 crypto 包
-import (
-	"crypto"
-)
-

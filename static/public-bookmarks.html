@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>公开书签</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/template-common.css">
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+
+    .pb-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 32px;
+      height: 60px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      flex-shrink: 0;
+    }
+
+    .pb-brand {
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .pb-search {
+      flex: 1;
+      max-width: 400px;
+      position: relative;
+    }
+    .pb-search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .pb-search input {
+      width: 100%;
+      padding: 8px 36px 8px 34px;
+      font-size: 13px;
+      font-family: inherit;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .pb-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .pb-search input::placeholder { color: var(--text-muted); }
+    .pb-search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: none;
+    }
+    .pb-search-clear:hover { color: var(--text-primary); background: var(--bg-elev-2); }
+
+    .pb-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .pb-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .pb-btn {
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+    .pb-btn-ghost {
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+    .pb-btn-ghost:hover { background: var(--bg-elev-3); color: var(--text-primary); }
+    .pb-btn-primary {
+      background: var(--gradient-primary);
+      border: none;
+      color: #fff;
+      box-shadow: 0 0 0 0 var(--accent-glow);
+    }
+    .pb-btn-primary:hover { filter: brightness(1.1); }
+
+    .pb-main {
+      flex: 1;
+      padding: 32px;
+      overflow-y: auto;
+    }
+
+    /* User group section */
+    .pb-user-group { margin-bottom: 40px; }
+    .pb-user-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pb-user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--gradient-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .pb-user-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .pb-user-count {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 600;
+      background: var(--accent-soft);
+      padding: 2px 8px;
+      border-radius: 12px;
+      margin-left: auto;
+    }
+
+    /* Folder group */
+    .pb-folder-group { margin-bottom: 24px; }
+    .pb-folder-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-elev-1);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .pb-folder-icon { font-size: 15px; }
+
+    /* Bookmark list */
+    .pb-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .pb-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      color: inherit;
+      transition: background .15s;
+      border: 1px solid transparent;
+    }
+    .pb-item:hover {
+      background: var(--bg-elev-1);
+      border-color: var(--border);
+    }
+    .pb-item-favicon {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .pb-item-favicon-placeholder {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .pb-item-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pb-item-title mark { background: var(--accent-soft); color: var(--accent); padding: 0 2px; border-radius: 2px; }
+    .pb-item-domain {
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+    }
+    .pb-item-remark {
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Empty / loading */
+    .pb-empty {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-muted);
+    }
+    .pb-empty-icon { font-size: 48px; margin-bottom: 16px; opacity: .4; }
+    .pb-empty-title { font-size: 16px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+    .pb-empty-sub { font-size: 13px; }
+
+    .pb-spinner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 0;
+    }
+    .pb-spinner::after {
+      content: '';
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) {
+      .pb-header { padding: 0 16px; }
+      .pb-main { padding: 20px 16px; }
+      .pb-item-remark { display: none; }
+      .pb-item-domain { display: none; }
+      .pb-search { max-width: none; }
+      .pb-count { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="pb-header">
+    <span class="pb-brand">🌐 公开书签</span>
+    <div class="pb-search">
+      <svg class="pb-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" id="searchInput" placeholder="搜索标题、链接、备注..." autocomplete="off">
+      <button class="pb-search-clear" id="searchClear">✕</button>
+    </div>
+    <div class="pb-header-actions">
+      <span class="pb-count" id="totalCount"></span>
+      <button class="pb-btn pb-btn-ghost" onclick="TemplateShell.toggleTheme()">切换主题</button>
+      <a class="pb-btn pb-btn-primary" href="/login.html">登录</a>
+    </div>
+  </header>
+
+  <main class="pb-main" id="main">
+    <div class="pb-spinner" id="spinner"></div>
+  </main>
+
+  <script src="/template-shell.js"></script>
+  <script>
+  (function () {
+    TemplateShell.initTheme();
+
+    const main = document.getElementById('main');
+    const spinner = document.getElementById('spinner');
+    const searchInput = document.getElementById('searchInput');
+    const searchClear = document.getElementById('searchClear');
+    const totalCount = document.getElementById('totalCount');
+
+    let allNodes = [];
+    let allBookmarks = [];
+
+    function escHtml(s) { return TemplateShell.escapeHtml(s || ''); }
+    function highlight(s, q) { return q ? TemplateShell.highlightText(s || '', q) : escHtml(s); }
+    function getDomain(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } }
+
+    // Flatten the public tree into a list with user_id and breadcrumb
+    function flattenWithUser(nodes, parentPath, results) {
+      for (const n of nodes) {
+        if (n.type === 'bookmark') {
+          results.push({ ...n, breadcrumb: [...parentPath] });
+        } else if (n.type === 'folder' && n.children) {
+          flattenWithUser(n.children, [...parentPath, n.title], results);
+        }
+      }
+    }
+
+    // Group bookmarks by user_id → folder path
+    function groupByUserAndFolder(bookmarks) {
+      const userMap = new Map(); // user_id → { user_id, bookmarks: Map(folderPath → [bm]) }
+      for (const bm of bookmarks) {
+        const uid = bm.user_id;
+        if (!userMap.has(uid)) userMap.set(uid, { user_id: uid, folders: new Map() });
+        const folderKey = bm.breadcrumb.length ? bm.breadcrumb.join(' / ') : '根目录';
+        const group = userMap.get(uid);
+        if (!group.folders.has(folderKey)) group.folders.set(folderKey, []);
+        group.folders.get(folderKey).push(bm);
+      }
+      return userMap;
+    }
+
+    function renderBookmarks(bookmarks, q) {
+      if (!bookmarks.length) {
+        main.innerHTML = `<div class="pb-empty">
+          <div class="pb-empty-icon">🔍</div>
+          <div class="pb-empty-title">没有匹配结果</div>
+          <div class="pb-empty-sub">试试其他关键词</div>
+        </div>`;
+        return;
+      }
+
+      const userMap = groupByUserAndFolder(bookmarks);
+      let html = '';
+
+      for (const [uid, userGroup] of userMap) {
+        const label = `用户 #${uid}`;
+        const avatarLetter = String(uid);
+        let folderHtml = '';
+        let userTotal = 0;
+
+        for (const [folderPath, items] of userGroup.folders) {
+          userTotal += items.length;
+          let itemsHtml = '';
+          for (const bm of items) {
+            const title = highlight(bm.title, q);
+            const remark = bm.remark ? highlight(bm.remark, q) : '';
+            const domain = escHtml(getDomain(bm.url));
+            const favicon = bm.favicon_url
+              ? `<img class="pb-item-favicon" src="${escHtml(bm.favicon_url)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+              + `<div class="pb-item-favicon-placeholder" style="display:none">🌐</div>`
+              : `<div class="pb-item-favicon-placeholder">🌐</div>`;
+            itemsHtml += `<a class="pb-item" href="${escHtml(bm.url)}" target="_blank" rel="noopener noreferrer">
+              ${favicon}
+              <span class="pb-item-title">${title}</span>
+              ${remark ? `<span class="pb-item-remark">${remark}</span>` : ''}
+              <span class="pb-item-domain">${domain}</span>
+            </a>`;
+          }
+          folderHtml += `<div class="pb-folder-group">
+            <div class="pb-folder-header"><span class="pb-folder-icon">📁</span>${escHtml(folderPath)}</div>
+            <div class="pb-list">${itemsHtml}</div>
+          </div>`;
+        }
+
+        html += `<div class="pb-user-group">
+          <div class="pb-user-header">
+            <div class="pb-user-avatar">${avatarLetter}</div>
+            <span class="pb-user-name">${escHtml(label)}</span>
+            <span class="pb-user-count">${userTotal} 个书签</span>
+          </div>
+          ${folderHtml}
+        </div>`;
+      }
+
+      main.innerHTML = html;
+    }
+
+    function doSearch() {
+      const q = searchInput.value.trim();
+      searchClear.style.display = q ? 'block' : 'none';
+      let filtered = allBookmarks;
+      if (q) {
+        const lower = q.toLowerCase();
+        filtered = filtered.filter(b =>
+          (b.title || '').toLowerCase().includes(lower) ||
+          (b.url || '').toLowerCase().includes(lower) ||
+          (b.remark || '').toLowerCase().includes(lower)
+        );
+      }
+      totalCount.textContent = `共 ${filtered.length} 个书签`;
+      renderBookmarks(filtered, q);
+    }
+
+    async function init() {
+      try {
+        const res = await fetch('/api/public-tree');
+        if (!res.ok) throw new Error('加载失败');
+        allNodes = await res.json();
+        flattenWithUser(allNodes, [], allBookmarks);
+      } catch (e) {
+        main.innerHTML = `<div class="pb-empty">
+          <div class="pb-empty-icon">😕</div>
+          <div class="pb-empty-title">加载失败</div>
+          <div class="pb-empty-sub">${TemplateShell.escapeHtml(e.message)}</div>
+        </div>`;
+        return;
+      }
+
+      if (!allBookmarks.length) {
+        main.innerHTML = `<div class="pb-empty">
+          <div class="pb-empty-icon">📭</div>
+          <div class="pb-empty-title">暂无公开书签</div>
+          <div class="pb-empty-sub">还没有用户分享公开书签</div>
+        </div>`;
+        return;
+      }
+
+      totalCount.textContent = `共 ${allBookmarks.length} 个书签`;
+      renderBookmarks(allBookmarks, '');
+    }
+
+    let searchTimer;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(doSearch, 150);
+    });
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      doSearch();
+      searchInput.focus();
+    });
+
+    init();
+  })();
+  </script>
+</body>
+</html>

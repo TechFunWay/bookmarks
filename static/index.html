@@ -48,24 +48,27 @@
     </div>
     
     <script>
-        async function checkAuth() {
-            const token = localStorage.getItem('token');
-            if (token) {
-                return true;
-            }
+        // 默认首页支持 6 个展示模板和整页目标（侧边 / 门户 / 旧版首页）
+        // view 为历史遗留值，经 view.html 按用户偏好跳转
+        const TEMPLATE_PAGES = { 'view-sidebar': '/view-sidebar.html', 'view-portal': '/view-portal.html', view: '/view.html', pc: '/pc.html' };
+        const VALID_TEMPLATES = ['magazine', 'masonry', 'timeline', 'minimal', 'grid', 'table'];
+
+        function resolveDefaultUrl(name) {
+            if (!name) return null;
+            if (TEMPLATE_PAGES[name]) return TEMPLATE_PAGES[name];
+            return VALID_TEMPLATES.includes(name) ? '/template-' + name + '.html' : null;
+        }
+
+        async function loadSystemConfig() {
             try {
                 const response = await fetch('/api/config/system');
                 if (response.ok) {
-                    const config = await response.json();
-                    if (config.require_login === 'false') {
-                        return true;
-                    }
+                    return await response.json();
                 }
             } catch (error) {
                 console.error('检查系统配置失败:', error);
             }
-            window.location.href = 'login.html';
-            return false;
+            return {};
         }
 
         function isMobileDevice() {
@@ -91,16 +94,52 @@
         }
         
         async function redirectToAppropriateVersion() {
-            const authenticated = await checkAuth();
-            if (!authenticated) {
-                return;
+            const token = localStorage.getItem('token');
+            let sysConfig = null;
+
+            if (!token) {
+                sysConfig = await loadSystemConfig();
+                if (sysConfig.require_login !== 'false') {
+                    window.location.href = 'login.html';
+                    return;
+                }
             }
-            
+
+            // 手机端布局不同，不受默认模板设置影响，始终使用移动版
             if (isMobileDevice()) {
                 window.location.href = '/mobile.html';
-            } else {
-                window.location.href = '/pc.html';
+                return;
             }
+
+            // 1) 登录用户的个人默认首页优先
+            if (token) {
+                try {
+                    const response = await fetch('/api/config', { headers: { 'Authorization': token } });
+                    if (response.ok) {
+                        const config = await response.json();
+                        const url = resolveDefaultUrl(config.user_default_template);
+                        if (url) {
+                            window.location.replace(url);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('读取用户配置失败:', error);
+                }
+            }
+
+            // 2) 管理员设置的全局默认首页
+            if (!sysConfig) {
+                sysConfig = await loadSystemConfig();
+            }
+            const url = resolveDefaultUrl(sysConfig.default_template);
+            if (url) {
+                window.location.replace(url);
+                return;
+            }
+
+            // 3) 都没设置时进旧版首页
+            window.location.href = '/pc.html';
         }
         
         window.addEventListener('DOMContentLoaded', redirectToAppropriateVersion);

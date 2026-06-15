@@ -92,7 +92,7 @@
         </button>
         <button class="tertiary" onclick="window.open('/templates.html', '_blank')">
           <span>✨</span>
-          <span>公开模板库</span>
+          <span>页面切换</span>
         </button>
       </div>
       <div class="theme-toggle">
@@ -141,7 +141,7 @@
                 <span class="dropdown-icon">👥</span>
                 <span>用户管理</span>
               </button>
-              <button class="dropdown-item" v-if="currentUser && currentUser.is_admin" @click="openAdminPage">
+              <button class="dropdown-item" v-if="currentUser" @click="openAdminPage">
                 <span class="dropdown-icon">🛠️</span>
                 <span>后台管理</span>
               </button>

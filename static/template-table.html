@@ -13,13 +13,18 @@
       line-height: 1.6;
     }
     .t-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
       display: flex;
       justify-content: space-between;
       align-items: center;
       height: 60px;
-      padding: 0 24px;
-      max-width: 960px;
-      margin: 0 auto;
+      padding: 0 32px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     .t-brand {
       font-weight: 600;
@@ -40,9 +45,7 @@
     }
     .t-tbl-container {
       width: 100%;
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 48px 24px;
+      padding: 40px 32px;
     }
     .t-tbl {
       width: 100%;
@@ -54,7 +57,7 @@
     }
     .t-tbl-row {
       display: grid;
-      grid-template-columns: 1fr 2fr 1fr 80px;
+      grid-template-columns: 1fr 2fr 80px;
       gap: 12px;
       padding: 12px 16px;
       border-bottom: 1px solid var(--border);
@@ -115,11 +118,9 @@
       font-size: 14px;
     }
     .t-footer {
-      padding: 48px;
+      padding: 32px;
       text-align: center;
       border-top: 1px solid var(--border);
-      max-width: 960px;
-      margin: 0 auto;
     }
     .t-footer a {
       color: var(--text-muted);
@@ -131,6 +132,8 @@
       color: var(--text-primary);
     }
     @media (max-width: 640px) {
+      .t-header { padding: 0 16px; }
+      .t-tbl-container { padding: 24px 16px; }
       .t-tbl-row {
         grid-template-columns: 1fr;
         gap: 8px;
@@ -258,6 +261,16 @@
       padding: 0 2px;
       border-radius: 2px;
     }
+    .t-folder-section-header {
+      margin: 0 -32px;
+      padding: 10px 32px;
+    }
+    @media (max-width: 640px) {
+      .t-folder-section-header {
+        margin: 0 -16px;
+        padding: 10px 16px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -269,6 +282,7 @@
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
     <div class="t-sort" id="sortContainer"></div>
+    <div class="t-auth" id="authContainer"></div>
     <button class="t-theme-toggle" onclick="TemplateShell.toggleTheme()">切换主题</button>
   </header>
 
@@ -277,6 +291,7 @@
 
   <footer class="t-footer">
     <a href="/">← 返回主应用</a>
+    <span class="t-version"></span>
   </footer>
 
   <script src="template-shell.js"></script>
@@ -289,65 +304,67 @@
       TemplateShell.initTheme();
 
       const app = document.getElementById('app');
-      const tree = await TemplateShell.loadPublicTree();
+      const tree = await TemplateShell.loadUserTree();
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
       const sortContainer = document.getElementById('sortContainer');
+      const authContainer = document.getElementById('authContainer');
       let currentSort = 'default';
 
-      if (!tree || tree.length === 0) {
-        app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
-      } else {
-        const flat = TemplateShell.flattenTree(tree);
-        if (flat.length === 0) {
-          app.innerHTML = '<div class="t-empty">暂无公开书签</div>';
-        } else {
-          const allItems = flat;
+      const allItems = TemplateShell.flattenTree(tree);
 
-          function formatDate(str) {
-            if (!str) return '';
-            try {
-              const d = new Date(str);
-              if (isNaN(d.getTime())) return '';
-              const y = d.getFullYear();
-              const m = String(d.getMonth() + 1).padStart(2, '0');
-              const day = String(d.getDate()).padStart(2, '0');
-              return `${y}-${m}-${day}`;
-            } catch (e) {
-              return '';
-            }
+      if (!allItems || allItems.length === 0) {
+        app.innerHTML = '<div class="t-empty">暂无书签</div>';
+        TemplateShell.mountSwitcher(document.body, 'table');
+      } else {
+        const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
+
+        function formatDate(str) {
+          if (!str) return '';
+          try {
+            const d = new Date(str);
+            if (isNaN(d.getTime())) return '';
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          } catch (e) { return ''; }
+        }
+
+        function groupByPath(bms) {
+          const groups = new Map();
+          for (const bm of bms) {
+            const path = (bm.breadcrumb && bm.breadcrumb.length) ? bm.breadcrumb.join(' / ') : '未分类';
+            if (!groups.has(path)) groups.set(path, []);
+            groups.get(path).push(bm);
+          }
+          return groups;
+        }
+
+        function render(list) {
+          if (!list || list.length === 0) {
+            app.innerHTML = '<div class="t-empty">无匹配结果</div>';
+            return;
           }
 
-          const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
+          const q = searchInput.value.trim();
+          const sorted = TemplateShell.sortBookmarks(list, currentSort);
+          const groups = groupByPath(sorted);
 
-          function render(list) {
-            if (!list || list.length === 0) {
-              app.innerHTML = '<div class="t-empty">无匹配结果</div>';
-              return;
-            }
-
-            const sorted = TemplateShell.sortBookmarks(list, currentSort);
-            let html = '<div class="t-tbl">';
-            for (const item of sorted) {
-              const path = (item.breadcrumb || []).join(' / ');
-              const dateStr = formatDate(item.updated_at || item.created_at);
-              
-              const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236a6a85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='2' y1='12' x2='22' y2='12'></line><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'></path></svg>`;
-              
-              const favicon = item.favicon_url 
-                ? `<img src="${TemplateShell.escapeHtml(item.favicon_url)}" class="t-tbl-favicon" alt="" onerror="this.src='${fallbackSvg}'">`
-                : `<img src="${fallbackSvg}" class="t-tbl-favicon" alt="">`;
-              
-              const q = searchInput.value.trim();
+          let html = '';
+          for (const [path, items] of groups) {
+            const folderLabel = q ? TemplateShell.highlightText(path, q) : TemplateShell.escapeHtml(path);
+            html += `<div class="t-folder-section">
+              <div class="t-folder-section-header">
+                <svg class="t-folder-section-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span class="t-folder-section-title">${folderLabel}</span>
+                <span class="t-folder-section-count">${items.length}</span>
+              </div>
+              <div class="t-tbl">`;
+            for (const item of items) {
               const title = q ? TemplateShell.highlightText(item.title, q) : TemplateShell.escapeHtml(item.title);
               const url = q ? TemplateShell.highlightText(item.url, q) : TemplateShell.escapeHtml(item.url);
-              const folder = q ? TemplateShell.highlightText((item.breadcrumb || []).join(' / '), q) : TemplateShell.escapeHtml((item.breadcrumb || []).join(' / '));
               const date = TemplateShell.escapeHtml(formatDate(item.updated_at || item.created_at));
-              
-              const faviconHtml = item.favicon_url 
+              const faviconHtml = item.favicon_url
                 ? `<img src="${TemplateShell.escapeHtml(item.favicon_url)}" class="t-tbl-favicon" alt="" onerror="this.src='${fallbackSvg}'">`
                 : `<img src="${fallbackSvg}" class="t-tbl-favicon" alt="">`;
-              
               html += `
                 <div class="t-tbl-row">
                   <a href="${TemplateShell.escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="t-tbl-title">
@@ -355,39 +372,38 @@
                     <span>${title}</span>
                   </a>
                   <div class="t-tbl-url" title="${TemplateShell.escapeHtml(item.url)}">${url}</div>
-                  <div class="t-tbl-folder" title="${TemplateShell.escapeHtml((item.breadcrumb || []).join(' / '))}">${folder}</div>
                   <div class="t-tbl-date">${date}</div>
-                </div>
-              `;
+                </div>`;
             }
-            html += '</div>';
-            app.innerHTML = html;
+            html += `</div></div>`;
           }
-
-          function doSearch() {
-            const q = searchInput.value.trim();
-            const filtered = TemplateShell.searchBookmarks(allItems, q);
-            render(filtered);
-            searchClear.style.display = q ? 'flex' : 'none';
-          }
-
-          currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
-            currentSort = m;
-            doSearch();
-          });
-
-          searchInput.addEventListener('input', doSearch);
-          searchClear.addEventListener('click', () => {
-            searchInput.value = '';
-            doSearch();
-            searchInput.focus();
-          });
-
-          render(allItems);
+          app.innerHTML = html;
         }
-      }
 
-      TemplateShell.mountSwitcher(document.body, 'table');
+        function doSearch() {
+          const q = searchInput.value.trim();
+          const filtered = TemplateShell.searchBookmarks(allItems, q);
+          render(filtered);
+          searchClear.style.display = q ? 'flex' : 'none';
+        }
+
+        currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
+          currentSort = m;
+          doSearch();
+        });
+        TemplateShell.mountAuthButton(authContainer);
+        TemplateShell.mountVersionFooter();
+
+        searchInput.addEventListener('input', doSearch);
+        searchClear.addEventListener('click', () => {
+          searchInput.value = '';
+          doSearch();
+          searchInput.focus();
+        });
+
+        render(allItems);
+        TemplateShell.mountSwitcher(document.body, 'table');
+      }
     });
 
     function formatDate(str) {
