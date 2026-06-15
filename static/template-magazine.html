@@ -14,13 +14,17 @@
     }
     
     .t-header {
-      padding: 24px 48px;
-      position: absolute;
+      position: sticky;
       top: 0;
-      left: 0;
-      right: 0;
       z-index: 100;
-      background: transparent;
+      padding: 16px 48px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     
     .t-brand {
@@ -48,7 +52,7 @@
       min-height: 360px;
       display: flex;
       align-items: center;
-      padding: 60px 48px 40px;
+      padding: 32px 48px 40px;
       position: relative;
       overflow: hidden;
       background: radial-gradient(circle at 80% 20%, var(--accent-soft) 0%, transparent 40%),
@@ -290,12 +294,6 @@
       color: var(--text-primary);
     }
     
-    .t-footer-version {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-    }
-    
     @media (max-width: 768px) {
       .t-header {
         padding: 20px 24px;
@@ -448,6 +446,7 @@
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
     <div class="t-sort" id="sortContainer"></div>
+    <div class="t-auth" id="authContainer"></div>
     <button class="t-theme-toggle" id="themeToggle">切换主题</button>
   </header>
 
@@ -467,7 +466,7 @@
 
   <footer class="t-footer">
     <a href="/" class="t-footer-link">← 返回主应用</a>
-    <div class="t-footer-version">Bookmarks v2.1.0</div>
+    <span class="t-version"></span>
   </footer>
 
   <script src="template-shell.js"></script>
@@ -479,7 +478,7 @@
         TemplateShell.toggleTheme();
       });
 
-      const tree = await TemplateShell.loadPublicTree();
+      const tree = await TemplateShell.loadUserTree();
       const groups = TemplateShell.groupByFolder(tree);
       const allBookmarks = [];
       Object.keys(groups).forEach(folder => {
@@ -491,6 +490,7 @@
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
       const sortContainer = document.getElementById('sortContainer');
+      const authContainer = document.getElementById('authContainer');
       let currentSort = 'default';
       
       const renderCard = (bm, q) => {
@@ -611,6 +611,8 @@
         currentSort = m;
         render(searchInput.value.trim());
       });
+      TemplateShell.mountAuthButton(authContainer);
+      TemplateShell.mountVersionFooter();
       
       TemplateShell.mountSwitcher(document.body, 'magazine');
     });
