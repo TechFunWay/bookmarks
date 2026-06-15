@@ -12,8 +12,14 @@
     }
     
     .t-header {
-      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 16px 0;
       background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     
     .t-brand {
@@ -43,30 +49,94 @@
       fill: currentColor;
     }
     
-    .t-mas-tags {
+    /* Nav wrap */
+    .t-nav-wrap {
       position: sticky;
-      top: 72px; /* Below header */
+      top: 72px;
       z-index: 90;
+      background: var(--bg-base);
+      padding: 8px 0 4px;
+      margin-bottom: 20px;
+    }
+    .t-nav-row {
       display: flex;
-      gap: 12px;
-      padding: 16px 0;
-      margin-bottom: 24px;
+      align-items: center;
+      gap: 4px;
+    }
+    .t-mas-tags {
+      flex: 1;
+      display: flex;
+      gap: 8px;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      background: var(--bg-base);
-      /* Hide scrollbar */
       scrollbar-width: none;
+      padding: 6px 2px;
     }
-    .t-mas-tags::-webkit-scrollbar {
+    .t-mas-tags::-webkit-scrollbar { display: none; }
+
+    /* Breadcrumb */
+    .t-nav-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 4px 2px 6px;
+    }
+    .t-nav-breadcrumb::-webkit-scrollbar { display: none; }
+    .t-nav-crumb {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      padding: 3px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .t-nav-crumb:hover { color: var(--text-primary); background: var(--bg-elev-2); }
+    .t-nav-crumb.active { color: var(--accent); font-weight: 700; }
+    .t-nav-crumb-sep {
+      color: var(--text-muted);
+      font-size: 11px;
+      opacity: 0.4;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    /* Scroll arrows */
+    .t-nav-arrow {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 16px;
+      line-height: 1;
       display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
     }
-    
+    .t-nav-arrow.visible { display: flex; }
+    .t-nav-arrow:hover {
+      background: var(--bg-elev-3);
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    /* Tags */
     .t-mas-tag {
-      padding: 8px 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 14px;
       border-radius: 20px;
       background: var(--bg-elev-2);
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
       white-space: nowrap;
       transition: all 0.2s;
@@ -81,6 +151,13 @@
       color: #fff;
       box-shadow: var(--shadow-glow);
     }
+.t-nav-chevron {
+      width: 12px;
+      height: 12px;
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+    .t-mas-tag.active .t-nav-chevron { opacity: 0.9; }
     
     .t-mas-grid {
       column-count: 4;
@@ -327,6 +404,7 @@
         <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
       </div>
       <div class="t-sort" id="sortContainer"></div>
+      <div class="t-auth" id="authContainer"></div>
       <button class="t-theme-toggle" id="themeToggle" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24">
           <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm0-2V4c4.418 0 8 3.582 8 8s-3.582 8-8 8z"/>
@@ -334,7 +412,14 @@
       </button>
     </header>
     
-    <div class="t-mas-tags" id="tagCloud"></div>
+    <div class="t-nav-wrap" id="navWrap">
+      <div class="t-nav-breadcrumb" id="navBreadcrumb" style="display:none"></div>
+      <div class="t-nav-row">
+        <button class="t-nav-arrow" id="navPrev" aria-label="向左滚动">‹</button>
+        <div class="t-mas-tags" id="navTags"></div>
+        <button class="t-nav-arrow" id="navNext" aria-label="向右滚动">›</button>
+      </div>
+    </div>
     <div class="t-mas-grid" id="gridContainer"></div>
     <div id="emptyState" style="display: none;"></div>
   </div>
@@ -349,159 +434,235 @@
         TemplateShell.toggleTheme();
       });
       
-      const tree = await TemplateShell.loadPublicTree();
+      const tree = await TemplateShell.loadUserTree();
       const allBookmarks = TemplateShell.flattenTree(tree);
-      const groups = TemplateShell.groupByFolder(tree);
-      
-      const tagCloud = document.getElementById('tagCloud');
+
       const gridContainer = document.getElementById('gridContainer');
-      const emptyState = document.getElementById('emptyState');
-      const searchInput = document.getElementById('searchInput');
-      const searchClear = document.getElementById('searchClear');
+      const emptyState    = document.getElementById('emptyState');
+      const searchInput   = document.getElementById('searchInput');
+      const searchClear   = document.getElementById('searchClear');
       const sortContainer = document.getElementById('sortContainer');
-      let currentSort = 'default';
-      
+      const authContainer = document.getElementById('authContainer');
+
       if (allBookmarks.length === 0) {
-        emptyState.innerHTML = `
-          <div class="t-empty">
-            <h3>暂无公开书签</h3>
-            <p>请在后台将一些书签设置为公开</p>
-          </div>
-        `;
+        emptyState.innerHTML = '<div class="t-empty"><h3>暂无书签</h3></div>';
         emptyState.style.display = 'block';
+        TemplateShell.mountSwitcher(document.body, 'masonry');
         return;
       }
-      
-      const folders = Object.keys(groups).sort();
+
+      // Build recursive folder tree from raw tree
+      function buildFolderTree(nodes) {
+        const result = [];
+        for (const node of nodes) {
+          if (node.type !== 'folder') continue;
+          result.push({ name: node.title, children: buildFolderTree(node.children || []) });
+        }
+        return result;
+      }
+      const folderTree = buildFolderTree(tree);
+
+      // Get sub-folder list at a given path
+      function getFoldersAtPath(path) {
+        let current = folderTree;
+        for (const name of path) {
+          const node = current.find(f => f.name === name);
+          if (!node) return [];
+          current = node.children;
+        }
+        return current;
+      }
+
+      // State
+      let folderPath = [];  // e.g. ['工作', '前端'] means drilled into 工作 → 前端
       let currentSearch = '';
-      
-      function renderTags(activeFilter) {
-        tagCloud.innerHTML = '';
-        
-        const allTag = document.createElement('button');
-        allTag.className = `t-mas-tag ${activeFilter === 'all' ? 'active' : ''}`;
-        allTag.textContent = '全部';
-        allTag.addEventListener('click', () => setFilter('all'));
-        tagCloud.appendChild(allTag);
-        
-        folders.forEach(folder => {
-          const tag = document.createElement('button');
-          tag.className = `t-mas-tag ${activeFilter === folder ? 'active' : ''}`;
-          tag.textContent = folder;
-          tag.addEventListener('click', () => setFilter(folder));
-          tagCloud.appendChild(tag);
+      let currentSort = 'default';
+
+      const FALLBACK_ICO = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWE5YWIwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxsaW5lIHgxPSIyIiB5MT0iMTIiIHgyPSIyMiIgeTI9IjEyIj48L2xpbmU+PHBhdGggZD0iTTEyIDJhMTUuMyAxNS4zIDAgMCAxIDQgMTAgMTUuMyAxNS4zIDAgMCAxLTQgMTAgMTUuMyAxNS4zIDAgMCAxLTQtMTAgMTUuMyAxNS4zIDAgMCAxIDQtMTB6Ij48L3BhdGg+PC9zdmc+`;
+      const CHEVRON_SVG = `<svg class="t-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+
+      const navBreadcrumb = document.getElementById('navBreadcrumb');
+      const navTagsEl     = document.getElementById('navTags');
+
+      // ── Scroll arrows ──────────────────────────────────────────
+      function setupArrows(container, prevBtn, nextBtn) {
+        function refresh() {
+          const hasLeft  = container.scrollLeft > 2;
+          const hasRight = container.scrollLeft + container.clientWidth < container.scrollWidth - 2;
+          prevBtn.classList.toggle('visible', hasLeft);
+          nextBtn.classList.toggle('visible', hasRight);
+        }
+        container.addEventListener('scroll', refresh, { passive: true });
+        window.addEventListener('resize', refresh);
+        prevBtn.addEventListener('click', () => container.scrollBy({ left: -200, behavior: 'smooth' }));
+        nextBtn.addEventListener('click', () => container.scrollBy({ left:  200, behavior: 'smooth' }));
+        refresh();
+        return refresh;
+      }
+
+      const refreshArrows = setupArrows(navTagsEl,
+        document.getElementById('navPrev'), document.getElementById('navNext'));
+
+      // ── Render breadcrumb ──────────────────────────────────────
+      function renderBreadcrumb() {
+        if (folderPath.length === 0) {
+          navBreadcrumb.style.display = 'none';
+          return;
+        }
+        navBreadcrumb.style.display = 'flex';
+        navBreadcrumb.innerHTML = '';
+
+        const allBtn = document.createElement('button');
+        allBtn.className = 't-nav-crumb';
+        allBtn.textContent = '全部';
+        allBtn.addEventListener('click', () => { folderPath = []; renderNav(); renderGrid(); });
+        navBreadcrumb.appendChild(allBtn);
+
+        folderPath.forEach((name, idx) => {
+          const sep = document.createElement('span');
+          sep.className = 't-nav-crumb-sep';
+          sep.textContent = '›';
+          navBreadcrumb.appendChild(sep);
+
+          const isLast = idx === folderPath.length - 1;
+          const crumb = document.createElement('button');
+          crumb.className = 't-nav-crumb' + (isLast ? ' active' : '');
+          crumb.textContent = name;
+          if (!isLast) {
+            crumb.addEventListener('click', () => {
+              folderPath = folderPath.slice(0, idx + 1);
+              renderNav(); renderGrid();
+            });
+          }
+          navBreadcrumb.appendChild(crumb);
         });
       }
-      
-      function renderGrid(filter) {
+
+      // ── Render tag row (current level's sub-folders) ───────────
+      function renderTags() {
+        navTagsEl.innerHTML = '';
+
+        if (folderPath.length === 0) {
+          // Root: "全部" (active) + L1 folders
+          const allBtn = document.createElement('button');
+          allBtn.className = 't-mas-tag active';
+          allBtn.textContent = '全部';
+          navTagsEl.appendChild(allBtn);
+
+          folderTree.forEach(folder => {
+            const btn = document.createElement('button');
+            btn.className = 't-mas-tag';
+            btn.innerHTML = TemplateShell.escapeHtml(folder.name) +
+              (folder.children.length > 0 ? CHEVRON_SVG : '');
+            btn.addEventListener('click', () => {
+              folderPath = [folder.name];
+              renderNav(); renderGrid();
+            });
+            navTagsEl.appendChild(btn);
+          });
+        } else {
+          const subFolders = getFoldersAtPath(folderPath);
+          subFolders.forEach(folder => {
+            const btn = document.createElement('button');
+            btn.className = 't-mas-tag';
+            btn.innerHTML = TemplateShell.escapeHtml(folder.name) +
+              (folder.children.length > 0 ? CHEVRON_SVG : '');
+            btn.addEventListener('click', () => {
+              folderPath = [...folderPath, folder.name];
+              renderNav(); renderGrid();
+            });
+            navTagsEl.appendChild(btn);
+          });
+        }
+
+        setTimeout(refreshArrows, 0);
+      }
+
+      function renderNav() {
+        renderBreadcrumb();
+        renderTags();
+      }
+
+      // ── Render grid ────────────────────────────────────────────
+      function renderGrid() {
         gridContainer.innerHTML = '';
-        
+        emptyState.style.display = 'none';
+        gridContainer.style.display = 'block';
+
         let filtered = allBookmarks;
-        if (filter !== 'all') {
-          filtered = filtered.filter(b => b.breadcrumb && b.breadcrumb[0] === filter);
+        if (folderPath.length > 0) {
+          filtered = filtered.filter(b => {
+            const bc = b.breadcrumb || [];
+            if (bc.length < folderPath.length) return false;
+            for (let i = 0; i < folderPath.length; i++) {
+              if (bc[i] !== folderPath[i]) return false;
+            }
+            return true;
+          });
         }
-        if (currentSearch) {
-          filtered = TemplateShell.searchBookmarks(filtered, currentSearch);
-        }
+        if (currentSearch) filtered = TemplateShell.searchBookmarks(filtered, currentSearch);
         filtered = TemplateShell.sortBookmarks(filtered, currentSort);
-        
-        if (filtered.length === 0) {
+
+        if (!filtered.length) {
           gridContainer.style.display = 'none';
-          emptyState.innerHTML = `
-            <div class="t-empty">
-              <h3>${currentSearch ? '没有匹配的书签' : '当前筛选下没有书签'}</h3>
-              <p>${currentSearch ? '试试其他关键词' : '该分类下暂无公开书签'}</p>
-              <a class="t-empty-link" onclick="window.location.hash='#all'">查看全部</a>
-            </div>
-          `;
+          emptyState.innerHTML = `<div class="t-empty">
+            <h3>${currentSearch ? '没有匹配的书签' : '当前分类下没有书签'}</h3>
+            ${currentSearch ? '<p>试试其他关键词</p>' : ''}
+          </div>`;
           emptyState.style.display = 'block';
           return;
         }
-        
-        gridContainer.style.display = 'block';
-        emptyState.style.display = 'none';
-        
+
         filtered.forEach(b => {
           const pin = document.createElement('a');
           pin.className = 't-mas-pin';
           pin.href = b.url;
           pin.target = '_blank';
           pin.rel = 'noopener noreferrer';
-          
-          const folderName = b.breadcrumb && b.breadcrumb.length > 0 ? b.breadcrumb[0] : '未分类';
-          
-          let faviconHtml = '';
-          if (b.favicon_url) {
-            faviconHtml = `<img src="${b.favicon_url}" class="t-favicon t-favicon-48" loading="lazy" alt="" onerror="this.classList.add('missing');this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWE5YWIwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxsaW5lIHgxPSIyIiB5MT0iMTIiIHgyPSIyMiIgeTI9IjEyIj48L2xpbmU+PHBhdGggZD0iTTEyIDJhMTUuMyAxNS4zIDAgMCAxIDQgMTAgMTUuMyAxNS4zIDAgMCAxLTQgMTAgMTUuMyAxNS4zIDAgMCAxLTQtMTAgMTUuMyAxNS4zIDAgMCAxIDQtMTB6Ij48L3BhdGg+PC9zdmc+'">`;
-          } else {
-            faviconHtml = `<div class="t-favicon t-favicon-48 missing" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>`;
-          }
-          
-          const titleHtml = currentSearch ? TemplateShell.highlightText(b.title || '', currentSearch) : TemplateShell.escapeHtml(b.title);
-          const urlHtml = currentSearch ? TemplateShell.highlightText(b.url || '', currentSearch) : TemplateShell.escapeHtml(b.url);
-          const remarkHtml = b.remark ? (currentSearch ? TemplateShell.highlightText(b.remark, currentSearch) : TemplateShell.escapeHtml(b.remark)) : '';
-          const folderHtml = currentSearch ? TemplateShell.highlightText(folderName, currentSearch) : TemplateShell.escapeHtml(folderName);
-          
+
+          const faviconHtml = b.favicon_url
+            ? `<img src="${TemplateShell.escapeHtml(b.favicon_url)}" class="t-favicon t-favicon-48" loading="lazy" alt="" onerror="this.src='${FALLBACK_ICO}'">`
+            : `<div class="t-favicon t-favicon-48 missing" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>`;
+
+          const q = currentSearch;
+          const titleHtml  = q ? TemplateShell.highlightText(b.title || '', q) : TemplateShell.escapeHtml(b.title);
+          const urlHtml    = q ? TemplateShell.highlightText(b.url   || '', q) : TemplateShell.escapeHtml(b.url);
+          const remarkHtml = b.remark ? (q ? TemplateShell.highlightText(b.remark, q) : TemplateShell.escapeHtml(b.remark)) : '';
+          const folderLabel = (b.breadcrumb || []).join(' / ');
+          const folderHtml = q ? TemplateShell.highlightText(folderLabel, q) : TemplateShell.escapeHtml(folderLabel);
+
           pin.innerHTML = `
-            <div class="t-mas-pin-top">
-              ${faviconHtml}
-              <div class="t-mas-pin-title">${titleHtml}</div>
-            </div>
+            <div class="t-mas-pin-top">${faviconHtml}<div class="t-mas-pin-title">${titleHtml}</div></div>
             <div class="t-mas-pin-url mono">${urlHtml}</div>
             ${remarkHtml ? `<div class="t-mas-pin-remark">${remarkHtml}</div>` : ''}
-            <div class="t-mas-pin-bottom">
-              <div class="t-mas-pin-dot"></div>
-              <span>${folderHtml}</span>
-            </div>
-          `;
-          
+            <div class="t-mas-pin-bottom"><div class="t-mas-pin-dot"></div><span>${folderHtml}</span></div>`;
           gridContainer.appendChild(pin);
         });
       }
-      
-      function setFilter(filter) {
-        window.location.hash = filter === 'all' ? '#all' : `#${encodeURIComponent(filter)}`;
-      }
-      
-      function getCurrentHash() {
-        let hash = window.location.hash.substring(1);
-        if (!hash) hash = 'all';
-        else hash = decodeURIComponent(hash);
-        if (hash !== 'all' && !folders.includes(hash)) hash = 'all';
-        return hash;
-      }
-      
-      function handleHashChange() {
-        const hash = getCurrentHash();
-        renderTags(hash);
-        renderGrid(hash);
-      }
-      
+
+      // ── Search ─────────────────────────────────────────────────
       let searchTimer;
-      searchInput.addEventListener('input', (e) => {
+      searchInput.addEventListener('input', e => {
         currentSearch = e.target.value.trim();
         searchClear.style.display = currentSearch ? 'flex' : 'none';
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => {
-          renderGrid(getCurrentHash());
-        }, 120);
+        searchTimer = setTimeout(renderGrid, 120);
       });
       searchClear.addEventListener('click', () => {
-        searchInput.value = '';
-        currentSearch = '';
+        searchInput.value = ''; currentSearch = '';
         searchClear.style.display = 'none';
-        renderGrid(getCurrentHash());
-        searchInput.focus();
+        renderGrid(); searchInput.focus();
       });
-      
-      currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
-        currentSort = m;
-        renderGrid(getCurrentHash());
-      });
-      
-      window.addEventListener('hashchange', handleHashChange);
-      handleHashChange();
+
+      currentSort = TemplateShell.mountSortControl(sortContainer, m => { currentSort = m; renderGrid(); });
+      TemplateShell.mountAuthButton(authContainer);
+      TemplateShell.mountVersionFooter();
+
+      // ── Initial render ─────────────────────────────────────────
+      renderNav();
+      renderGrid();
     });
   </script>
+  <div class="t-version" style="text-align:center;padding:24px;border-top:1px solid var(--border);margin-top:auto;color:var(--text-muted);font-size:12px;"></div>
 </body>
 </html>

@@ -211,7 +211,7 @@ func CompareVersions(v1, v2 string) (int, error) {
 // GetAvailableVersions 获取可用的升级版本列表
 func (u *Upgrade) GetAvailableVersions(fromVersion string) ([]string, error) {
 	// 硬编码所有可用版本
-	allVersions := []string{"v1.7.0", "v1.8.0", "v1.9.0", "v2.0.0", "v2.2.0", "v2.3.0"}
+	allVersions := []string{"v1.7.0", "v1.8.0", "v1.9.0", "v2.0.0", "v2.2.0", "v2.3.0", "v3.0.0"}
 
 	versions := []string{}
 	for _, version := range allVersions {
@@ -291,6 +291,8 @@ func (u *Upgrade) executeSQLForVersion(version string) error {
 		return u.executeSQLForV2_2_0()
 	case "v2.3.0":
 		return u.executeSQLForV2_3_0()
+	case "v3.0.0":
+		return nil
 	default:
 		return fmt.Errorf("未找到版本 %s 的SQL语句", version)
 	}
@@ -404,6 +406,8 @@ func (u *Upgrade) executeDataProcessingLogic(version string) error {
 		return u.processDataForV2_2_0()
 	case "v2.3.0":
 		return u.processDataForV2_3_0()
+	case "v3.0.0":
+		return nil
 	default:
 		// 对于未特殊处理的版本，可以执行通用数据处理逻辑
 		u.LogUpgrade("执行版本 %s 的通用数据处理逻辑", version)

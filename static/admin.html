@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>控制台 - 网址收藏夹</title>
   <link rel="icon" href="/favicon.ico" />
+  <script src="js/md5.js"></script>
   <script src="/vue.global.prod.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -186,6 +187,7 @@
     .menu-section { padding: 6px 0; }
     .menu-section + .menu-section { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; }
     .menu-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; padding: 4px 10px 6px; }
+    .menu-divider { height: 1px; background: var(--border); margin: 6px 10px; }
     .menu-item {
       display: flex; align-items: center; gap: 10px;
       width: 100%;
@@ -392,30 +394,95 @@
     /* Modal */
     .modal-overlay {
       position: fixed; inset: 0; z-index: 100;
-      background: rgba(0,0,0,.6);
-      backdrop-filter: blur(4px);
-      display: grid; place-items: center;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
       padding: 20px;
     }
     .modal {
       background: var(--bg-elev-1);
-      border: 1px solid var(--border);
-      border-radius: 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: 20px;
       width: 480px; max-width: 100%;
       max-height: 90vh; overflow: hidden;
       display: flex; flex-direction: column;
-      box-shadow: var(--shadow-lg);
+      box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+      animation: modalIn .22s cubic-bezier(.34,1.2,.64,1);
     }
-    .modal-hd { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--border); }
-    .modal-title { font-size: 15px; font-weight: 600; }
-    .modal-bd { padding: 22px; overflow-y: auto; }
-    .modal-ft { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
-    .form-group { margin-bottom: 14px; }
-    .form-error { color: var(--rose); font-size: 12px; margin-top: 6px; }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.9) translateY(16px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-hd {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--bg-elev-2) 0%, var(--bg-elev-1) 100%);
+      border-radius: 20px 20px 0 0;
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .modal-bd { padding: 24px; overflow-y: auto; flex: 1; }
+    .modal-ft {
+      padding: 16px 24px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 8px;
+      background: var(--bg-elev-2);
+      border-radius: 0 0 20px 20px;
+      flex-shrink: 0;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-error { color: var(--rose); font-size: 12px; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+    .form-error::before { content: '⚠'; font-size: 11px; }
     .form-hint { color: var(--text-muted); font-size: 11px; margin-top: 4px; }
     .modal-row { display: flex; gap: 8px; align-items: center; }
     .api-key-display { display: flex; gap: 8px; }
     .api-key-display .input { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+    /* Confirm dialog */
+    .confirm-modal { max-width: 380px; }
+    .confirm-body { padding: 32px 28px 24px; text-align: center; }
+    .confirm-icon-ring {
+      width: 72px; height: 72px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; margin: 0 auto 20px;
+      position: relative;
+    }
+    .confirm-icon-ring::before {
+      content: '';
+      position: absolute; inset: -4px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      opacity: .2;
+    }
+    .confirm-icon-ring.danger { background: var(--rose-soft); color: var(--rose); }
+    .confirm-icon-ring.warning { background: var(--amber-soft); color: var(--amber); }
+    .confirm-icon-ring.info { background: var(--accent-soft); color: var(--accent); }
+    .confirm-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; color: var(--text-primary); }
+    .confirm-msg { font-size: 13.5px; color: var(--text-secondary); line-height: 1.65; }
+    .confirm-ft {
+      padding: 16px 28px 24px;
+      display: flex; gap: 10px; justify-content: center;
+      border-radius: 0 0 20px 20px;
+    }
+    .confirm-ft .btn { min-width: 110px; padding: 10px 20px; font-size: 14px; font-weight: 600; }
+
+    /* Mobile — bottom sheet */
+    @media (max-width: 540px) {
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal {
+        border-radius: 24px 24px 0 0; width: 100%; max-width: 100%;
+        animation: modalInMobile .25s cubic-bezier(.34,1.1,.64,1);
+      }
+      .modal-hd { border-radius: 24px 24px 0 0; }
+      .modal-ft { border-radius: 0; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+      .confirm-modal { max-width: 100%; }
+      .confirm-ft { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+    }
+    @keyframes modalInMobile {
+      from { transform: translateY(100%); opacity: 0; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
 
     /* Toast */
     .toast-stack { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
@@ -615,14 +682,17 @@
         <a class="nav-item" :class="{ active: currentTab === 'dashboard' }" @click="switchTab('dashboard')">
           <span class="nav-icon">📊</span><span>仪表盘</span>
         </a>
-        <a class="nav-item" :class="{ active: currentTab === 'users' }" @click="switchTab('users')">
+        <a v-if="currentUser?.is_admin" class="nav-item" :class="{ active: currentTab === 'users' }" @click="switchTab('users')">
           <span class="nav-icon">👥</span><span>用户管理</span>
           <span class="nav-badge" v-if="users.length">{{ users.length }}</span>
         </a>
         <a class="nav-item" :class="{ active: currentTab === 'bookmarks' }" @click="switchTab('bookmarks')">
           <span class="nav-icon">📚</span><span>书签管理</span>
         </a>
-        <a class="nav-item" :class="{ active: currentTab === 'logs' }" @click="switchTab('logs')">
+        <a v-if="currentUser?.is_admin" class="nav-item" :class="{ active: currentTab === 'userbookmarks' }" @click="switchTab('userbookmarks')">
+          <span class="nav-icon">🗂️</span><span>用户书签</span>
+        </a>
+        <a v-if="currentUser?.is_admin" class="nav-item" :class="{ active: currentTab === 'logs' }" @click="switchTab('logs')">
           <span class="nav-icon">📋</span><span>操作日志</span>
         </a>
         <a class="nav-item" :class="{ active: currentTab === 'settings' }" @click="switchTab('settings')">
@@ -656,11 +726,15 @@
               <button class="menu-item" @click="showImportDialog(); userMenuOpen = false"><span class="mi-icon">📥</span><span class="mi-label">导入 JSON</span></button>
               <button class="menu-item" @click="showEdgeImportDialog(); userMenuOpen = false"><span class="mi-icon">🌐</span><span class="mi-label">导入 Edge</span></button>
               <button class="menu-item" @click="showUpdateMetadataDialog(); userMenuOpen = false"><span class="mi-icon">🔄</span><span class="mi-label">更新书签信息</span></button>
+              <div class="menu-divider"></div>
+              <button class="menu-item" @click="exportBookmarks(); userMenuOpen = false"><span class="mi-icon">📤</span><span class="mi-label">导出 JSON</span></button>
+              <button class="menu-item" @click="exportEdgeBookmarks(); userMenuOpen = false"><span class="mi-icon">🌍</span><span class="mi-label">导出 Edge</span></button>
             </div>
             <div class="menu-section">
               <div class="menu-label">导航</div>
-              <a class="menu-item" href="/view.html"><span class="mi-icon">📖</span><span class="mi-label">新版首页</span></a>
-              <a class="menu-item" href="/pc.html"><span class="mi-icon">🏠</span><span class="mi-label">返回收藏夹</span></a>
+              <a class="menu-item" href="/view-sidebar.html"><span class="mi-icon">📂</span><span class="mi-label">侧边</span></a>
+              <a class="menu-item" href="/view-portal.html"><span class="mi-icon">🏠</span><span class="mi-label">门户</span></a>
+              <a class="menu-item" href="/pc.html"><span class="mi-icon">🏠</span><span class="mi-label">旧版首页</span></a>
             </div>
             <div class="menu-section">
               <button class="menu-item danger" @click="handleLogout(); userMenuOpen = false"><span class="mi-icon">🚪</span><span class="mi-label">退出登录</span></button>
@@ -676,15 +750,53 @@
           <div class="page-sub">{{ pageSub }}</div>
         </div>
         <div class="topbar-actions">
+          <button class="btn btn-ghost" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
+            <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+          </button>
+          <a href="/templates.html" class="btn btn-ghost">
+            <span>🎨</span><span>前端首页</span>
+          </a>
           <button class="btn btn-grad" @click="development-noteAssistant">
             <span>✨</span><span>AI 助手</span>
           </button>
         </div>
       </header>
       <div class="content">
-        <!-- Dashboard Tab -->
+        <!-- 普通用户仪表盘 -->
         <transition name="fade">
-        <div v-if="currentTab === 'dashboard'">
+        <div v-if="currentTab === 'dashboard' && !currentUser?.is_admin">
+          <div class="stat-grid" v-if="!loading.stats">
+            <div class="stat-card">
+              <div class="stat-row"><div class="stat-icon cyan"><span>🔖</span></div></div>
+              <div class="stat-value">{{ stats.total_bookmarks }}</div>
+              <div class="stat-label">我的书签</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-row"><div class="stat-icon amber"><span>📁</span></div></div>
+              <div class="stat-value">{{ stats.total_folders }}</div>
+              <div class="stat-label">我的文件夹</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-row"><div class="stat-icon emerald"><span>🌐</span></div></div>
+              <div class="stat-value">{{ stats.public_bookmarks }}</div>
+              <div class="stat-label">公开书签</div>
+            </div>
+          </div>
+          <div v-else class="spinner"></div>
+          <div class="card" style="margin-top:16px">
+            <div class="card-hd"><div class="card-title">快捷入口</div></div>
+            <div class="card-bd" style="display:flex;gap:12px;flex-wrap:wrap;padding:16px">
+              <button class="btn btn-primary" @click="switchTab('bookmarks')">📂 管理我的书签</button>
+              <a class="btn btn-ghost" href="/public-bookmarks.html" target="_blank">🌐 浏览公开书签</a>
+              <button class="btn btn-ghost" @click="switchTab('settings')">⚙️ 个人设置</button>
+            </div>
+          </div>
+        </div>
+        </transition>
+
+        <!-- 管理员仪表盘 -->
+        <transition name="fade">
+        <div v-if="currentTab === 'dashboard' && currentUser?.is_admin">
           <!-- development-note cards -->
           <div class="insight-grid">
             <div class="insight-card" v-for="i in development-note" :key="i.title" :class="i.level">
@@ -752,7 +864,7 @@
         </div>
         </transition>
 
-        <!-- Users Tab -->
+        <!-- Users Tab (admin only) -->
         <transition name="fade">
         <div v-if="currentTab === 'users'">
           <div class="card">
@@ -824,6 +936,7 @@
                     <td style="color: var(--text-muted); font-size: 12px;">{{ u.last_login_at ? relativeTime(u.last_login_at) : '从未登录' }}</td>
                     <td>
                       <div class="row-actions">
+                        <button class="btn btn-ghost" @click="viewUserBookmarks(u)">📚 书签</button>
                         <button class="btn btn-ghost" @click="openEditUser(u)">✏️ 编辑</button>
                         <button class="btn btn-ghost" @click="openResetPwd(u)">🔑 重置</button>
                         <button class="btn btn-ghost" style="color: var(--rose);" @click="openDeleteUser(u)" :disabled="u.is_admin && u.id === currentUserId">🗑️</button>
@@ -843,14 +956,14 @@
         </div>
         </transition>
 
-        <!-- Bookmarks Tab -->
+        <!-- Bookmarks Tab (own data) + User Bookmarks Tab (admin: select user) -->
         <transition name="fade">
-        <div v-if="currentTab === 'bookmarks'">
+        <div v-if="currentTab === 'bookmarks' || currentTab === 'userbookmarks'">
           <div class="card">
             <div class="card-hd">
               <div>
-                <div class="card-title">用户书签管理</div>
-                <div class="card-sub">选择用户，浏览与管理其书签树</div>
+                <div class="card-title">{{ bm.mode === 'admin' ? '用户书签管理' : '我的书签' }}</div>
+                <div class="card-sub">{{ bm.mode === 'admin' ? '选择用户，浏览与管理其书签树' : '浏览与管理你的书签与文件夹' }}</div>
               </div>
               <div class="row-actions">
                 <button class="btn btn-ghost btn-sm" @click="expandAllBm">展开全部</button>
@@ -858,25 +971,28 @@
               </div>
             </div>
             <div class="card-bd">
-              <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
-                <select class="select" style="max-width: 320px;" v-model="bm.selectedUserId" @change="loadBookmarkUserTree">
+              <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+                <select v-if="bm.mode === 'admin'" class="select" style="max-width: 320px;" v-model="bm.selectedUserId" @change="loadBookmarkUserTree">
                   <option :value="null">-- 请选择用户 --</option>
                   <option v-for="bu in bm.userList" :key="bu.id" :value="bu.id">{{ bu.username }}{{ bu.nickname ? ' (' + bu.nickname + ')' : '' }}{{ bu.is_admin ? ' [管理员]' : '' }}</option>
                 </select>
-                <button class="btn btn-primary btn-sm" :disabled="!bm.selectedUserId" @click="bmAddFolder">📂 新建文件夹</button>
-                <button class="btn btn-primary btn-sm" :disabled="!bm.selectedUserId" @click="bmAddBookmark">🔖 新建书签</button>
+                <button class="btn btn-primary btn-sm" :disabled="bm.mode === 'admin' && !bm.selectedUserId" @click="bmAddFolder">📂 新建文件夹</button>
+                <button class="btn btn-primary btn-sm" :disabled="bm.mode === 'admin' && !bm.selectedUserId" @click="bmAddBookmark">🔖 新建书签</button>
+                <template v-if="bm.mode === 'self'">
+                  <span style="width:1px; height:20px; background: var(--border); margin: 0 2px;"></span>
+                  <button class="btn btn-secondary btn-sm" @click="showImportDialog">📥 导入 JSON</button>
+                  <button class="btn btn-secondary btn-sm" @click="showEdgeImportDialog">🌐 导入 Edge</button>
+                  <button class="btn btn-secondary btn-sm" @click="exportBmJSON">📤 导出 JSON</button>
+                  <button class="btn btn-secondary btn-sm" @click="exportBmEdge">🌍 导出 Edge</button>
+                </template>
                 <div style="margin-left: auto; color: var(--text-muted); font-size: 12.5px; align-self: center;">
                   <strong style="color: var(--text-primary);">{{ bm.totalBookmarks }}</strong> 个书签，<strong style="color: var(--text-primary);">{{ bm.totalFolders }}</strong> 个文件夹
                 </div>
               </div>
               <div v-if="bm.loading" class="spinner"></div>
-              <div v-else-if="!bm.selectedUserId" class="empty">
-                <div class="empty-icon">👤</div>
-                <div class="empty-title">请选择要管理的用户</div>
-              </div>
-              <div v-else-if="!bmFlattened.length" class="empty">
+              <div v-else-if="!bm.tree || !bm.tree.length" class="empty">
                 <div class="empty-icon">📂</div>
-                <div class="empty-title">该用户暂无书签</div>
+                <div class="empty-title">{{ bm.mode === 'admin' ? (bm.selectedUserId ? '该用户暂无书签' : '请先选择一个用户') : '暂无书签，点击上方按钮创建' }}</div>
               </div>
               <div v-else class="bm-tree">
                 <div v-for="item in bmFlattened" :key="item.node.id" class="bm-row" :class="{ selected: bm.selectedNodeId === item.node.id }" @click="bmSelectNode(item.node)" :style="{ paddingLeft: (item.depth * 18 + 8) + 'px' }">
@@ -973,7 +1089,7 @@
         <!-- Settings Tab -->
         <transition name="fade">
         <div v-if="currentTab === 'settings'">
-          <div class="card card-pad" style="margin-bottom: 16px;">
+          <div v-if="currentUser?.is_admin" class="card card-pad" style="margin-bottom: 16px;">
             <div class="section-title">全局设置</div>
             <div class="setting-row">
               <div class="setting-info">
@@ -998,7 +1114,7 @@
             <div class="setting-row">
               <div class="setting-info">
                 <div class="lbl">默认模板</div>
-                <div class="desc">公开展示页 /templates.html 的默认跳转目标。留空则让用户自行选择。</div>
+                <div class="desc">电脑端访问首页 / 和前端首页 /templates.html 时的默认跳转目标。手机端首页始终使用移动版，不受此设置影响。</div>
               </div>
               <select v-model="settings.defaultTemplate" @change="saveSettingsDebounced" style="background: var(--bg-elev-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px; min-width: 180px;">
                 <option value="">无默认（让用户选择）</option>
@@ -1006,11 +1122,34 @@
                 <option value="masonry">瀑布流 Masonry</option>
                 <option value="timeline">时间线 Timeline</option>
                 <option value="minimal">极简 Minimal</option>
+                <option value="grid">卡片网格 Grid</option>
+                <option value="table">表格 Table</option>
+                <option value="view-sidebar">侧边</option>
+                <option value="view-portal">门户</option>
+                <option value="pc">旧版首页（仅电脑端）</option>
               </select>
             </div>
           </div>
           <div class="card card-pad">
             <div class="section-title">显示设置</div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="lbl">默认模板首页</div>
+                <div class="desc">登录后电脑端访问首页 / 和前端首页 /templates.html 时优先跳转的页面。手机端首页不受影响。留空则使用全局默认。</div>
+              </div>
+              <select v-model="config.userDefaultTemplate" @change="saveConfigDebounced" style="background: var(--bg-elev-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px; min-width: 180px;">
+                <option value="">无默认（使用全局设置）</option>
+                <option value="magazine">杂志 Magazine</option>
+                <option value="masonry">瀑布流 Masonry</option>
+                <option value="timeline">时间线 Timeline</option>
+                <option value="minimal">极简 Minimal</option>
+                <option value="grid">卡片网格 Grid</option>
+                <option value="table">表格 Table</option>
+                <option value="view-sidebar">侧边</option>
+                <option value="view-portal">门户</option>
+                <option value="pc">旧版首页（仅电脑端）</option>
+              </select>
+            </div>
             <div class="setting-row">
               <div class="setting-info">
                 <div class="lbl">显示 URL 地址</div>
@@ -1098,7 +1237,7 @@
 
   <!-- Create User Modal -->
   <transition name="fade">
-    <div v-if="createUserModal.visible" class="modal-overlay" @click="closeCreateUserModal">
+    <div v-if="createUserModal.visible" class="modal-overlay" @mousedown.self="closeCreateUserModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">➕ 创建用户</div><button class="icon-btn" @click="closeCreateUserModal">✕</button></div>
         <div class="modal-bd">
@@ -1119,7 +1258,7 @@
 
   <!-- Edit User Modal -->
   <transition name="fade">
-    <div v-if="editModal.visible" class="modal-overlay" @click="closeEditModal">
+    <div v-if="editModal.visible" class="modal-overlay" @mousedown.self="closeEditModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">编辑 · {{ editModal.user?.username }}</div><button class="icon-btn" @click="closeEditModal">✕</button></div>
         <div class="modal-bd">
@@ -1137,7 +1276,7 @@
 
   <!-- Reset Password Modal -->
   <transition name="fade">
-    <div v-if="resetModal.visible" class="modal-overlay" @click="closeResetModal">
+    <div v-if="resetModal.visible" class="modal-overlay" @mousedown.self="closeResetModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">🔑 重置密码 · {{ resetModal.user?.username }}</div><button class="icon-btn" @click="closeResetModal">✕</button></div>
         <div class="modal-bd">
@@ -1155,7 +1294,7 @@
 
   <!-- Delete User Modal -->
   <transition name="fade">
-    <div v-if="deleteModal.visible" class="modal-overlay" @click="closeDeleteModal">
+    <div v-if="deleteModal.visible" class="modal-overlay" @mousedown.self="closeDeleteModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title" style="color: var(--rose);">⚠️ 确认删除</div><button class="icon-btn" @click="closeDeleteModal">✕</button></div>
         <div class="modal-bd">
@@ -1173,7 +1312,7 @@
 
   <!-- Change Password Modal -->
   <transition name="fade">
-    <div v-if="changePasswordModal.visible" class="modal-overlay" @click="closeChangePasswordModal">
+    <div v-if="changePasswordModal.visible" class="modal-overlay" @mousedown.self="closeChangePasswordModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">🔑 修改密码</div><button class="icon-btn" @click="closeChangePasswordModal">✕</button></div>
         <div class="modal-bd">
@@ -1192,7 +1331,7 @@
 
   <!-- Security Questions Modal -->
   <transition name="fade">
-    <div v-if="securityQuestionsModal.visible" class="modal-overlay" @click="closeSecurityQuestionsModal">
+    <div v-if="securityQuestionsModal.visible" class="modal-overlay" @mousedown.self="closeSecurityQuestionsModal">
       <div class="modal" @click.stop style="max-width: 540px;">
         <div class="modal-hd"><div class="modal-title">❓ 安全问题</div><button class="icon-btn" @click="closeSecurityQuestionsModal">✕</button></div>
         <div class="modal-bd">
@@ -1215,7 +1354,7 @@
 
   <!-- API Key Modal -->
   <transition name="fade">
-    <div v-if="pluginAPIKeyModal.visible" class="modal-overlay" @click="closePluginAPIKeyModal">
+    <div v-if="pluginAPIKeyModal.visible" class="modal-overlay" @mousedown.self="closePluginAPIKeyModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">🔌 API Key</div><button class="icon-btn" @click="closePluginAPIKeyModal">✕</button></div>
         <div class="modal-bd">
@@ -1239,7 +1378,7 @@
 
   <!-- Import Options Modal -->
   <transition name="fade">
-    <div v-if="importDialog.visible" class="modal-overlay" @click="closeImportDialog">
+    <div v-if="importDialog.visible" class="modal-overlay" @mousedown.self="closeImportDialog">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">📥 导入 JSON 书签</div><button class="icon-btn" @click="closeImportDialog">✕</button></div>
         <div class="modal-bd">
@@ -1268,7 +1407,7 @@
 
   <!-- Import Folder Selector -->
   <transition name="fade">
-    <div v-if="importFolderSelectorVisible" class="modal-overlay" @click="cancelFolderSelection">
+    <div v-if="importFolderSelectorVisible" class="modal-overlay" @mousedown.self="cancelFolderSelection">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">选择导入目标文件夹</div><button class="icon-btn" @click="cancelFolderSelection">✕</button></div>
         <div class="modal-bd">
@@ -1287,7 +1426,7 @@
 
   <!-- Edge Import Options -->
   <transition name="fade">
-    <div v-if="edgeImportDialog.visible" class="modal-overlay" @click="closeEdgeImportDialog">
+    <div v-if="edgeImportDialog.visible" class="modal-overlay" @mousedown.self="closeEdgeImportDialog">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">🔄 导入 Edge 书签</div><button class="icon-btn" @click="closeEdgeImportDialog">✕</button></div>
         <div class="modal-bd">
@@ -1316,7 +1455,7 @@
 
   <!-- Edge Folder Selector -->
   <transition name="fade">
-    <div v-if="edgeFolderSelectorVisible" class="modal-overlay" @click="cancelEdgeFolderSelection">
+    <div v-if="edgeFolderSelectorVisible" class="modal-overlay" @mousedown.self="cancelEdgeFolderSelection">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">选择导入目标文件夹</div><button class="icon-btn" @click="cancelEdgeFolderSelection">✕</button></div>
         <div class="modal-bd">
@@ -1335,7 +1474,7 @@
 
   <!-- Edge Import Confirm -->
   <transition name="fade">
-    <div v-if="edgeConfirmImportVisible" class="modal-overlay" @click="closeEdgeConfirmImportDialog">
+    <div v-if="edgeConfirmImportVisible" class="modal-overlay" @mousedown.self="closeEdgeConfirmImportDialog">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">确认导入 Edge 书签</div><button class="icon-btn" @click="closeEdgeConfirmImportDialog">✕</button></div>
         <div class="modal-bd">
@@ -1356,7 +1495,7 @@
 
   <!-- Update Metadata Modal -->
   <transition name="fade">
-    <div v-if="updateMetadataDialog.visible" class="modal-overlay" @click="closeUpdateMetadataDialog">
+    <div v-if="updateMetadataDialog.visible" class="modal-overlay" @mousedown.self="closeUpdateMetadataDialog">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">🔄 更新网址信息</div><button class="icon-btn" @click="closeUpdateMetadataDialog">✕</button></div>
         <div class="modal-bd">
@@ -1385,7 +1524,7 @@
 
   <!-- Folder Icon Editor -->
   <transition name="fade">
-    <div v-if="folderIconDialog.visible" class="modal-overlay" @click="closeFolderIconDialog">
+    <div v-if="folderIconDialog.visible" class="modal-overlay" @mousedown.self="closeFolderIconDialog">
       <div class="modal" @click.stop style="max-width: 520px;">
         <div class="modal-hd"><div class="modal-title">🎨 设置文件夹图标 · {{ folderIconDialog.node?.title }}</div><button class="icon-btn" @click="closeFolderIconDialog">✕</button></div>
         <div class="modal-bd">
@@ -1415,7 +1554,7 @@
 
   <!-- Edit Node Modal (Bookmarks) -->
   <transition name="fade">
-    <div v-if="bmEditModal.visible" class="modal-overlay" @click="closeBmEditModal">
+    <div v-if="bmEditModal.visible" class="modal-overlay" @mousedown.self="closeBmEditModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">{{ bmEditModal.isFolder ? '✏️ 编辑文件夹' : '✏️ 编辑书签' }}</div><button class="icon-btn" @click="closeBmEditModal">✕</button></div>
         <div class="modal-bd">
@@ -1457,7 +1596,7 @@
 
   <!-- Create Folder Modal (Bookmarks) -->
   <transition name="fade">
-    <div v-if="bmCreateFolderModal.visible" class="modal-overlay" @click="closeBmCreateFolderModal">
+    <div v-if="bmCreateFolderModal.visible" class="modal-overlay" @mousedown.self="closeBmCreateFolderModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">📂 新建文件夹</div><button class="icon-btn" @click="closeBmCreateFolderModal">✕</button></div>
         <div class="modal-bd">
@@ -1481,7 +1620,7 @@
 
   <!-- Create Bookmark Modal (Bookmarks) -->
   <transition name="fade">
-    <div v-if="bmCreateBookmarkModal.visible" class="modal-overlay" @click="closeBmCreateBookmarkModal">
+    <div v-if="bmCreateBookmarkModal.visible" class="modal-overlay" @mousedown.self="closeBmCreateBookmarkModal">
       <div class="modal" @click.stop>
         <div class="modal-hd"><div class="modal-title">🔖 新建书签</div><button class="icon-btn" @click="closeBmCreateBookmarkModal">✕</button></div>
         <div class="modal-bd">
@@ -1520,6 +1659,28 @@
         <div class="modal-ft">
           <button class="btn btn-secondary" @click="closeBmCreateBookmarkModal">取消</button>
           <button class="btn btn-primary" @click="confirmBmCreateBookmark" :disabled="bmCreateBookmarkModal.loading">{{ bmCreateBookmarkModal.loading ? '创建中…' : '确认创建' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Universal Confirm Dialog -->
+  <transition name="fade">
+    <div v-if="confirmDialog.visible" class="modal-overlay" @mousedown.self="closeConfirm">
+      <div class="modal confirm-modal" @click.stop>
+        <div class="confirm-body">
+          <div class="confirm-icon-ring" :class="confirmDialog.type">
+            {{ confirmDialog.icon }}
+          </div>
+          <div class="confirm-title">{{ confirmDialog.title }}</div>
+          <div class="confirm-msg">{{ confirmDialog.message }}</div>
+        </div>
+        <div class="confirm-ft">
+          <button class="btn btn-secondary" @click="closeConfirm" :disabled="confirmDialog.loading">取消</button>
+          <button class="btn" :class="confirmDialog.type === 'danger' ? 'btn-danger' : confirmDialog.type === 'warning' ? 'btn-warning' : 'btn-primary'"
+            @click="doConfirm" :disabled="confirmDialog.loading">
+            {{ confirmDialog.loading ? '处理中…' : '确认' }}
+          </button>
         </div>
       </div>
     </div>
@@ -1569,14 +1730,15 @@
 <script>
 const { createApp } = Vue;
 
-// MD5 helper (minimal, for password hashing to match backend)
-function MD5(s) {
-  // Use a tiny MD5 implementation; falls back to prompt if not available
-  if (window.md5) return window.md5(s);
-  // Quick & dirty: backend expects MD5(plaintext) — try to load script
-  if (!MD5._warned) { MD5._warned = true; console.warn('MD5 not loaded, please include md5 lib'); }
-  return s;
-}
+// MD5 helper — delegates to js/md5.js library if loaded
+window.MD5 = (function() {
+  var realMd5 = typeof window.MD5 === 'function' ? window.MD5 : null;
+  return function MD5(s) {
+    if (realMd5) return realMd5(s);
+    if (!MD5._warned) { MD5._warned = true; console.warn('MD5 not loaded, please include md5 lib'); }
+    return s;
+  };
+})();
 
 const FOLDER_ICON_PRESETS = ['📁','📂','🗂️','📚','📖','📕','📗','📘','📙','📓','📔','📒','📃','📜','📝','📄','📑','📰','🗞️','📋','📌','📍','📎','🖇️','✂️','🔗','🖍️','🖊️','✏️','📐','📏','📦','🗃️','🗳️','🌐','🌍','🌎','🌏','🗺️','🧭','📡','🛰️','🔍','🔎','🔒','🔓','🔐','🔑','🛡️','📧','💌','✉️','📨','📩','💬','💭','🕸️','💻','🖥️','⌨️','🖱️','🖨️','💽','💾','💿','📀','📱','📲','📞','📟','📠','☎️','📺','📻','🎙️','📷','📸','📹','📽️','🎥','🎞️','📼','🔦','💡','🕯️','🎵','🎶','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🎻','🎬','🎭','🎨','🎮','🕹️','🎰','🎲','🛒','🛍️','🏪','🏬','💳','💰','💵','💴','💶','💷','🪙','💎','🏦','📊','📈','📉','📅','📆','🗓️','⏰','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚','🕛','🔖','🏷️','💱','💹','🧮','🔋','🔌','🤖','👾','👽','🛸','🚀','🧠','🔬','🔭','🧬','🦠','🧪','⚗️','🔮','🧿','⭐','🌟','✨','💫','🔥','⚡','🌈','🎯','🎪','💎','👑','🏆','🥇','🥈','🥉','🏅','🎖️','🎗️','🏵️','🎫','🎀','🎁','🎊','🎉','🎃','🚀','✈️','🚁','🚂','🚗','🚌','🚲','🛴','🛵','🏍️','⛵','🚢','🛸','🪐','🌍','🌎','🌏','🗺️','🧭','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','💒','🗼','⛪','🕌','🛕','🌲','🌳','🌴','🌵','🌾','🌿','🍀','🍁','🍂','🍃','🌺','🌸','🌼','🌻','🌹','🌷','🌱','🎋','🎍','🎄','⛰️','🏔️','🗻','🌋','🏕️','🏖️','🏝️','🏜️','🌊','🏞️','🎑','🌅','🌄','🌠','🎇','🌌','🐱','🐶','🐺','🦊','🐰','🐹','🐭','🐼','🐻','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🐤','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦗','🐙','🦑','🐬','🐳','🐋','🦈','🐊','🐅','🦍','🦧','🍎','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🥑','🌽','🥕','🥦','🍕','🍔','🌭','🥪','🌮','🌯','🥗','🍜','🍝','🍣','🍱','🍛','🍚','🍙','🍘','🥟','🍢','🍡','🍧','🍨','☕','🧃','🥤','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧋','🍵','🍶','⚽','🏀','🏈','⚾','🎾','🏐','🏉','🎱','🏓','🏸','🥊','🥋','⛸️','🛹','🎿','⛷️','🏂','🏋️','🤸','⛹️','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💝','💖','💗','💕','💞','💓'];
 
@@ -1601,12 +1763,13 @@ const app = createApp({
       currentPage: 1,
       pageSize: 20,
       settings: { allowRegister: true, requireLogin: true, defaultTemplate: '' },
-      config: { showUrlInList: true, showFolderPath: true, showUpdatedAt: true, showFullTitle: true },
+      config: { showUrlInList: true, showFolderPath: true, showUpdatedAt: true, showFullTitle: true, userDefaultTemplate: '' },
       backgroundSettings: { type: 'default', color: '', image: '', panelOpacity: 90 },
       presetColors: ['#0c0c0c','#1a1a2e','#16213e','#0f3460','#533483','#f8fafc','#f1f5f9','#e2e8f0','#cbd5e1','#94a3b8','#f59e0b','#06b6d4','#10b981','#f43f5e','#6366f1','#8b5cf6'],
       editModal: { visible: false, user: null, form: { nickname: '', email: '' }, loading: false, error: '' },
       resetModal: { visible: false, user: null, newPassword: '', loading: false, error: '', success: false, successPassword: '' },
       deleteModal: { visible: false, user: null, loading: false, error: '' },
+      confirmDialog: { visible: false, title: '', message: '', icon: '⚠️', type: 'danger', loading: false, onConfirm: null },
       toasts: [],
       changePasswordModal: { visible: false, oldPassword: '', newPassword: '', confirmPassword: '', loading: false, error: '' },
       securityQuestionsModal: { visible: false, question1: '', answer1: '', question2: '', answer2: '', question3: '', answer3: '', loading: false, error: '', hasQuestions: false, savedQuestions: {} },
@@ -1628,7 +1791,7 @@ const app = createApp({
       saveSettingsTimer: null,
       saveConfigTimer: null,
       createUserModal: { visible: false, form: { username: '', password: '', nickname: '', email: '', isAdmin: false }, loading: false, error: '' },
-      bm: { selectedUserId: null, userList: [], tree: [], loading: false, expandedFolders: {}, totalBookmarks: 0, totalFolders: 0, selectedNodeId: null },
+      bm: { mode: 'self', selectedUserId: null, userList: [], tree: [], loading: false, expandedFolders: {}, totalBookmarks: 0, totalFolders: 0, selectedNodeId: null },
       bmEditModal: { visible: false, node: null, isFolder: false, title: '', url: '', favicon_url: '', remark: '', visibility: 'private', metadataLoading: false, loading: false, error: '' },
       bmCreateFolderModal: { visible: false, title: '', parentId: null, icon: '', loading: false, error: '' },
       bmCreateBookmarkModal: { visible: false, url: '', title: '', parentId: null, favicon_url: '', visibility: 'private', remark: '', metadataLoading: false, loading: false, error: '' },
@@ -1642,10 +1805,10 @@ const app = createApp({
   },
   computed: {
     pageTitle() {
-      return { dashboard: '仪表盘', users: '用户管理', bookmarks: '书签管理', logs: '操作日志', settings: '系统设置', background: '背景外观' }[this.currentTab] || '';
+      return { dashboard: '仪表盘', users: '用户管理', bookmarks: '我的书签', userbookmarks: '用户书签', logs: '操作日志', settings: this.currentUser?.is_admin ? '系统设置' : '个性化设置', background: '背景外观' }[this.currentTab] || '';
     },
     pageSub() {
-      return { dashboard: '系统关键指标 + AI 智能洞察', users: '创建、编辑、启用/禁用用户', bookmarks: '管理用户书签与文件夹', logs: '审计日志 + 异常检测', settings: '全局与显示配置', background: '自定义背景与主题' }[this.currentTab] || '';
+      return { dashboard: '系统关键指标 + AI 智能洞察', users: '创建、编辑、启用/禁用用户', bookmarks: '管理你的书签与文件夹', userbookmarks: '选择用户，查看与管理其书签', logs: '审计日志 + 异常检测', settings: this.currentUser?.is_admin ? '全局与显示配置' : '显示配置与个性化', background: '自定义背景与主题' }[this.currentTab] || '';
     },
     userInitial() { return (this.currentUser?.username || '?').charAt(0).toUpperCase(); },
     allSelected() { return this.pageUsers.length > 0 && this.pageUsers.every(u => this.selectedUsers.includes(u.id) || (u.is_admin && u.id === this.currentUserId)); },
@@ -1856,7 +2019,8 @@ const app = createApp({
 
     /* Theme */
     toggleTheme() { this.theme = this.theme === 'dark' ? 'light' : 'dark'; },
-    switchTab(tab) { this.currentTab = tab; if (tab === 'bookmarks' && !this.bm.userList.length) this.loadBookmarkUsers(); if (tab === 'logs' && !this.al.logs.length) this.loadAuditLogs(1); },
+    switchTab(tab) { if (['users','logs','userbookmarks'].includes(tab) && !this.currentUser?.is_admin) return; this.currentTab = tab; if (tab === 'bookmarks') { this.bm.mode = 'self'; this.bm.selectedUserId = null; this.loadBookmarkUserTree(); } if (tab === 'userbookmarks') { this.bm.mode = 'admin'; this.bm.selectedNodeId = null; this.bm.tree = []; this.bm.totalBookmarks = 0; this.bm.totalFolders = 0; if (!this.bm.userList.length) this.loadBookmarkUsers(); if (this.bm.selectedUserId) this.loadBookmarkUserTree(); } if (tab === 'logs' && !this.al.logs.length) this.loadAuditLogs(1); },
+    async viewUserBookmarks(u) { if (!this.currentUser?.is_admin) return; this.currentTab = 'userbookmarks'; this.bm.mode = 'admin'; this.bm.selectedNodeId = null; if (!this.bm.userList.length) await this.loadBookmarkUsers(); this.bm.selectedUserId = u.id; this.loadBookmarkUserTree(); },
 
     /* User menu (sidebar footer dropdown) */
     toggleUserMenu(e) {
@@ -1912,10 +2076,10 @@ const app = createApp({
 
     /* HTTP helpers */
     getHeaders(contentType) { const h = {}; if (contentType) h['Content-Type'] = contentType; if (this.token) h['Authorization'] = this.token; return h; },
-    async checkAuth() { if (!this.token) { window.location.href = '/login.html'; return false; } try { const res = await fetch('/api/auth/me', { headers: this.getHeaders() }); if (!res.ok) { localStorage.removeItem('token'); window.location.href = '/login.html'; return false; } const user = await res.json(); if (!user.is_admin) { window.location.href = '/pc.html'; return false; } this.currentUser = user; this.currentUserId = user.id; return true; } catch { window.location.href = '/login.html'; return false; } },
+    async checkAuth() { if (!this.token) { window.location.href = '/login.html'; return false; } try { const res = await fetch('/api/auth/me', { headers: this.getHeaders() }); if (!res.ok) { localStorage.removeItem('token'); window.location.href = '/login.html'; return false; } const user = await res.json(); this.currentUser = user; this.currentUserId = user.id; if (!user.is_admin && !['dashboard','bookmarks','settings','background'].includes(this.currentTab)) { this.currentTab = 'dashboard'; } return true; } catch { window.location.href = '/login.html'; return false; } },
 
     /* Stats / users / settings */
-    async loadStats() { this.loading.stats = true; try { const res = await fetch('/api/admin/stats', { headers: this.getHeaders() }); if (res.ok) this.stats = await res.json(); } catch {} this.loading.stats = false; },
+    async loadStats() { this.loading.stats = true; try { const url = this.currentUser?.is_admin ? '/api/admin/stats' : '/api/stats'; const res = await fetch(url, { headers: this.getHeaders() }); if (res.ok) this.stats = await res.json(); } catch {} this.loading.stats = false; },
     async loadActivitySeries() {
       try {
         const res = await fetch('/api/admin/audit-log?limit=500', { headers: this.getHeaders() });
@@ -1935,7 +2099,7 @@ const app = createApp({
         this.actionSeries = actionSeries;
       } catch {}
     },
-    async loadDashboard() { await Promise.all([this.loadStats(), this.loadUsers(), this.loadActivitySeries(), this.loadAuditLogs(1)]); },
+    async loadDashboard() { if (this.currentUser?.is_admin) { await Promise.all([this.loadStats(), this.loadUsers(), this.loadActivitySeries(), this.loadAuditLogs(1)]); } else { await this.loadStats(); } },
     async loadUsers() {
       this.loading.users = true;
       try {
@@ -1956,7 +2120,18 @@ const app = createApp({
     toggleAllUsers() { if (this.allSelected) this.selectedUsers = []; else this.selectedUsers = this.pageUsers.filter(u => !(u.is_admin && u.id === this.currentUserId)).map(u => u.id); },
 
     /* Batch ops */
-    async batchDelete() { if (!confirm(`确定删除 ${this.selectedUsers.length} 个用户吗？此操作不可撤销。`)) return; try { const res = await fetch('/api/users/batch', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ user_ids: this.selectedUsers, action: 'delete' }) }); if (res.ok) { this.toast('批量删除成功', 'success'); this.loadUsers(); this.loadStats(); } else { const d = await res.json(); this.toast(d.error || '批量删除失败', 'error'); } } catch { this.toast('网络错误', 'error'); } },
+    async batchDelete() {
+      this.showConfirm('批量删除用户', `确定删除 ${this.selectedUsers.length} 个用户吗？该操作将永久删除所有相关书签，不可撤销。`, {
+        icon: '🗑️', type: 'danger',
+        onConfirm: async () => {
+          try {
+            const res = await fetch('/api/users/batch', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ user_ids: this.selectedUsers, action: 'delete' }) });
+            if (res.ok) { this.toast('批量删除成功', 'success'); this.loadUsers(); this.loadStats(); }
+            else { const d = await res.json(); this.toast(d.error || '批量删除失败', 'error'); }
+          } catch { this.toast('网络错误', 'error'); }
+        }
+      });
+    },
     async batchActivate() { try { const res = await fetch('/api/users/batch', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ user_ids: this.selectedUsers, action: 'activate' }) }); if (res.ok) { this.toast('批量启用成功', 'success'); this.loadUsers(); } else { const d = await res.json(); this.toast(d.error || '操作失败', 'error'); } } catch { this.toast('网络错误', 'error'); } },
     async batchDeactivate() { try { const res = await fetch('/api/users/batch', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ user_ids: this.selectedUsers, action: 'deactivate' }) }); if (res.ok) { this.toast('批量禁用成功', 'success'); this.loadUsers(); } else { const d = await res.json(); this.toast(d.error || '操作失败', 'error'); } } catch { this.toast('网络错误', 'error'); } },
 
@@ -1969,13 +2144,24 @@ const app = createApp({
     async doResetPassword() { if (this.resetModal.newPassword.length < 6) { this.resetModal.error = '密码长度至少6位'; return; } this.resetModal.loading = true; this.resetModal.error = ''; try { const res = await fetch(`/api/users/${this.resetModal.user.id}/reset-password`, { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ new_password: MD5(this.resetModal.newPassword) }) }); if (res.ok) { this.resetModal.success = true; this.resetModal.successPassword = this.resetModal.newPassword; this.toast('密码已重置', 'success'); } else { const d = await res.json(); this.resetModal.error = d.error || '重置失败'; } } catch { this.resetModal.error = '网络错误'; } this.resetModal.loading = false; },
     openDeleteUser(user) { this.deleteModal = { visible: true, user, loading: false, error: '' }; },
     closeDeleteModal() { this.deleteModal.visible = false; },
+    showConfirm(title, message, { icon = '⚠️', type = 'danger', onConfirm = null } = {}) {
+      this.confirmDialog = { visible: true, title, message, icon, type, loading: false, onConfirm };
+    },
+    closeConfirm() { this.confirmDialog.visible = false; },
+    async doConfirm() {
+      if (!this.confirmDialog.onConfirm) { this.confirmDialog.visible = false; return; }
+      this.confirmDialog.loading = true;
+      try { await this.confirmDialog.onConfirm(); } catch {}
+      this.confirmDialog.loading = false;
+      this.confirmDialog.visible = false;
+    },
     async doDeleteUser() { this.deleteModal.loading = true; this.deleteModal.error = ''; try { const res = await fetch(`/api/users/${this.deleteModal.user.id}`, { method: 'DELETE', headers: this.getHeaders() }); if (res.ok) { this.toast('删除成功', 'success'); this.closeDeleteModal(); this.loadUsers(); this.loadStats(); } else { const d = await res.json(); this.deleteModal.error = d.error || '删除失败'; } } catch { this.deleteModal.error = '网络错误'; } this.deleteModal.loading = false; },
 
     /* Settings */
     async saveSettings() { try { await fetch('/api/config', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ key: 'allow_register', value: this.settings.allowRegister.toString() }) }); await fetch('/api/config', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ key: 'require_login', value: this.settings.requireLogin.toString() }) }); await fetch('/api/config', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ key: 'default_template', value: this.settings.defaultTemplate || '' }) }); this.toast('设置已保存', 'success'); } catch { this.toast('保存设置失败', 'error'); } },
     saveSettingsDebounced() { if (this.saveSettingsTimer) clearTimeout(this.saveSettingsTimer); this.saveSettingsTimer = setTimeout(() => this.saveSettings(), 500); },
-    async loadConfig() { try { const res = await fetch('/api/config', { headers: this.getHeaders() }); if (res.ok) { const data = await res.json(); this.config.showUrlInList = data.show_url_in_list !== undefined ? data.show_url_in_list === 'true' : true; this.config.showFolderPath = data.show_folder_path !== undefined ? data.show_folder_path === 'true' : true; this.config.showUpdatedAt = data.show_updated_at !== undefined ? data.show_updated_at === 'true' : true; this.config.showFullTitle = data.show_full_title !== undefined ? data.show_full_title === 'true' : true; } } catch {} },
-    async saveConfig() { try { const items = [{ key: 'show_url_in_list', value: this.config.showUrlInList.toString() }, { key: 'show_folder_path', value: this.config.showFolderPath.toString() }, { key: 'show_updated_at', value: this.config.showUpdatedAt.toString() }, { key: 'show_full_title', value: this.config.showFullTitle.toString() }]; for (const item of items) { await fetch('/api/config', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify(item) }); } this.toast('配置已保存', 'success'); } catch { this.toast('保存配置失败', 'error'); } },
+    async loadConfig() { try { const res = await fetch('/api/config', { headers: this.getHeaders() }); if (res.ok) { const data = await res.json(); this.config.showUrlInList = data.show_url_in_list !== undefined ? data.show_url_in_list === 'true' : true; this.config.showFolderPath = data.show_folder_path !== undefined ? data.show_folder_path === 'true' : true; this.config.showUpdatedAt = data.show_updated_at !== undefined ? data.show_updated_at === 'true' : true; this.config.showFullTitle = data.show_full_title !== undefined ? data.show_full_title === 'true' : true; this.config.userDefaultTemplate = data.user_default_template || ''; } } catch {} },
+    async saveConfig() { try { const items = [{ key: 'show_url_in_list', value: this.config.showUrlInList.toString() }, { key: 'show_folder_path', value: this.config.showFolderPath.toString() }, { key: 'show_updated_at', value: this.config.showUpdatedAt.toString() }, { key: 'show_full_title', value: this.config.showFullTitle.toString() }, { key: 'user_default_template', value: this.config.userDefaultTemplate || '' }]; for (const item of items) { await fetch('/api/config', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify(item) }); } this.toast('配置已保存', 'success'); } catch { this.toast('保存配置失败', 'error'); } },
     saveConfigDebounced() { if (this.saveConfigTimer) clearTimeout(this.saveConfigTimer); this.saveConfigTimer = setTimeout(() => this.saveConfig(), 500); },
 
     /* Background */
@@ -1995,17 +2181,17 @@ const app = createApp({
     collectBookmarks(nodes) { const list = []; for (const node of nodes) { if (node.type === 'folder' && node.children) list.push(...this.collectBookmarks(node.children)); else if (node.type === 'bookmark') list.push({ id: node.id, title: node.title, url: node.url }); } return list; },
 
     /* Import */
-    showImportDialog() { this.importDialog.visible = true; this.importMode = 'merge'; this.importParentId = null; },
+    showImportDialog() { this.importDialog.visible = true; this.importMode = 'merge'; this.importParentId = null; this.loadTree(); },
     closeImportDialog() { this.importDialog.visible = false; if (this.$refs.adminImportFile) this.$refs.adminImportFile.value = ''; },
     handleFileUpload() { this.$refs.adminImportFile?.click(); },
     showImportFolderSelector() { this.importFolderSelectorVisible = true; },
     selectImportParentFolder(id) { this.importParentId = id; },
     confirmFolderSelection() { this.importFolderSelectorVisible = false; },
     cancelFolderSelection() { this.importFolderSelectorVisible = false; },
-    async importBookmarks(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = async (e) => { try { const data = JSON.parse(e.target.result); const res = await fetch('/api/import', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ bookmarks: data, mode: this.importMode, parent_id: this.importParentId }) }); if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || '导入失败'); } this.toast('导入成功', 'success'); this.closeImportDialog(); } catch (err) { this.toast(err.message || '导入失败，请检查文件格式', 'error'); } }; reader.readAsText(file); },
+    async importBookmarks(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = async (e) => { try { const data = JSON.parse(e.target.result); const res = await fetch('/api/import', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ bookmarks: data, mode: this.importMode, parent_id: this.importParentId }) }); if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || '导入失败'); } this.toast('导入成功', 'success'); this.closeImportDialog(); this.refreshAfterImport(); } catch (err) { this.toast(err.message || '导入失败，请检查文件格式', 'error'); } }; reader.readAsText(file); },
 
     /* Edge Import */
-    showEdgeImportDialog() { this.edgeImportDialog.visible = true; this.edgeImportMode = 'merge'; this.edgeImportParentId = null; },
+    showEdgeImportDialog() { this.edgeImportDialog.visible = true; this.edgeImportMode = 'merge'; this.edgeImportParentId = null; this.loadTree(); },
     closeEdgeImportDialog() { this.edgeImportDialog.visible = false; if (this.$refs.adminEdgeImportFile) this.$refs.adminEdgeImportFile.value = ''; },
     handleEdgeFileUpload() { this.$refs.adminEdgeImportFile?.click(); },
     showEdgeFolderSelector() { this.edgeFolderSelectorVisible = true; },
@@ -2014,7 +2200,75 @@ const app = createApp({
     cancelEdgeFolderSelection() { this.edgeFolderSelectorVisible = false; },
     importEdgeBookmarks(event) { const file = event.target.files[0]; if (!file) return; this.edgeImportFile = file; this.edgeConfirmImportVisible = true; },
     closeEdgeConfirmImportDialog() { this.edgeConfirmImportVisible = false; this.edgeImportFile = null; },
-    async confirmEdgeImportBookmarks() { if (!this.edgeImportFile) return; const reader = new FileReader(); reader.onload = async (e) => { try { const res = await fetch('/api/import-edge', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ html: e.target.result, mode: this.edgeImportMode, parent_id: this.edgeImportParentId }) }); if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || '导入失败'); } this.toast('Edge 书签导入成功', 'success'); this.closeEdgeImportDialog(); this.closeEdgeConfirmImportDialog(); } catch (err) { this.toast(err.message || '导入失败', 'error'); this.closeEdgeConfirmImportDialog(); } }; reader.readAsText(this.edgeImportFile); },
+    async confirmEdgeImportBookmarks() { if (!this.edgeImportFile) return; const reader = new FileReader(); reader.onload = async (e) => { try { const res = await fetch('/api/import-edge', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ html: e.target.result, mode: this.edgeImportMode, parent_id: this.edgeImportParentId }) }); if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || '导入失败'); } this.toast('Edge 书签导入成功', 'success'); this.closeEdgeImportDialog(); this.closeEdgeConfirmImportDialog(); this.refreshAfterImport(); } catch (err) { this.toast(err.message || '导入失败', 'error'); this.closeEdgeConfirmImportDialog(); } }; reader.readAsText(this.edgeImportFile); },
+
+    refreshAfterImport() { this.loadTree(); if (this.currentTab === 'bookmarks') { this.bm.mode = 'self'; this.loadBookmarkUserTree(); } },
+    /* Export */
+    exportBmJSON() { this.exportBookmarks(this.bm.tree); },
+    exportBmEdge() { this.exportEdgeBookmarks(this.bm.tree); },
+    async exportBookmarks(tree) {
+      let data = Array.isArray(tree) ? tree : null;
+      if (!data) { await this.loadTree(); data = this.tree; }
+      if (!data || data.length === 0) { this.toast('没有可导出的书签', 'warning'); return; }
+      try {
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.toast('导出成功', 'success');
+      } catch (e) {
+        this.toast('导出失败: ' + e.message, 'error');
+      }
+    },
+    async exportEdgeBookmarks(tree) {
+      let data = Array.isArray(tree) ? tree : null;
+      if (!data) { await this.loadTree(); data = this.tree; }
+      if (!data || data.length === 0) { this.toast('没有可导出的书签', 'warning'); return; }
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file. It will be read and overwritten. DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>`;
+        const gen = (nodes, level) => {
+          let h = '';
+          for (const node of nodes) {
+            const ind = '  '.repeat(level);
+            if (node.type === 'folder') {
+              h += `\n${ind}<DT><H3 ADD_DATE="${now}" LAST_MODIFIED="0">${node.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</H3>\n${ind}<DL><p>`;
+              if (node.children && node.children.length) h += gen(node.children, level + 1);
+              h += `\n${ind}</DL><p>`;
+            } else if (node.type === 'bookmark') {
+              const icon = node.favicon_url ? ` ICON="${node.favicon_url.replace(/"/g, '&quot;')}"` : '';
+              h += `\n${ind}<DT><A HREF="${(node.url || '').replace(/"/g, '&quot;')}" ADD_DATE="${now}"${icon}>${(node.title || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</A>`;
+            }
+          }
+          return h;
+        };
+        html += gen(data, 0);
+        html += '\n</DL><p>';
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bookmarks-${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.toast('导出成功', 'success');
+      } catch (e) {
+        this.toast('导出失败: ' + e.message, 'error');
+      }
+    },
 
     /* Update Metadata */
     showUpdateMetadataDialog() { this.updateMetadataDialog.visible = true; this.updateMetadataDialog.targetFolderId = null; },
@@ -2043,30 +2297,43 @@ const app = createApp({
     async handleCreateUser() { const f = this.createUserModal.form; if (!f.username || !f.password) { this.createUserModal.error = '用户名和密码不能为空'; return; } if (f.password.length < 6) { this.createUserModal.error = '密码长度不能少于6位'; return; } this.createUserModal.loading = true; this.createUserModal.error = ''; try { const res = await fetch('/api/users', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ username: f.username, password: MD5(f.password), nickname: f.nickname, email: f.email, is_admin: f.isAdmin }) }); if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '创建失败'); } this.toast('用户创建成功', 'success'); this.closeCreateUserModal(); this.loadUsers(); this.loadStats(); } catch (e) { this.createUserModal.error = e.message; } this.createUserModal.loading = false; },
 
     /* Bookmark Management */
+    bmApi(url) { return this.bm.mode === 'admin' ? '/api/admin' + url : '/api' + url; },
     async loadBookmarkUsers() { try { const res = await fetch('/api/users?limit=500', { headers: this.getHeaders() }); if (res.ok) { const data = await res.json(); this.bm.userList = data.users || []; } } catch {} },
-    async loadBookmarkUserTree() { if (!this.bm.selectedUserId) { this.bm.tree = []; return; } this.bm.loading = true; this.bm.selectedNodeId = null; try { const res = await fetch('/api/admin/users/' + this.bm.selectedUserId + '/tree', { headers: this.getHeaders() }); if (res.ok) { const tree = await res.json(); this.bm.tree = tree; this.bm.expandedFolders = {}; const counts = this.countBmNodes(tree); this.bm.totalBookmarks = counts.bookmarks; this.bm.totalFolders = counts.folders; for (const node of tree) { if (node.type === 'folder') this.bm.expandedFolders[node.id] = true; } } } catch {} this.bm.loading = false; },
+    async loadBookmarkUserTree() { this.bm.loading = true; this.bm.selectedNodeId = null; try { let tree; if (this.bm.mode === 'admin') { if (!this.bm.selectedUserId) { this.bm.tree = []; this.bm.loading = false; return; } const res = await fetch('/api/admin/users/' + this.bm.selectedUserId + '/tree', { headers: this.getHeaders() }); if (res.ok) tree = await res.json(); } else { const res = await fetch('/api/tree', { headers: this.getHeaders() }); if (res.ok) tree = await res.json(); } if (tree) { this.bm.tree = tree; this.bm.expandedFolders = {}; const counts = this.countBmNodes(tree); this.bm.totalBookmarks = counts.bookmarks; this.bm.totalFolders = counts.folders; for (const node of tree) { if (node.type === 'folder') this.bm.expandedFolders[node.id] = true; } } } catch {} this.bm.loading = false; },
     countBmNodes(nodes) { let b = 0, f = 0; for (const n of nodes) { if (n.type === 'folder') { f++; if (n.children) { const c = this.countBmNodes(n.children); b += c.bookmarks; f += c.folders; } } else b++; } return { bookmarks: b, folders: f }; },
     toggleBmFolder(id) { this.bm.expandedFolders = { ...this.bm.expandedFolders, [id]: !this.bm.expandedFolders[id] }; },
     expandAllBm() { const exp = {}; const walk = (nodes) => { for (const n of nodes) { if (n.type === 'folder') { exp[n.id] = true; if (n.children) walk(n.children); } } }; walk(this.bm.tree); this.bm.expandedFolders = exp; },
     collapseAllBm() { this.bm.expandedFolders = {}; },
     bmSelectNode(node) { this.bm.selectedNodeId = this.bm.selectedNodeId === node.id ? null : node.id; },
-    async deleteBmNode(node) { if (!confirm('确定要删除"' + node.title + '"吗？' + (node.type === 'folder' ? '该文件夹下的所有内容将被一并删除。' : ''))) return; try { const res = await fetch('/api/admin/nodes/' + node.id, { method: 'DELETE', headers: this.getHeaders() }); if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '删除失败'); } this.toast('已删除', 'success'); this.loadBookmarkUserTree(); } catch (e) { this.toast(e.message, 'error'); } },
+    async deleteBmNode(node) {
+      const extra = node.type === 'folder' ? '该文件夹下的所有内容将被一并删除，操作不可撤销。' : '操作不可撤销。';
+      this.showConfirm('确认删除', `确定要删除"${node.title}"吗？${extra}`, {
+        icon: node.type === 'folder' ? '📂' : '🗑️', type: 'danger',
+        onConfirm: async () => {
+          try {
+            const res = await fetch(this.bmApi('/nodes/' + node.id), { method: 'DELETE', headers: this.getHeaders() });
+            if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '删除失败'); }
+            this.toast('已删除', 'success'); this.loadBookmarkUserTree();
+          } catch (e) { this.toast(e.message, 'error'); }
+        }
+      });
+    },
     isIconUrl(s) { return s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:')); },
     bmEditNode(node) { this.bmEditModal = { visible: true, node: node, isFolder: node.type === 'folder', title: node.title || '', url: node.url || '', favicon_url: node.favicon_url || '', remark: node.remark || '', visibility: node.visibility || 'private', metadataLoading: false, loading: false, error: '' }; },
     closeBmEditModal() { this.bmEditModal.visible = false; },
-    async saveBmEditNode() { const m = this.bmEditModal; if (!m.title.trim()) { m.error = '名称不能为空'; return; } if (!m.isFolder && !m.url.trim()) { m.error = '网址不能为空'; return; } m.loading = true; m.error = ''; try { const body = { title: m.title.trim(), favicon_url: m.favicon_url || null }; if (!m.isFolder) { body.url = m.url.trim(); body.visibility = m.visibility; } body.remark = m.remark; const res = await fetch('/api/admin/nodes/' + m.node.id, { method: 'PUT', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '保存失败'); } this.toast('已更新', 'success'); this.closeBmEditModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
+    async saveBmEditNode() { const m = this.bmEditModal; if (!m.title.trim()) { m.error = '名称不能为空'; return; } if (!m.isFolder && !m.url.trim()) { m.error = '网址不能为空'; return; } m.loading = true; m.error = ''; try { const body = { title: m.title.trim(), favicon_url: m.favicon_url || null }; if (!m.isFolder) { body.url = m.url.trim(); body.visibility = m.visibility; } body.remark = m.remark; const res = await fetch(this.bmApi('/nodes/' + m.node.id), { method: 'PUT', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '保存失败'); } this.toast('已更新', 'success'); this.closeBmEditModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
     async lookupBmMetadata(mode) { const modal = mode === 'edit' ? this.bmEditModal : this.bmCreateBookmarkModal; const url = modal.url.trim(); if (!url) { modal.error = '请先输入网址'; return; } modal.metadataLoading = true; modal.error = ''; try { const res = await fetch('/api/metadata?url=' + encodeURIComponent(url)); if (res.ok) { const data = await res.json(); if (data.title && !modal.title) modal.title = data.title; if (data.favicon_url && !modal.favicon_url) modal.favicon_url = data.favicon_url; } } catch {} modal.metadataLoading = false; },
     openEditFolderIcon(node) { this.folderIconDialog.node = node; this.folderIconDialog.selectedIcon = ''; this.folderIconDialog.customIcon = ''; if (node.favicon_url) { if (this.isIconUrl(node.favicon_url)) this.folderIconDialog.customIcon = node.favicon_url; else this.folderIconDialog.selectedIcon = node.favicon_url; } this.folderIconDialog.visible = true; },
     closeFolderIconDialog() { this.folderIconDialog.visible = false; this.folderIconDialog.node = null; },
-    async saveFolderIcon() { const node = this.folderIconDialog.node; if (!node) return; const icon = this.folderIconDialog.selectedIcon || this.folderIconDialog.customIcon; try { const res = await fetch('/api/admin/nodes/' + node.id, { method: 'PUT', headers: this.getHeaders('application/json'), body: JSON.stringify({ favicon_url: icon || null }) }); if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '保存失败'); } this.toast('图标已更新', 'success'); this.closeFolderIconDialog(); this.loadBookmarkUserTree(); } catch (e) { this.toast(e.message, 'error'); } },
-    onAdminIconError(e, node) { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.textContent = '📁'; },
-    async bmMoveNode(node, direction) { const parentId = node.parent_id; const url = '/api/admin/nodes/reorder'; const tree = this.bm.tree; let siblings = []; const findSiblings = (nodes) => { for (const n of nodes) { if (n.id === node.id) { siblings = nodes; return true; } if (n.children && findSiblings(n.children)) return true; } return false; }; findSiblings(tree); if (siblings.length < 2) return; const ids = siblings.map(n => n.id); const idx = ids.indexOf(node.id); if (idx < 0) return; if (direction === 'up' && idx > 0) { [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]]; } else if (direction === 'down' && idx < ids.length - 1) { [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]]; } else { return; } const expandedSnapshot = { ...this.bm.expandedFolders }; try { const res = await fetch(url, { method: 'PUT', headers: this.getHeaders('application/json'), body: JSON.stringify({ user_id: this.bm.selectedUserId, parent_id: parentId, ordered_ids: ids }) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '排序失败'); } await this.loadBookmarkUserTree(); this.bm.expandedFolders = { ...this.bm.expandedFolders, ...expandedSnapshot }; this.toast('排序成功', 'success'); } catch (e) { this.toast(e.message, 'error'); } },
+    async saveFolderIcon() { const node = this.folderIconDialog.node; if (!node) return; const icon = this.folderIconDialog.selectedIcon || this.folderIconDialog.customIcon; try { const res = await fetch(this.bmApi('/nodes/' + node.id), { method: 'PUT', headers: this.getHeaders('application/json'), body: JSON.stringify({ favicon_url: icon || null }) }); if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || '保存失败'); } this.toast('图标已更新', 'success'); this.closeFolderIconDialog(); this.loadBookmarkUserTree(); } catch (e) { this.toast(e.message, 'error'); } },
+    onAdminIconError(e, node) { e.target.style.display = 'none'; if (e.target.parentElement) { e.target.parentElement.textContent = node.type === 'folder' ? '📁' : '📎'; } },
+    async bmMoveNode(node, direction) { const parentId = node.parent_id; const tree = this.bm.tree; let siblings = []; const findSiblings = (nodes) => { for (const n of nodes) { if (n.id === node.id) { siblings = nodes; return true; } if (n.children && findSiblings(n.children)) return true; } return false; }; findSiblings(tree); if (siblings.length < 2) return; const ids = siblings.map(n => n.id); const idx = ids.indexOf(node.id); if (idx < 0) return; if (direction === 'up' && idx > 0) { [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]]; } else if (direction === 'down' && idx < siblings.length - 1) { [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]]; } else { return; } const expandedSnapshot = { ...this.bm.expandedFolders }; try { const body = { parent_id: parentId, ordered_ids: ids }; if (this.bm.mode === 'admin') body.user_id = this.bm.selectedUserId; const res = await fetch(this.bmApi('/nodes/reorder'), { method: 'PUT', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '排序失败'); } await this.loadBookmarkUserTree(); this.bm.expandedFolders = { ...this.bm.expandedFolders, ...expandedSnapshot }; this.toast('排序成功', 'success'); } catch (e) { this.toast(e.message, 'error'); } },
     bmAddFolder() { this.bmCreateFolderModal = { visible: true, title: '', parentId: null, icon: '', loading: false, error: '' }; },
     closeBmCreateFolderModal() { this.bmCreateFolderModal.visible = false; },
-    async confirmBmCreateFolder() { const m = this.bmCreateFolderModal; if (!m.title.trim()) { m.error = '文件夹名称不能为空'; return; } m.loading = true; m.error = ''; try { const res = await fetch('/api/admin/folders', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ user_id: this.bm.selectedUserId, title: m.title.trim(), parent_id: m.parentId, icon: m.icon.trim() }) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); } this.toast('文件夹已创建', 'success'); this.closeBmCreateFolderModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
+    async confirmBmCreateFolder() { const m = this.bmCreateFolderModal; if (!m.title.trim()) { m.error = '文件夹名称不能为空'; return; } m.loading = true; m.error = ''; try { const body = { title: m.title.trim(), parent_id: m.parentId, icon: m.icon.trim() }; if (this.bm.mode === 'admin') body.user_id = this.bm.selectedUserId; const res = await fetch(this.bmApi('/folders'), { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); } this.toast('文件夹已创建', 'success'); this.closeBmCreateFolderModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
     bmAddBookmark() { this.bmCreateBookmarkModal = { visible: true, url: '', title: '', parentId: null, loading: false, error: '' }; },
     closeBmCreateBookmarkModal() { this.bmCreateBookmarkModal.visible = false; },
-    async confirmBmCreateBookmark() { const m = this.bmCreateBookmarkModal; if (!m.url.trim()) { m.error = '网址不能为空'; return; } m.loading = true; m.error = ''; try { const res = await fetch('/api/admin/bookmarks', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ user_id: this.bm.selectedUserId, url: m.url.trim(), title: m.title.trim(), favicon_url: m.favicon_url.trim(), parent_id: m.parentId, visibility: m.visibility, remark: m.remark }) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); } this.toast('书签已创建', 'success'); this.closeBmCreateBookmarkModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
+    async confirmBmCreateBookmark() { const m = this.bmCreateBookmarkModal; if (!m.url.trim()) { m.error = '网址不能为空'; return; } m.loading = true; m.error = ''; try { const body = { url: m.url.trim(), title: m.title.trim(), favicon_url: m.favicon_url.trim(), parent_id: m.parentId, visibility: m.visibility, remark: m.remark }; if (this.bm.mode === 'admin') body.user_id = this.bm.selectedUserId; const res = await fetch(this.bmApi('/bookmarks'), { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); } this.toast('书签已创建', 'success'); this.closeBmCreateBookmarkModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
     onPreviewError(e) { e.target.style.display = 'none'; },
 
     /* Audit Log */
@@ -2093,8 +2360,13 @@ const app = createApp({
         this.userMenuOpen = false;
       }
     });
-    await this.loadDashboard();
-    this.loadSettings();
+    if (this.currentUser?.is_admin) {
+      await this.loadDashboard();
+      this.loadSettings();
+    } else {
+      this.loadStats();
+      this.loadBookmarkUserTree();
+    }
     this.loadConfig();
     this.loadBackgroundSettings();
     this.loadTree();
