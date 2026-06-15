@@ -67,7 +67,7 @@
 }
 
 html, body {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
@@ -231,6 +231,49 @@ a {
 .t-switcher-link:hover {
   background: var(--bg-elev-2);
   color: var(--text-primary);
+}
+
+/* Folder Sections (shared across templates) */
+.t-folder-section {
+  margin-bottom: 32px;
+}
+.t-folder-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 0;
+  background: var(--accent-soft);
+  border-top: 2px solid var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+.t-folder-section-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.t-folder-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+  flex: 1;
+  min-width: 0;
+}
+.t-folder-section-title mark {
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.t-folder-section-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-base);
+  padding: 2px 9px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 /* Responsive & Accessibility */

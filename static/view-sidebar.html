@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <script>(function(){var t=localStorage.getItem('bookmark_theme')==='light'?'light':'dark';document.documentElement.className=t;document.documentElement.setAttribute('data-theme',t);})();</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>侧边 - 书签首页</title>
+  <link rel="icon" href="/favicon.ico" />
+  <script src="/vue.global.prod.js"></script>
+  <script src="/tailwind.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['-apple-system','BlinkMacSystemFont','"Segoe UI"','"PingFang SC"','"Hiragino Sans GB"','"Microsoft YaHei"','sans-serif'] },
+          animation: { 'spin-slow': 'spin .8s linear infinite' },
+        },
+      },
+    }
+  </script>
+  <style>
+    [v-cloak]{display:none!important}
+    html,body{overflow-y:auto!important;scroll-behavior:smooth}
+    body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.08);border-radius:4px}
+    .dark ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08)}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse-dot{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+    .card-stagger:nth-child(1){animation-delay:.02s}
+    .card-stagger:nth-child(2){animation-delay:.05s}
+    .card-stagger:nth-child(3){animation-delay:.08s}
+    .card-stagger:nth-child(4){animation-delay:.11s}
+    .card-stagger:nth-child(5){animation-delay:.14s}
+    .card-stagger:nth-child(6){animation-delay:.17s}
+    .card-stagger:nth-child(7){animation-delay:.2s}
+    .card-stagger:nth-child(8){animation-delay:.23s}
+    .card-stagger:nth-child(9){animation-delay:.26s}
+    .card-stagger:nth-child(10){animation-delay:.29s}
+    .card-stagger:nth-child(n+11){animation-delay:.32s}
+    .dark body{background:#08080d}
+    .bookmark-grid>*{animation:fadeUp .4s cubic-bezier(.16,1,.3,1) forwards;opacity:0}
+    .skeleton{background:linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite}
+    .dark .skeleton{background:linear-gradient(90deg,#1c1c22 25%,#26262e 50%,#1c1c22 75%);background-size:200% 100%}
+  </style>
+</head>
+<body class="bg-[#f5f5fa] dark:bg-[#08080d] text-slate-800 dark:text-gray-200 min-h-screen">
+<div id="app" v-cloak>
+
+  <!-- ===== Header ===== -->
+  <header class="sticky top-0 z-50 flex items-center justify-between px-4 sm:px-6 lg:px-8 h-14 lg:h-16 bg-white/80 dark:bg-[#0c0c12]/80 backdrop-blur-2xl border-b border-black/5 dark:border-white/5">
+    <div class="flex items-center gap-2.5 lg:gap-3">
+      <div class="w-8 h-8 lg:w-9 lg:h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-400 flex items-center justify-center text-base lg:text-lg text-white shadow-lg shadow-indigo-500/25 ring-1 ring-white/20">
+        📎
+      </div>
+      <span class="text-base lg:text-lg font-extrabold text-slate-800 dark:text-white tracking-tight">书签首页</span>
+    </div>
+    <div class="flex items-center gap-1 lg:gap-1.5">
+      <button @click="toggleTheme"
+        class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-all duration-200">
+        {{ theme === 'dark' ? '☀️' : '🌙' }}
+      </button>
+      <a :href="token ? '/admin.html' : '/login.html'" :title="token ? '后台管理' : '登录'"
+        class="inline-flex items-center gap-1.5 px-2.5 lg:px-3.5 py-2 rounded-lg text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-all duration-200">
+        👤 <span class="hidden sm:inline">{{ token ? '后台管理' : '登录' }}</span>
+      </a>
+    </div>
+  </header>
+
+  <div class="flex h-[calc(100vh-3.5rem)] lg:h-[calc(100vh-4rem)]">
+
+    <!-- Sidebar -->
+    <aside class="w-56 lg:w-64 min-w-[14rem] lg:min-w-[16rem] overflow-y-auto bg-white dark:bg-[#0f0f15] border-r border-black/5 dark:border-white/5 py-4">
+      <div v-for="node in tree.filter(n => n.type === 'folder')" :key="node.id" class="px-3">
+        <tree-node :node="node" :depth="0" :selected-id="selectedId" :folders-only="true" @select="selectFolder" />
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#f5f5fa] dark:bg-[#08080d]">
+
+      <!-- Header area -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 lg:mb-8">
+        <div>
+          <h2 class="text-2xl lg:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
+            {{ currentFolderTitle }}
+          </h2>
+          <div v-if="currentFolderPath" class="text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium flex items-center gap-1">
+            <span>📁</span> {{ currentFolderPath }}
+          </div>
+        </div>
+        <div class="relative w-full sm:w-72 lg:w-80 group">
+          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+            <span class="text-sm text-slate-400">🔍</span>
+          </div>
+          <input type="text" v-model="searchQuery" placeholder="搜索书签..." @input="handleSearch"
+            class="w-full pl-9 pr-8 py-2.5 bg-white dark:bg-[#14141c] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-800 dark:text-gray-200 font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none transition-all duration-200 focus:border-indigo-400 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:focus:ring-indigo-400/10 shadow-sm" />
+          <button v-if="searchQuery" @click="clearSearch"
+            class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-indigo-500 text-sm transition-colors">✕</button>
+        </div>
+      </div>
+
+      <!-- Search result count -->
+      <div v-if="searchQuery && filteredBookmarks.length > 0"
+        class="text-sm text-slate-500 dark:text-slate-400 font-medium mb-4 flex items-center gap-2">
+        <span class="w-1 h-4 rounded-full bg-indigo-400"></span>
+        搜索到 {{ filteredBookmarks.length }} 个书签
+      </div>
+
+      <!-- Empty state -->
+      <div v-if="bookmarks.length === 0 && !loading"
+        class="flex flex-col items-center justify-center py-24 text-slate-400 dark:text-slate-500">
+        <div class="text-6xl mb-6 opacity-25">📂</div>
+        <p class="text-lg font-medium">暂无书签</p>
+        <p class="text-sm mt-1 opacity-60">去管理页面添加一些书签吧</p>
+      </div>
+
+      <!-- Loading skeleton -->
+      <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
+        <div v-for="i in 6" :key="i" class="flex items-center gap-3.5 p-4 lg:p-5 rounded-2xl bg-white dark:bg-[#14141c] border border-black/5 dark:border-white/5">
+          <div class="w-6 h-6 rounded-lg skeleton flex-shrink-0"></div>
+          <div class="flex-1 space-y-2">
+            <div class="h-4 w-3/4 rounded-lg skeleton"></div>
+            <div class="h-3 w-full rounded-lg skeleton"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bookmark cards -->
+      <div v-if="bookmarks.length > 0" class="bookmark-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
+        <a v-for="item in bookmarks" :key="item.id"
+          :href="item.url" target="_blank" rel="noopener"
+          class="card-stagger group relative flex items-center gap-3.5 p-4 lg:p-5 bg-white dark:bg-[#14141c] border border-slate-100 dark:border-white/5 rounded-2xl shadow-sm hover:shadow-xl hover:shadow-indigo-500/8 dark:hover:shadow-indigo-500/5 hover:border-indigo-200/50 dark:hover:border-indigo-500/20 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer overflow-hidden">
+          <!-- Left gradient accent -->
+          <div class="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-gradient-to-b from-indigo-400 via-purple-400 to-pink-400 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:top-1 group-hover:bottom-1"></div>
+          <!-- Shine effect -->
+          <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-[radial-gradient(600px_circle_at_var(--mouse-x,_50%)_var(--mouse-y,_50%),rgba(99,102,241,.06),transparent_60%)]"></div>
+          <!-- Favicon -->
+          <div class="relative flex-shrink-0">
+            <div class="w-9 h-9 lg:w-10 lg:h-10 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 border border-slate-200 dark:border-slate-600/50 flex items-center justify-center overflow-hidden shadow-sm group-hover:shadow-md group-hover:shadow-indigo-500/10 transition-all duration-300 group-hover:scale-105">
+              <img v-if="faviconUrl(item)" :src="faviconUrl(item)" class="w-5 h-5 lg:w-[22px] lg:h-[22px] object-contain" alt="" @error="onFaviconError" />
+              <span v-else class="text-lg">🌐</span>
+            </div>
+          </div>
+          <!-- Info -->
+          <div class="flex-1 min-w-0">
+            <div class="text-sm lg:text-[0.9rem] font-semibold text-slate-800 dark:text-gray-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-300">{{ item.title }}</div>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-[11px] text-slate-400 dark:text-slate-500 truncate">{{ getDomain(item.url) }}</span>
+            </div>
+          </div>
+          <!-- Arrow -->
+          <div class="flex-shrink-0 w-7 h-7 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-500/15 group-hover:border-indigo-200 dark:group-hover:border-indigo-500/30 transition-all duration-300">
+            <span class="text-xs text-slate-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">↗</span>
+          </div>
+        </a>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/template-shell.js"></script>
+<script src="/view-shell.js"></script>
+<script>
+createViewApp();
+TemplateShell.mountSwitcher(document.body, 'view-sidebar');
+</script>
+</body>
+</html>
