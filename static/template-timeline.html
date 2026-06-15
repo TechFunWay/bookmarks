@@ -12,9 +12,14 @@
     }
     
     .t-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
       padding: 16px 24px;
       background: var(--bg-base);
       border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       margin-bottom: 32px;
       display: flex;
       align-items: center;
@@ -52,9 +57,7 @@
     }
     
     .t-tl {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 0 24px;
+      padding: 0 32px;
       position: relative;
     }
     
@@ -64,7 +67,7 @@
       position: absolute;
       top: 0;
       bottom: 0;
-      left: 64px; /* 24px padding + 40px (half of 80px rail) */
+      left: 72px; /* 32px padding + 40px (half of 80px rail) */
       width: 2px;
       background: var(--border);
       z-index: 0;
@@ -72,7 +75,7 @@
     
     @media (max-width: 640px) {
       .t-tl::before {
-        left: 44px; /* 24px padding + 20px (half of 40px rail) */
+        left: 36px; /* 16px padding + 20px (half of 40px rail) */
       }
     }
     
@@ -394,8 +397,9 @@
       border-radius: 2px;
     }
     @media (max-width: 640px) {
-      .t-header { flex-wrap: wrap; }
+      .t-header { flex-wrap: wrap; padding: 12px 16px; }
       .t-search { order: 3; max-width: none; flex-basis: 100%; }
+      .t-tl { padding: 0 16px; }
     }
   </style>
 </head>
@@ -408,6 +412,7 @@
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
     <div class="t-sort" id="sortContainer"></div>
+    <div class="t-auth" id="authContainer"></div>
     <button class="t-theme-toggle" id="themeToggle" aria-label="Toggle theme">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="5"></circle>
@@ -443,6 +448,7 @@
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
       const sortContainer = document.getElementById('sortContainer');
+      const authContainer = document.getElementById('authContainer');
       let allFlat = [];
       let currentSort = 'default';
       
@@ -462,7 +468,7 @@
       };
       
       try {
-        const tree = await TemplateShell.loadPublicTree();
+        const tree = await TemplateShell.loadUserTree();
         allFlat = TemplateShell.flattenTree(tree);
         render();
       } catch (err) {
@@ -474,6 +480,8 @@
         currentSort = m;
         render();
       });
+      TemplateShell.mountAuthButton(authContainer);
+      TemplateShell.mountVersionFooter();
       
       let searchTimer;
       searchInput.addEventListener('input', (e) => {
@@ -605,5 +613,6 @@
         .replace(/'/g, "&#039;");
     }
   </script>
+  <div class="t-version" style="text-align:center;padding:24px;border-top:1px solid var(--border);margin-top:auto;color:var(--text-muted);font-size:12px;"></div>
 </body>
 </html>

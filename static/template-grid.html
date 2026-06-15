@@ -313,6 +313,17 @@
       padding: 0 2px;
       border-radius: 2px;
     }
+    .t-folder-section-header {
+      padding: 10px 48px;
+    }
+    @media (max-width: 768px) {
+      .t-folder-section-header {
+        padding: 10px 20px;
+      }
+    }
+    #gridContainer > .t-empty {
+      margin: 48px;
+    }
   </style>
 </head>
 <body>
@@ -324,17 +335,19 @@
       <button class="t-search-clear" id="searchClear" aria-label="清空搜索" style="display:none;">✕</button>
     </div>
     <div class="t-sort" id="sortContainer"></div>
+    <div class="t-auth" id="authContainer"></div>
     <button class="t-theme-toggle" id="themeToggle">切换主题</button>
   </header>
 
   <main class="t-main">
-    <div class="t-grid" id="gridContainer">
-      <!-- Cards will be injected here -->
+    <div id="gridContainer">
+      <!-- Sections will be injected here -->
     </div>
   </main>
 
   <footer class="t-footer">
     <a href="/" class="t-footer-link">← 返回主应用</a>
+    <span class="t-version"></span>
   </footer>
 
   <script src="template-shell.js"></script>
@@ -346,88 +359,103 @@
         TemplateShell.toggleTheme();
       });
 
-      const tree = await TemplateShell.loadPublicTree();
+      const tree = await TemplateShell.loadUserTree();
       const allBookmarks = TemplateShell.flattenTree(tree);
       const gridContainer = document.getElementById('gridContainer');
       const searchInput = document.getElementById('searchInput');
       const searchClear = document.getElementById('searchClear');
       const sortContainer = document.getElementById('sortContainer');
+      const authContainer = document.getElementById('authContainer');
       let currentSort = 'default';
-      
+
       if (!allBookmarks || allBookmarks.length === 0) {
-        gridContainer.style.display = 'block';
-        gridContainer.innerHTML = '<div class="t-empty">暂无公开书签</div>';
+        gridContainer.innerHTML = '<div class="t-empty">暂无书签</div>';
         TemplateShell.mountSwitcher(document.body, 'grid');
         return;
       }
-      
+
       currentSort = TemplateShell.mountSortControl(sortContainer, (m) => {
         currentSort = m;
         doSearch();
       });
-      
+      TemplateShell.mountAuthButton(authContainer);
+      TemplateShell.mountVersionFooter();
+
       const fallbackSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
-      
+
+      function groupByPath(bms) {
+        const groups = new Map();
+        for (const bm of bms) {
+          const path = (bm.breadcrumb && bm.breadcrumb.length) ? bm.breadcrumb.join(' / ') : '未分类';
+          if (!groups.has(path)) groups.set(path, []);
+          groups.get(path).push(bm);
+        }
+        return groups;
+      }
+
       function render(list) {
         if (!list || list.length === 0) {
           gridContainer.innerHTML = '<div class="t-empty">无匹配结果</div>';
           return;
         }
-        
+
+        const q = searchInput.value.trim();
         const sorted = TemplateShell.sortBookmarks(list, currentSort);
+        const groups = groupByPath(sorted);
+
         let html = '';
-        for (const bm of sorted) {
-          const folderPath = bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb.join(' / ') : '';
-          
-          let iconHtml = '';
-          if (bm.favicon_url) {
-            iconHtml = `<img src="${TemplateShell.escapeHtml(bm.favicon_url)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><div style="display:none;">${fallbackSvg}</div>`;
-          } else {
-            iconHtml = fallbackSvg;
+        for (const [path, bms] of groups) {
+          const folderLabel = q ? TemplateShell.highlightText(path, q) : TemplateShell.escapeHtml(path);
+          html += `<div class="t-folder-section">
+            <div class="t-folder-section-header">
+              <svg class="t-folder-section-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span class="t-folder-section-title">${folderLabel}</span>
+              <span class="t-folder-section-count">${bms.length}</span>
+            </div>
+            <div class="t-grid">`;
+          for (const bm of bms) {
+            let iconHtml = '';
+            if (bm.favicon_url) {
+              iconHtml = `<img src="${TemplateShell.escapeHtml(bm.favicon_url)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><div style="display:none;">${fallbackSvg}</div>`;
+            } else {
+              iconHtml = fallbackSvg;
+            }
+            const title = q ? TemplateShell.highlightText(bm.title, q) : TemplateShell.escapeHtml(bm.title);
+            const url = q ? TemplateShell.highlightText(bm.url, q) : TemplateShell.escapeHtml(bm.url);
+            const remark = bm.remark ? (q ? TemplateShell.highlightText(bm.remark, q) : TemplateShell.escapeHtml(bm.remark)) : '';
+            html += `
+              <a href="${TemplateShell.escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-grid-card">
+                <div class="t-grid-card-favicon">${iconHtml}</div>
+                <div class="t-grid-card-title">${title}</div>
+                <div class="t-grid-card-url">${url}</div>
+                ${remark ? `<div class="t-grid-card-remark">${remark}</div>` : ''}
+              </a>`;
           }
-          
-          const q = searchInput.value.trim();
-          const title = q ? TemplateShell.highlightText(bm.title, q) : TemplateShell.escapeHtml(bm.title);
-          const url = q ? TemplateShell.highlightText(bm.url, q) : TemplateShell.escapeHtml(bm.url);
-          const remark = bm.remark ? (q ? TemplateShell.highlightText(bm.remark, q) : TemplateShell.escapeHtml(bm.remark)) : '';
-          const folder = TemplateShell.escapeHtml(bm.breadcrumb && bm.breadcrumb.length > 0 ? bm.breadcrumb.join(' / ') : '');
-          
-          html += `
-            <a href="${TemplateShell.escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-grid-card">
-              ${folder ? `<div class="t-grid-card-folder">${folder}</div>` : ''}
-              <div class="t-grid-card-favicon">
-                ${iconHtml}
-              </div>
-              <div class="t-grid-card-title">${title}</div>
-              <div class="t-grid-card-url">${url}</div>
-              ${remark ? `<div class="t-grid-card-remark">${remark}</div>` : ''}
-            </a>
-          `;
+          html += `</div></div>`;
         }
-        
+
         gridContainer.innerHTML = html;
       }
-      
+
       function doSearch() {
         const q = searchInput.value.trim();
         const filtered = TemplateShell.searchBookmarks(allBookmarks, q);
         render(filtered);
         searchClear.style.display = q ? 'flex' : 'none';
       }
-      
+
       searchInput.addEventListener('input', doSearch);
       searchClear.addEventListener('click', () => {
         searchInput.value = '';
         doSearch();
         searchInput.focus();
       });
-      
-      // Initial render
+
       render(allBookmarks);
-      
+
       TemplateShell.mountSwitcher(document.body, 'grid');
     });
-    
+
     document.getElementById('themeToggle').addEventListener('click', () => {
       TemplateShell.toggleTheme();
     });
