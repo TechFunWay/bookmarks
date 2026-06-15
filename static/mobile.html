@@ -1308,7 +1308,7 @@
                   <span class="settings-item-label">用户管理</span>
                   <span class="settings-item-value">›</span>
                 </div>
-                <div class="settings-item" v-if="currentUser && currentUser.is_admin" @click="openAdminPage">
+                <div class="settings-item" v-if="currentUser" @click="openAdminPage">
                   <span class="settings-item-icon">🛠️</span>
                   <span class="settings-item-label">后台管理</span>
                   <span class="settings-item-value">›</span>

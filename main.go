@@ -49,7 +49,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v2.3.0"
+	appVersion = "v3.0.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -218,9 +218,15 @@ func main() {
 	port := flag.String("port", "8901", "服务器监听端口")
 	logModeFlag := flag.String("logmode", defaultLogMode, "日志模式: debug 或 release")
 	deviceType := flag.String("deviceType", "", "设备类型")
+	insecureTLS := flag.Bool("insecureTLS", false, "抓取网页元数据时跳过TLS证书验证（用于内网自签名证书环境）")
+	disableStats := flag.Bool("disableStats", false, "禁用匿名使用统计上报（也可设置环境变量 DISABLE_STATS=1）")
 	flag.Parse()
 
-	startStatsReporter("bookmarks", appVersion, *deviceType, *dataUrl)
+	if !*disableStats && os.Getenv("DISABLE_STATS") == "" {
+		startStatsReporter("bookmarks", appVersion, *deviceType, *dataUrl)
+	} else {
+		log.Println("使用统计上报已禁用")
+	}
 
 	logMode = *logModeFlag
 	if envLogMode := os.Getenv("LOG_MODE"); envLogMode != "" {
@@ -302,12 +308,11 @@ func main() {
 		log.Printf("系统升级失败: %v", err)
 	}
 
-	// 创建支持自签名证书的HTTP客户端
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			// 允许自签名证书和不安全的TLS连接（主要用于内网环境）
-			InsecureSkipVerify: true,
-		},
+	// 元数据抓取的HTTP客户端；默认验证TLS证书，-insecureTLS 可关闭（内网自签名证书场景）
+	transport := &http.Transport{}
+	if *insecureTLS {
+		log.Println("警告: 已禁用TLS证书验证（-insecureTLS）")
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	s := &server{
@@ -385,6 +390,7 @@ func main() {
 		})
 		r.Get("/tree", s.optionalAuthMiddleware(s.handleGetTree))
 		r.Get("/public-tree", s.handleGetPublicTree)
+		r.Get("/stats", s.tokenAuthMiddleware(s.handleUserStats))
 		r.Get("/metadata", s.handleMetadata)
 		r.Get("/version", s.handleGetVersion)
 		r.Post("/folders", s.optionalAuthMiddleware(s.handleCreateFolder))
@@ -454,11 +460,10 @@ func initializeDB(db *sql.DB) error {
 		log.Println("数据库表不存在，开始初始化")
 
 		if _, err := db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {
-			log.Println("启用外键约束失败: %w", err)
+			log.Printf("启用外键约束失败: %v", err)
 		}
 
 		if _, err := db.Exec(`
-		-- 创建nodes表
 		CREATE TABLE IF NOT EXISTS nodes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL DEFAULT 0,
@@ -468,27 +473,27 @@ func initializeDB(db *sql.DB) error {
     url TEXT,
     favicon_url TEXT,
     remark TEXT NOT NULL DEFAULT '',
+    visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('public', 'private')),
     position INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);`); err != nil {
-			log.Println("创建nodes表失败: %w", err)
+			log.Printf("创建nodes表失败: %v", err)
 		}
 
 		if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);
 CREATE INDEX IF NOT EXISTS idx_nodes_user_id ON nodes(user_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_user_id_parent ON nodes(user_id, parent_id);`); err != nil {
-			log.Println("创建nodes表索引失败: %w", err)
+			log.Printf("创建nodes表索引失败: %v", err)
 		}
 
-		if _, err := db.Exec(string(`-- 创建nodes表的updated_at触发器
-CREATE TRIGGER IF NOT EXISTS trg_nodes_updated_at
+		if _, err := db.Exec(`CREATE TRIGGER IF NOT EXISTS trg_nodes_updated_at
 AFTER UPDATE ON nodes
 BEGIN
     UPDATE nodes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;`)); err != nil {
-			log.Println("创建nodes表updated_at触发器失败: %w", err)
+END;`); err != nil {
+			log.Printf("创建nodes表updated_at触发器失败: %v", err)
 		}
 
 		log.Println("数据库初始化成功")
@@ -505,23 +510,6 @@ func (s *server) handleGetTree(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
-	}
-
-	// 加载所有公开书签，并过滤掉当前用户自己的（它们已在主树中）
-	publicNodes, err := s.loadPublicTree(r.Context())
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, err)
-		return
-	}
-	otherPublicNodes := filterNodesByUser(publicNodes, userID)
-	if len(otherPublicNodes) > 0 {
-		publicFolder := &node{
-			ID:       -1,
-			Type:     "folder",
-			Title:    "🌐 公开书签",
-			Children: otherPublicNodes,
-		}
-		nodes = append([]*node{publicFolder}, nodes...)
 	}
 
 	respondJSON(w, http.StatusOK, nodes)
@@ -1259,7 +1247,7 @@ func parseEdgeHTML(htmlContent string, iconPath string) ([]*node, error) {
 			depth--
 		}()
 
-		Debug("解析节点: 深度=%d, 类型=%s, 数据=%s", depth, n.Type, n.Data)
+		Debug("解析节点: 深度=%d, 类型=%d, 数据=%s", depth, n.Type, n.Data)
 
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == html.ElementNode {
@@ -1581,9 +1569,9 @@ func (s *server) importNodes(tx *sql.Tx, ctx context.Context, userID int64, node
 				}
 
 				res, err := tx.ExecContext(ctx, `
-					INSERT INTO nodes (parent_id, type, title, url, favicon_url, position, user_id, remark)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, pos, userID, remark)
+					INSERT INTO nodes (parent_id, type, title, url, favicon_url, remark, position, user_id)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				`, parentID, nodeTypeBookmark, node.Title, node.URL, favicon, remark, pos, userID)
 				if err != nil {
 					return err
 				}
@@ -2326,207 +2314,171 @@ func (s *server) getNode(ctx context.Context, userID int64, id int64) (*node, er
 	return &n, nil
 }
 
+// fetchMetadataOnce performs a single HTTP attempt. Returns (title, iconURL, retryable, err).
+// retryable=true means the caller should retry; retryable=false with err=nil means a usable
+// result was obtained even if it is a fallback value.
+func (s *server) fetchMetadataOnce(rawURL, hostname, baseIconURL string) (string, string, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequest("GET", rawURL, nil)
+	if err != nil {
+		return "", "", true, err
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req = req.WithContext(ctx)
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", "", true, err
+	}
+	defer resp.Body.Close()
+
+	finalURL := resp.Request.URL.String()
+	if finalURL != rawURL {
+		Debug("URL重定向: %s -> %s", rawURL, finalURL)
+	}
+
+	var bodyReader io.Reader = resp.Body
+	if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
+		gz, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			Debug("无法创建gzip读取器: %v", err)
+		} else {
+			defer gz.Close()
+			bodyReader = gz
+		}
+	} else if strings.Contains(resp.Header.Get("Content-Encoding"), "deflate") {
+		zl := flate.NewReader(resp.Body)
+		defer zl.Close()
+		bodyReader = zl
+	}
+
+	if resp.StatusCode == 403 {
+		Debug("Received 403 Forbidden for URL: %s", rawURL)
+		return "", "", true, fmt.Errorf("remote status 403 Forbidden")
+	}
+
+	if resp.StatusCode >= 400 {
+		Debug("Received status %d for URL: %s", resp.StatusCode, rawURL)
+		if hostname != "" {
+			return hostname, baseIconURL, false, nil
+		}
+		return rawURL, baseIconURL, false, nil
+	}
+
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+		if hostname != "" {
+			return hostname, baseIconURL, false, nil
+		}
+		return rawURL, baseIconURL, false, nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(bodyReader, 1<<20))
+	if err != nil {
+		return "", "", true, err
+	}
+
+	var title string
+
+	// 1. 正则提取 <title>
+	titleRegex := regexp.MustCompile(`(?si)<title[^>]*>(.*?)</title>`)
+	if matches := titleRegex.FindSubmatch(body); len(matches) > 1 {
+		t := strings.Join(strings.Fields(html.UnescapeString(string(matches[1]))), " ")
+		if t != "" {
+			title = t
+		}
+	}
+
+	// 2. og:title meta 标签
+	if title == "" {
+		metaTitleRegex := regexp.MustCompile(`(?si)<meta[^>]*property=["']og:title["'][^>]*content=["'](.*?)["']`)
+		if metaMatches := metaTitleRegex.FindSubmatch(body); len(metaMatches) > 1 {
+			t := strings.Join(strings.Fields(html.UnescapeString(string(metaMatches[1]))), " ")
+			if t != "" {
+				title = t
+			}
+		}
+	}
+
+	// 3. HTML 解析（同时用于提取图标）
+	doc, parseErr := html.Parse(bytes.NewReader(body))
+	if title == "" && parseErr == nil {
+		if t := extractTitle(doc); t != "" {
+			title = t
+		}
+	}
+
+	// 4. getPageTitle 兜底
+	if title == "" {
+		title, _ = getPageTitle(rawURL)
+	}
+
+	// 5. 最终兜底：主机名或 URL
+	if title == "" {
+		if hostname != "" {
+			title = hostname
+		} else {
+			title = finalURL
+		}
+	}
+
+	iconURL := baseIconURL
+	if parseErr == nil && doc != nil {
+		if iconHref := extractIconHref(doc); iconHref != "" {
+			if resolved, resolveErr := resolveURL(rawURL, iconHref); resolveErr == nil {
+				iconURL = resolved
+			}
+		}
+	}
+
+	return title, iconURL, false, nil
+}
+
 func (s *server) fetchMetadata(rawURL string) (string, string, error) {
-	// 解析URL以获取主机名作为备用标题
 	parsedURL, parseErr := url.Parse(rawURL)
 	var hostname string
 	var baseIconURL string
 
 	if parseErr == nil && parsedURL != nil {
-		// 确保parsedURL正确初始化
 		if parsedURL.Scheme == "" {
 			parsedURL.Scheme = "https"
 		}
 		if parsedURL.Host != "" {
 			hostname = parsedURL.Hostname()
-			// 预构建基础图标URL
 			baseIconURL = parsedURL.Scheme + "://" + parsedURL.Host + "/favicon.ico"
 		}
 	}
 
-	// 重试机制配置
 	maxRetries := 2
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		// 每次重试添加一些延迟
 		if attempt > 0 {
 			jitter := time.Duration(rand.Intn(500)) * time.Millisecond
 			time.Sleep(time.Second + jitter)
 		}
 
-		req, err := http.NewRequest("GET", rawURL, nil)
-		if err != nil {
-			lastErr = err
-			continue
+		title, iconURL, retry, err := s.fetchMetadataOnce(rawURL, hostname, baseIconURL)
+		if err == nil {
+			return title, iconURL, nil
 		}
-
-		// 创建跟踪重定向的响应
-		var finalURL string = rawURL
-
-		// 使用更完整的用户代理和HTTP头，更像真实浏览器
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-		req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
-		req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-		req.Header.Set("Connection", "keep-alive")
-		req.Header.Set("Upgrade-Insecure-Requests", "1")
-		req.Header.Set("Sec-Fetch-Dest", "document")
-		req.Header.Set("Sec-Fetch-Mode", "navigate")
-		req.Header.Set("Sec-Fetch-Site", "none")
-		req.Header.Set("Sec-Fetch-User", "?1")
-
-		// 设置超时上下文
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		req = req.WithContext(ctx)
-
-		resp, err := s.httpClient.Do(req)
-		if err != nil {
-			// 网络错误时继续重试
-			lastErr = err
-			continue
+		lastErr = err
+		if !retry {
+			break
 		}
-
-		// 获取最终的URL（跟随重定向后）
-		finalURL = resp.Request.URL.String()
-		if finalURL != rawURL {
-			Debug("URL重定向: %s -> %s", rawURL, finalURL)
-		}
-
-		defer resp.Body.Close()
-
-		// 处理gzip压缩内容
-		var bodyReader io.Reader = resp.Body
-		if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
-			gz, err := gzip.NewReader(resp.Body)
-			if err != nil {
-				Debug("无法创建gzip读取器: %v", err)
-				// 尝试作为普通内容继续处理，不立即放弃
-				bodyReader = resp.Body
-			} else {
-				defer gz.Close()
-				bodyReader = gz
-			}
-		}
-		// 也处理deflate压缩
-		if strings.Contains(resp.Header.Get("Content-Encoding"), "deflate") {
-			zl := flate.NewReader(resp.Body)
-			defer zl.Close()
-			bodyReader = zl
-		}
-
-		// 对于403错误，尝试不同的策略
-		if resp.StatusCode == 403 {
-			// 记录错误但继续到下一个重试
-			Debug("Received 403 Forbidden for URL: %s, attempt: %d", rawURL, attempt+1)
-			lastErr = fmt.Errorf("remote status 403 Forbidden")
-			continue
-		}
-
-		// 对于其他错误状态码，直接使用URL信息作为备选
-		if resp.StatusCode >= 400 {
-			Debug("Received status %d for URL: %s", resp.StatusCode, rawURL)
-			// 即使状态码错误，也尝试从URL获取基本信息
-			if hostname != "" {
-				return hostname, baseIconURL, nil
-			}
-			return rawURL, baseIconURL, nil
-		}
-
-		// 确保我们只读取HTML内容
-		contentType := resp.Header.Get("Content-Type")
-		if !strings.Contains(contentType, "text/html") {
-			// 对于非HTML内容，使用已解析的主机名
-			if hostname != "" {
-				return hostname, baseIconURL, nil
-			}
-			return rawURL, baseIconURL, nil
-		}
-
-		body, err := io.ReadAll(io.LimitReader(bodyReader, 1<<20))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		// 初始化标题变量
-		var title string
-
-		// 1. 首先尝试增强的正则表达式提取标题
-		// 使用更宽松的正则表达式，添加DOTALL模式支持换行符
-		titleRegex := regexp.MustCompile(`(?si)<title[^>]*>(.*?)</title>`)
-		matches := titleRegex.FindSubmatch(body)
-		if len(matches) > 1 {
-			// 提取标题并清理
-			titleContent := strings.TrimSpace(html.UnescapeString(string(matches[1])))
-			// 移除多余的空白字符和HTML标签
-			titleContent = strings.Join(strings.Fields(titleContent), " ")
-			// 确保标题不为空
-			if titleContent != "" {
-				title = titleContent
-			}
-		}
-
-		// 2. 如果正则没找到，尝试从meta标签获取og:title
-		if title == "" {
-			metaTitleRegex := regexp.MustCompile(`(?si)<meta[^>]*property=["']og:title["'][^>]*content=["'](.*?)["']`)
-			metaMatches := metaTitleRegex.FindSubmatch(body)
-			if len(metaMatches) > 1 {
-				metaTitle := strings.TrimSpace(html.UnescapeString(string(metaMatches[1])))
-				metaTitle = strings.Join(strings.Fields(metaTitle), " ")
-				if metaTitle != "" {
-					title = metaTitle
-				}
-			}
-		}
-
-		// 3. 尝试解析HTML文档（即使正则已经找到标题，也进行解析以获取图标）
-		var doc *html.Node
-		doc, err = html.Parse(bytes.NewReader(body))
-
-		// 如果正则表达式没有找到标题，但HTML解析成功，尝试使用html包解析
-		if title == "" && err == nil {
-			htmlTitle := extractTitle(doc)
-			if htmlTitle != "" {
-				title = htmlTitle
-			}
-		}
-
-		// 4. 尝试从页面文本中提取第一个有意义的文本作为标题
-		if title == "" {
-			// 用原生go从网址parsedURL获取网页内容
-			title, err = getPageTitle(rawURL)
-		}
-
-		// 5. 如果所有方法都失败，使用已解析的主机名或URL
-		if title == "" {
-			if hostname != "" {
-				title = hostname
-			} else {
-				title = finalURL
-			}
-		}
-
-		// 优先使用预构建的默认图标URL
-		iconURL := baseIconURL
-
-		// 然后尝试从页面提取更具体的图标
-		if err == nil && doc != nil {
-			iconHref := extractIconHref(doc)
-			if iconHref != "" {
-				// 使用resolveURL函数解析相对URL
-				resolved, resolveErr := resolveURL(rawURL, iconHref)
-				if resolveErr == nil {
-					iconURL = resolved
-				}
-			}
-		}
-
-		return title, iconURL, nil
 	}
 
-	// 如果所有重试都失败，返回URL信息作为备选
 	Error("All %d attempts failed for URL: %s, last error: %v", maxRetries+1, rawURL, lastErr)
 	if hostname != "" {
 		return hostname, baseIconURL, nil
@@ -3287,6 +3239,31 @@ func (s *server) handleBatchUsers(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
 }
 
+// handleUserStats 返回当前登录用户自己的统计信息
+func (s *server) handleUserStats(w http.ResponseWriter, r *http.Request) {
+	userID := getUserID(r)
+	var stats struct {
+		TotalBookmarks  int `json:"total_bookmarks"`
+		TotalFolders    int `json:"total_folders"`
+		PublicBookmarks int `json:"public_bookmarks"`
+	}
+	queries := []struct {
+		dest *int
+		sql  string
+	}{
+		{&stats.TotalBookmarks, "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark' AND user_id = ?"},
+		{&stats.TotalFolders, "SELECT COUNT(*) FROM nodes WHERE type = 'folder' AND user_id = ?"},
+		{&stats.PublicBookmarks, "SELECT COUNT(*) FROM nodes WHERE type = 'bookmark' AND visibility = 'public' AND user_id = ?"},
+	}
+	for _, q := range queries {
+		if err := s.db.QueryRowContext(r.Context(), q.sql, userID).Scan(q.dest); err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Errorf("stats query failed: %w", err))
+			return
+		}
+	}
+	respondJSON(w, http.StatusOK, stats)
+}
+
 // handleAdminStats 返回后台管理统计信息
 func (s *server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	var stats struct {
@@ -3958,13 +3935,6 @@ func (s *server) handleAdminReorderNodes(w http.ResponseWriter, r *http.Request)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// 辅助函数：获取最小值
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // saveBase64Icon 保存base64图标到本地文件
 func saveBase64Icon(iconData string, iconPath string) (string, error) {
@@ -4341,31 +4311,16 @@ func (s *server) apiKeyAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// apiKeyAuthMiddlewareForChi 适配 Chi 路由器的 API Key 中间件
 func (s *server) apiKeyAuthMiddlewareForChi(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.apiKeyAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-		})(w, r)
-	})
+	return s.apiKeyAuthMiddleware(next.ServeHTTP)
 }
 
-// tokenAuthMiddlewareChi 适配 Chi 路由器的 Token 认证中间件
 func (s *server) tokenAuthMiddlewareChi(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.tokenAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-		})(w, r)
-	})
+	return s.tokenAuthMiddleware(next.ServeHTTP)
 }
 
-// adminMiddlewareChi 适配 Chi 路由器的管理员权限中间件
 func (s *server) adminMiddlewareChi(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.adminMiddleware(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-		})(w, r)
-	})
+	return s.adminMiddleware(next.ServeHTTP)
 }
 
 // corsMiddleware CORS 跨域中间件
