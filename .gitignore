@@ -15,6 +15,9 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Build artifacts
+*.zip
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
 .playwright-mcp/
@@ -31,3 +34,6 @@ release
 /data
 /bookmarks
 bookmarks
+techfunway.bookmarks/app/server/bookmarks
+techfunway.bookmarks/app/server/reset-password
+techfunway.bookmarks/app/server/edge-extension.zip
