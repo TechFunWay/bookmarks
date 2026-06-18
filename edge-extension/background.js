@@ -35,7 +35,8 @@ const DEFAULT_DEVICE = {
 const DEFAULT_CONFIG = {
   devices: [{ ...DEFAULT_DEVICE }],
   lastSyncTime: null,
-  folderIdMap: {}
+  folderIdMap: {},  // edgeId → serverId 持久映射，防止重复文件夹
+  bookmarkIdMap: {} // edgeId → serverId 持久映射（书签）
 };
 
 let config = { ...DEFAULT_CONFIG };
@@ -82,6 +83,55 @@ function ensureDeviceDefaults(device) {
   device.e2a = { ...DEFAULT_E2A, ...device.e2a };
   device.a2e = { ...DEFAULT_A2E, ...device.a2e };
   return device;
+}
+
+function getEdgeToServerId(edgeId, type) {
+  const map = type === 'folder' ? (config.folderIdMap || {}) : (config.bookmarkIdMap || {});
+  return map[String(edgeId)] || null;
+}
+
+function setEdgeToServerId(edgeId, serverId, type) {
+  if (!edgeId || !serverId) return;
+  if (type === 'folder') {
+    if (!config.folderIdMap) config.folderIdMap = {};
+    config.folderIdMap[String(edgeId)] = serverId;
+  } else {
+    if (!config.bookmarkIdMap) config.bookmarkIdMap = {};
+    config.bookmarkIdMap[String(edgeId)] = serverId;
+  }
+}
+
+function removeEdgeToServerId(edgeId, type) {
+  if (type === 'folder' && config.folderIdMap) {
+    delete config.folderIdMap[String(edgeId)];
+  } else if (type === 'bookmark' && config.bookmarkIdMap) {
+    delete config.bookmarkIdMap[String(edgeId)];
+  }
+}
+
+async function saveIdMaps() {
+  await chrome.storage.local.set({ config });
+}
+
+function cleanupStaleIdMaps(serverBookmarkIds, serverFolderIds) {
+  let changed = false;
+  if (config.folderIdMap) {
+    for (const [edgeId, serverId] of Object.entries(config.folderIdMap)) {
+      if (!serverFolderIds.has(serverId)) {
+        delete config.folderIdMap[edgeId];
+        changed = true;
+      }
+    }
+  }
+  if (config.bookmarkIdMap) {
+    for (const [edgeId, serverId] of Object.entries(config.bookmarkIdMap)) {
+      if (!serverBookmarkIds.has(serverId)) {
+        delete config.bookmarkIdMap[edgeId];
+        changed = true;
+      }
+    }
+  }
+  return changed;
 }
 
 function migrateConfig(storedConfig) {
@@ -533,6 +583,7 @@ function convertEdgeToSyncFormat(edgeBookmarks, targetParentId = null) {
     if (node.url) {
       bookmarks.push({
         temp_id: null,
+        edge_id: node.id,
         edge_parent_id: parentTempId,
         title: node.title || '未命名',
         url: node.url,
@@ -575,11 +626,20 @@ function generateBookmarkBatchRequest(edgeData, serverBookmarks, serverFolders, 
       parentServerId = targetParentId;
     }
 
-    const existingBookmark = serverBookmarks.find(b =>
-      b.parent_id === parentServerId &&
-      b.title === edgeBookmark.title &&
-      b.url === edgeBookmark.url
-    );
+    let existingBookmark = null;
+
+    const mappedServerId = getEdgeToServerId(edgeBookmark.edge_id, 'bookmark');
+    if (mappedServerId) {
+      existingBookmark = serverBookmarks.find(b => b.id === mappedServerId);
+    }
+
+    if (!existingBookmark) {
+      existingBookmark = serverBookmarks.find(b =>
+        b.parent_id === parentServerId &&
+        b.title === edgeBookmark.title &&
+        b.url === edgeBookmark.url
+      );
+    }
 
     if (existingBookmark) {
       request.update.bookmarks.push({
@@ -590,13 +650,15 @@ function generateBookmarkBatchRequest(edgeData, serverBookmarks, serverFolders, 
         favicon_url: edgeBookmark.favicon_url,
         position: edgeBookmark.position
       });
+      setEdgeToServerId(edgeBookmark.edge_id, existingBookmark.id, 'bookmark');
     } else {
       request.create.bookmarks.push({
         parent_id: parentServerId,
         title: edgeBookmark.title,
         url: edgeBookmark.url,
         favicon_url: edgeBookmark.favicon_url,
-        position: edgeBookmark.position
+        position: edgeBookmark.position,
+        _edge_id: edgeBookmark.edge_id
       });
     }
   });
@@ -733,10 +795,22 @@ async function syncToBackend(edgeBookmarks, device) {
           parentServerId = targetParentId;
         }
 
-        const existingFolder = serverFolders.find(f =>
-          f.parent_id === parentServerId &&
-          f.title === edgeFolder.title
-        );
+        let existingFolder = null;
+
+        const mappedServerId = getEdgeToServerId(edgeFolder.edge_id, 'folder');
+        if (mappedServerId) {
+          existingFolder = serverFolders.find(f => f.id === mappedServerId);
+          if (existingFolder && existingFolder.parent_id !== parentServerId) {
+            existingFolder = null;
+          }
+        }
+
+        if (!existingFolder) {
+          existingFolder = serverFolders.find(f =>
+            f.parent_id === parentServerId &&
+            f.title === edgeFolder.title
+          );
+        }
 
         if (existingFolder) {
           layerRequest.update.folders.push({
@@ -746,12 +820,14 @@ async function syncToBackend(edgeBookmarks, device) {
             position: edgeFolder.position
           });
           tempIdToServerId.set(edgeFolder.temp_id, existingFolder.id);
+          setEdgeToServerId(edgeFolder.edge_id, existingFolder.id, 'folder');
         } else {
           layerRequest.create.folders.push({
             parent_id: parentServerId,
             title: edgeFolder.title,
             position: edgeFolder.position,
-            _temp_id: edgeFolder.temp_id
+            _temp_id: edgeFolder.temp_id,
+            _edge_id: edgeFolder.edge_id
           });
         }
       });
@@ -766,7 +842,7 @@ async function syncToBackend(edgeBookmarks, device) {
         });
       }
 
-      const cleanFolders = layerRequest.create.folders.map(({ _temp_id, ...rest }) => rest);
+      const cleanFolders = layerRequest.create.folders.map(({ _temp_id, _edge_id, ...rest }) => rest);
       const sendRequest = {
         ...layerRequest,
         create: { ...layerRequest.create, folders: cleanFolders }
@@ -782,7 +858,11 @@ async function syncToBackend(edgeBookmarks, device) {
         layerResult.created?.folders?.forEach((folder, index) => {
           if (index < createList.length) {
             const tempId = createList[index]._temp_id;
+            const edgeId = createList[index]._edge_id;
             tempIdToServerId.set(tempId, folder.id);
+            if (edgeId) {
+              setEdgeToServerId(edgeId, folder.id, 'folder');
+            }
           }
         });
       }
@@ -799,6 +879,16 @@ async function syncToBackend(edgeBookmarks, device) {
     );
 
     const bookmarkResult = await callBatchAPI(bookmarkBatchRequest, device);
+
+    const bookmarkCreateList = bookmarkBatchRequest.create.bookmarks;
+    bookmarkResult.created?.bookmarks?.forEach((bookmark, index) => {
+      if (index < bookmarkCreateList.length) {
+        const edgeId = bookmarkCreateList[index]._edge_id;
+        if (edgeId) {
+          setEdgeToServerId(edgeId, bookmark.id, 'bookmark');
+        }
+      }
+    });
 
     const result = {
       created: {
@@ -827,6 +917,15 @@ async function syncToBackend(edgeBookmarks, device) {
     };
 
     console.log('同步完成，统计:', stats);
+
+    const freshBookmarks = await fetchServerBookmarks(device);
+    const freshFolders = await fetchServerFolders(device);
+    const serverFolderIds = new Set(freshFolders.map(f => f.id));
+    const serverBookmarkIds = new Set(freshBookmarks.map(b => b.id));
+    if (cleanupStaleIdMaps(serverBookmarkIds, serverFolderIds)) {
+      await saveIdMaps();
+    }
+
     return { stats, result };
   } catch (error) {
     console.error('同步到后端失败:', error);

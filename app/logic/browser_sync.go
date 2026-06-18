@@ -434,32 +434,61 @@ func (bs *BrowserSync) BatchOperation(ctx context.Context, userID int64, req *Ba
 	}
 	defer tx.Rollback()
 
-	// 处理创建操作
+	existingFolderKeys, err := bs.loadExistingFolderKeys(ctx, tx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("加载已有文件夹失败: %w", err)
+	}
+
+	existingBookmarkKeys, err := bs.loadExistingBookmarkKeys(ctx, tx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("加载已有书签失败: %w", err)
+	}
+
 	if req.Create != nil {
-		// 创建文件夹
 		for _, folder := range req.Create.Folders {
+			if folder.Title == "" {
+				result.Errors = append(result.Errors, "创建文件夹失败: title 不能为空")
+				continue
+			}
+			key := folderDedupKey(folder.ParentID, folder.Title)
+			if _, exists := existingFolderKeys[key]; exists {
+				result.Errors = append(result.Errors, fmt.Sprintf("创建文件夹 '%s' 失败: 同级目录下已存在同名文件夹", folder.Title))
+				continue
+			}
 			createdFolder, err := bs.createFolderTx(ctx, tx, userID, folder)
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("创建文件夹 '%s' 失败: %v", folder.Title, err))
 				continue
 			}
+			existingFolderKeys[key] = createdFolder.ID
 			result.Created.Folders = append(result.Created.Folders, createdFolder)
 		}
 
-		// 创建书签
 		for _, bookmark := range req.Create.Bookmarks {
+			if bookmark.Title == "" {
+				result.Errors = append(result.Errors, "创建书签失败: title 不能为空")
+				continue
+			}
+			if bookmark.URL == "" {
+				result.Errors = append(result.Errors, fmt.Sprintf("创建书签 '%s' 失败: url 不能为空", bookmark.Title))
+				continue
+			}
+			key := bookmarkDedupKey(bookmark.ParentID, bookmark.URL)
+			if _, exists := existingBookmarkKeys[key]; exists {
+				result.Errors = append(result.Errors, fmt.Sprintf("创建书签 '%s' 失败: 同级目录下已存在相同网址", bookmark.Title))
+				continue
+			}
 			createdBookmark, err := bs.createBookmarkTx(ctx, tx, userID, bookmark)
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("创建书签 '%s' 失败: %v", bookmark.Title, err))
 				continue
 			}
+			existingBookmarkKeys[key] = createdBookmark.ID
 			result.Created.Bookmarks = append(result.Created.Bookmarks, createdBookmark)
 		}
 	}
 
-	// 处理更新操作
 	if req.Update != nil {
-		// 更新文件夹
 		for _, folder := range req.Update.Folders {
 			err := bs.updateFolderTx(ctx, tx, userID, folder)
 			if err != nil {
@@ -469,7 +498,6 @@ func (bs *BrowserSync) BatchOperation(ctx context.Context, userID int64, req *Ba
 			result.Updated.Folders = append(result.Updated.Folders, folder)
 		}
 
-		// 更新书签
 		for _, bookmark := range req.Update.Bookmarks {
 			err := bs.updateBookmarkTx(ctx, tx, userID, bookmark)
 			if err != nil {
@@ -480,9 +508,7 @@ func (bs *BrowserSync) BatchOperation(ctx context.Context, userID int64, req *Ba
 		}
 	}
 
-	// 处理删除操作
 	if req.Delete != nil {
-		// 删除书签
 		for _, id := range req.Delete.BookmarkIDs {
 			_, err := tx.ExecContext(ctx, "DELETE FROM nodes WHERE id = ? AND user_id = ? AND type = 'bookmark'", id, userID)
 			if err != nil {
@@ -492,7 +518,6 @@ func (bs *BrowserSync) BatchOperation(ctx context.Context, userID int64, req *Ba
 			result.Deleted.BookmarkIDs = append(result.Deleted.BookmarkIDs, id)
 		}
 
-		// 删除文件夹
 		for _, id := range req.Delete.FolderIDs {
 			_, err := tx.ExecContext(ctx, "DELETE FROM nodes WHERE id = ? AND user_id = ? AND type = 'folder'", id, userID)
 			if err != nil {
@@ -508,6 +533,68 @@ func (bs *BrowserSync) BatchOperation(ctx context.Context, userID int64, req *Ba
 	}
 
 	return result, nil
+}
+
+func folderDedupKey(parentID *int64, title string) string {
+	if parentID != nil {
+		return fmt.Sprintf("f:%d:%s", *parentID, title)
+	}
+	return fmt.Sprintf("f:nil:%s", title)
+}
+
+func bookmarkDedupKey(parentID *int64, url string) string {
+	if parentID != nil {
+		return fmt.Sprintf("b:%d:%s", *parentID, url)
+	}
+	return fmt.Sprintf("b:nil:%s", url)
+}
+
+func (bs *BrowserSync) loadExistingFolderKeys(ctx context.Context, tx *sql.Tx, userID int64) (map[string]int64, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT id, parent_id, title FROM nodes WHERE user_id = ? AND type = 'folder'", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	keys := make(map[string]int64)
+	for rows.Next() {
+		var id int64
+		var parentID sql.NullInt64
+		var title string
+		if err := rows.Scan(&id, &parentID, &title); err != nil {
+			return nil, err
+		}
+		var pid *int64
+		if parentID.Valid {
+			pid = &parentID.Int64
+		}
+		keys[folderDedupKey(pid, title)] = id
+	}
+	return keys, rows.Err()
+}
+
+func (bs *BrowserSync) loadExistingBookmarkKeys(ctx context.Context, tx *sql.Tx, userID int64) (map[string]int64, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT id, parent_id, url FROM nodes WHERE user_id = ? AND type = 'bookmark'", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	keys := make(map[string]int64)
+	for rows.Next() {
+		var id int64
+		var parentID sql.NullInt64
+		var url string
+		if err := rows.Scan(&id, &parentID, &url); err != nil {
+			return nil, err
+		}
+		var pid *int64
+		if parentID.Valid {
+			pid = &parentID.Int64
+		}
+		keys[bookmarkDedupKey(pid, url)] = id
+	}
+	return keys, rows.Err()
 }
 
 // createFolderTx 在事务中创建文件夹
