@@ -1,303 +1,328 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="auto">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>注册 - 书签管理</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="js/md5.js"></script>
-    <style>
-        .register-container {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-        }
-        .register-box {
-            background: white;
-            border-radius: 12px;
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-        }
-        .register-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .register-header h1 {
-            color: #333;
-            font-size: 28px;
-            margin: 0 0 10px 0;
-        }
-        .register-header p {
-            color: #666;
-            font-size: 14px;
-            margin: 0;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-            font-size: 14px;
-        }
-        .form-group label .required {
-            color: #d13438;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 14px 16px;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 14px;
-            box-sizing: border-box;
-            transition: all 0.3s ease;
-            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
-            color: #333;
-        }
-        .form-group input:hover {
-            border-color: #b0b0b0;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.05);
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            background: #ffffff;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1), inset 0 1px 3px rgba(0, 0, 0, 0.04);
-        }
-        .form-group input::placeholder {
-            color: #999;
-            font-size: 14px;
-        }
-        .form-hint {
-            font-size: 12px;
-            color: #999;
-            margin-top: 5px;
-        }
-        .register-btn {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: opacity 0.3s;
-        }
-        .register-btn:hover {
-            opacity: 0.9;
-        }
-        .register-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .register-footer {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 14px;
-        }
-        .register-footer a {
-            color: #667eea;
-            text-decoration: none;
-        }
-        .register-footer a:hover {
-            text-decoration: underline;
-        }
-        .error-message {
-            background: #fee;
-            color: #c33;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: none;
-        }
-        .error-message.show {
-            display: block;
-        }
-        .first-admin-banner {
-            display: none;
-            align-items: flex-start;
-            gap: 10px;
-            background: linear-gradient(135deg, #f0f4ff 0%, #faf0ff 100%);
-            border: 1px solid #c7d4ff;
-            border-left: 4px solid #667eea;
-            border-radius: 8px;
-            padding: 14px 16px;
-            margin-bottom: 24px;
-            font-size: 13px;
-            color: #444;
-            line-height: 1.6;
-        }
-        .first-admin-banner.show {
-            display: flex;
-        }
-        .first-admin-banner-icon {
-            font-size: 22px;
-            flex-shrink: 0;
-            margin-top: 1px;
-        }
-        .first-admin-banner strong {
-            display: block;
-            font-size: 14px;
-            font-weight: 700;
-            color: #4a5bcd;
-            margin-bottom: 4px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注册 · 书签</title>
+  <script src="js/md5.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #f0f2f8;
+      --bg-orb1:      rgba(99,102,241,0.18);
+      --bg-orb2:      rgba(6,182,212,0.14);
+      --bg-orb3:      rgba(139,92,246,0.10);
+      --brand-bg:     linear-gradient(145deg, rgba(99,102,241,0.12) 0%, rgba(6,182,212,0.07) 100%);
+      --brand-border: rgba(99,102,241,0.12);
+      --form-bg:      rgba(255,255,255,0.92);
+      --form-border:  rgba(0,0,0,0.06);
+      --card-shadow:  0 24px 64px rgba(99,102,241,0.12), 0 0 0 1px rgba(0,0,0,0.06);
+      --text:         #1a1a2e;
+      --text-sub:     #5a5a7a;
+      --text-muted:   #9090b0;
+      --input-bg:     #f4f5fb;
+      --input-border: rgba(0,0,0,0.10);
+      --input-focus:  #6366f1;
+      --input-color:  #1a1a2e;
+      --placeholder:  #b0b0cc;
+      --icon-color:   #a0a0c0;
+      --grad:         linear-gradient(135deg, #6366f1, #06b6d4);
+      --accent:       #6366f1;
+      --link:         #6366f1;
+      --link-hover:   #4f46e5;
+      --error-bg:     rgba(244,63,94,0.08);
+      --error-border: rgba(244,63,94,0.18);
+      --error-text:   #e11d48;
+      --divider:      rgba(0,0,0,0.07);
+      --hint:         #a0a0c0;
+      --toggle-bg:    rgba(0,0,0,0.06);
+      --toggle-hover: rgba(0,0,0,0.10);
+      --toggle-icon:  #5a5a7a;
+      --banner-bg:    linear-gradient(135deg, rgba(99,102,241,0.10), rgba(6,182,212,0.06));
+      --banner-border:rgba(99,102,241,0.20);
+      --banner-title: #4f46e5;
+      --banner-text:  #6060a0;
+      --req:          #e11d48;
+    }
+
+    [data-theme="dark"] {
+      --bg:           #0d0d1a;
+      --bg-orb1:      rgba(99,102,241,0.28);
+      --bg-orb2:      rgba(6,182,212,0.22);
+      --bg-orb3:      rgba(139,92,246,0.15);
+      --brand-bg:     linear-gradient(145deg, rgba(99,102,241,0.20) 0%, rgba(6,182,212,0.10) 100%);
+      --brand-border: rgba(255,255,255,0.08);
+      --form-bg:      rgba(10,10,22,0.88);
+      --form-border:  rgba(255,255,255,0.06);
+      --card-shadow:  0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.07);
+      --text:         #e8e8f0;
+      --text-sub:     #8a8aaa;
+      --text-muted:   #5a5a78;
+      --input-bg:     rgba(255,255,255,0.05);
+      --input-border: rgba(255,255,255,0.09);
+      --input-color:  #e0e0f0;
+      --placeholder:  #3e3e5a;
+      --icon-color:   #4a4a68;
+      --link:         #818cf8;
+      --link-hover:   #a5b4fc;
+      --error-bg:     rgba(244,63,94,0.10);
+      --error-border: rgba(244,63,94,0.20);
+      --error-text:   #f87171;
+      --divider:      rgba(255,255,255,0.07);
+      --hint:         #4a4a68;
+      --toggle-bg:    rgba(255,255,255,0.08);
+      --toggle-hover: rgba(255,255,255,0.14);
+      --toggle-icon:  #8a8aaa;
+      --banner-bg:    linear-gradient(135deg, rgba(99,102,241,0.15), rgba(6,182,212,0.08));
+      --banner-border:rgba(99,102,241,0.25);
+      --banner-title: #a5b4fc;
+      --banner-text:  #7070a0;
+      --req:          #f87171;
+    }
+
+    html, body { min-height: 100%; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); -webkit-font-smoothing: antialiased; transition: background .3s; }
+    body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; position: relative; overflow: hidden; }
+
+    .bg { position: fixed; inset: 0; z-index: 0; background: radial-gradient(ellipse 70% 55% at 15% 50%, var(--bg-orb1) 0%, transparent 60%), radial-gradient(ellipse 55% 45% at 85% 60%, var(--bg-orb2) 0%, transparent 55%), radial-gradient(ellipse 45% 35% at 50% 5%, var(--bg-orb3) 0%, transparent 50%), var(--bg); transition: background .3s; }
+
+    .theme-btn {
+      position: fixed; top: 20px; right: 20px; z-index: 100;
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--toggle-bg); border: 1px solid var(--brand-border);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--toggle-icon);
+      transition: background .2s; backdrop-filter: blur(8px);
+    }
+    .theme-btn:hover { background: var(--toggle-hover); }
+    .theme-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-sun, .icon-moon { position: absolute; transition: opacity .2s, transform .2s; }
+    [data-theme="light"] .icon-moon { opacity: 0; transform: scale(.6); }
+    [data-theme="light"] .icon-sun  { opacity: 1; transform: scale(1); }
+    [data-theme="dark"]  .icon-sun  { opacity: 0; transform: scale(.6); }
+    [data-theme="dark"]  .icon-moon { opacity: 1; transform: scale(1); }
+
+    .card {
+      position: relative; z-index: 1;
+      display: flex; width: 100%; max-width: 940px;
+      border-radius: 24px; overflow: hidden;
+      box-shadow: var(--card-shadow); transition: box-shadow .3s;
+    }
+
+    /* Brand */
+    .brand { flex: 1; padding: 48px 44px; background: var(--brand-bg); border-right: 1px solid var(--brand-border); display: flex; flex-direction: column; justify-content: center; transition: background .3s, border-color .3s; }
+    .brand-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 44px; }
+    .brand-logo-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--grad); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(99,102,241,0.35); flex-shrink: 0; }
+    .brand-logo-icon svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .brand-logo-name { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+    .brand-title { font-size: 32px; font-weight: 700; color: var(--text); line-height: 1.2; letter-spacing: -0.03em; margin-bottom: 12px; }
+    .brand-title em { font-style: normal; background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .brand-desc { font-size: 14px; color: var(--text-sub); line-height: 1.7; margin-bottom: 40px; }
+    .brand-steps { display: flex; flex-direction: column; gap: 18px; }
+    .brand-step { display: flex; align-items: center; gap: 14px; }
+    .step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; box-shadow: 0 0 10px rgba(99,102,241,0.3); }
+    .step-text { font-size: 13px; color: var(--text-sub); }
+
+    /* Form */
+    .form-side { width: 420px; flex-shrink: 0; padding: 44px 38px; background: var(--form-bg); border-left: 1px solid var(--form-border); backdrop-filter: blur(20px); display: flex; flex-direction: column; justify-content: center; transition: background .3s; }
+    .form-title { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; margin-bottom: 4px; }
+    .form-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+
+    /* Admin banner */
+    .admin-banner { display: none; align-items: flex-start; gap: 11px; padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; background: var(--banner-bg); border: 1px solid var(--banner-border); }
+    .admin-banner.show { display: flex; }
+    .admin-banner-icon { width: 28px; height: 28px; border-radius: 7px; background: var(--grad); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .admin-banner strong { display: block; font-size: 12px; font-weight: 600; color: var(--banner-title); margin-bottom: 2px; }
+    .admin-banner p { font-size: 12px; color: var(--banner-text); line-height: 1.5; }
+
+    /* Alert */
+    .alert { display: none; align-items: center; gap: 8px; padding: 10px 13px; border-radius: 9px; font-size: 13px; margin-bottom: 14px; background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); }
+    .alert.show { display: flex; }
+
+    /* Row */
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .field { margin-bottom: 12px; }
+    .field-label { font-size: 12px; font-weight: 500; color: var(--text-sub); margin-bottom: 6px; display: flex; align-items: center; gap: 3px; }
+    .req { color: var(--req); font-size: 10px; }
+    .field-wrap { position: relative; }
+    .fi { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--icon-color); pointer-events: none; }
+    .fi svg { width: 14px; height: 14px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .field-input { width: 100%; height: 42px; padding: 0 38px 0 39px; font-size: 13px; font-family: inherit; color: var(--input-color); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 10px; outline: none; transition: border-color .2s, background .2s, box-shadow .2s, color .2s; }
+    .field-input::placeholder { color: var(--placeholder); }
+    .field-input:hover { border-color: rgba(99,102,241,0.3); }
+    .field-input:focus { border-color: var(--input-focus); background: rgba(99,102,241,0.05); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+    .pwd-btn { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--icon-color); background: none; border: none; cursor: pointer; border-radius: 6px; transition: color .15s; }
+    .pwd-btn:hover { color: var(--text-sub); }
+    .pwd-btn svg { width: 13px; height: 13px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .divider { height: 1px; background: var(--divider); margin: 4px 0 12px; }
+    .field-hint { font-size: 11px; color: var(--hint); margin-top: 4px; }
+
+    .btn { width: 100%; height: 44px; border: none; border-radius: 10px; background: var(--grad); color: #fff; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; margin-top: 4px; box-shadow: 0 4px 16px rgba(99,102,241,0.35); transition: opacity .2s, transform .15s, box-shadow .2s; }
+    .btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); box-shadow: 0 6px 22px rgba(99,102,241,0.45); }
+    .btn:active:not(:disabled) { transform: translateY(0); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    .links { margin-top: 14px; text-align: center; font-size: 13px; color: var(--text-muted); }
+    .links a { color: var(--link); text-decoration: none; font-weight: 500; transition: color .15s; }
+    .links a:hover { color: var(--link-hover); }
+
+    @media (max-width: 760px) {
+      .brand { display: none; }
+      .card { max-width: 440px; }
+      .form-side { width: 100%; padding: 36px 24px; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
-    <div class="register-container">
-        <div class="register-box">
-            <div class="register-header">
-                <h1>网址收藏夹</h1>
-                <p>创建一个新账户开始使用</p>
-            </div>
-            <div id="first-admin-banner" class="first-admin-banner">
-                <span class="first-admin-banner-icon">🛡️</span>
-                <div>
-                    <strong>首次注册将成为管理员</strong>
-                    系统中尚无任何用户，您注册的账户将自动获得管理员权限，可管理所有书签和系统设置。
-                </div>
-            </div>
-            <div id="error-message" class="error-message"></div>
-            <form id="register-form">
-                <div class="form-group">
-                    <label for="username">用户名 <span class="required">*</span></label>
-                    <input type="text" id="username" name="username" required autocomplete="username">
-                </div>
-                <div class="form-group">
-                    <label for="password">密码 <span class="required">*</span></label>
-                    <input type="password" id="password" name="password" required autocomplete="new-password" minlength="6">
-                    <div class="form-hint">密码至少6位</div>
-                </div>
-                <div class="form-group">
-                    <label for="confirm-password">确认密码 <span class="required">*</span></label>
-                    <input type="password" id="confirm-password" name="confirm-password" required autocomplete="new-password" minlength="6">
-                </div>
-                <div class="form-group">
-                    <label for="nickname">昵称</label>
-                    <input type="text" id="nickname" name="nickname" autocomplete="nickname">
-                </div>
-                <div class="form-group">
-                    <label for="email">邮箱</label>
-                    <input type="email" id="email" name="email" autocomplete="email">
-                </div>
-                <button type="submit" class="register-btn" id="register-btn">注册</button>
-            </form>
-            <div class="register-footer">
-                已有账户？<a href="login.html">立即登录</a>
-            </div>
-        </div>
+<div class="bg"></div>
+
+<button class="theme-btn" id="themeBtn" aria-label="切换主题">
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="card">
+  <div class="brand">
+    <div class="brand-logo">
+      <div class="brand-logo-icon"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+      <span class="brand-logo-name">Bookmarks</span>
+    </div>
+    <h1 class="brand-title">开始你的<br><em>收藏之旅</em></h1>
+    <p class="brand-desc">注册账户，将你喜欢的网址都收藏在这里，支持多设备访问。</p>
+    <div class="brand-steps">
+      <div class="brand-step"><div class="step-num">1</div><span class="step-text">注册账户，设置用户名和密码</span></div>
+      <div class="brand-step"><div class="step-num">2</div><span class="step-text">添加书签，按文件夹整理分类</span></div>
+      <div class="brand-step"><div class="step-num">3</div><span class="step-text">选择喜欢的模板，随时随地访问</span></div>
+    </div>
+  </div>
+
+  <div class="form-side">
+    <div class="form-title" id="form-title">创建账户</div>
+    <div class="form-sub" id="form-sub">填写以下信息完成注册</div>
+
+    <div class="admin-banner" id="admin-banner">
+      <div class="admin-banner-icon">🛡️</div>
+      <div><strong>首次注册将成为管理员</strong><p>系统尚无用户，此账户将自动获得管理员权限。</p></div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', async function() {
-            const registerForm = document.getElementById('register-form');
-            const registerBtn = document.getElementById('register-btn');
-            const errorMessage = document.getElementById('error-message');
-            const registerBox = document.querySelector('.register-box');
-            const registerHeader = document.querySelector('.register-header');
-            const firstAdminBanner = document.getElementById('first-admin-banner');
+    <div class="alert" id="alert"><span>⚠</span><span id="alert-text"></span></div>
 
-            // 检查系统配置
-            try {
-                const response = await fetch('/api/config/system');
-                if (response.ok) {
-                    const configData = await response.json();
-                    if (configData.allow_register === 'false' && configData.no_users !== 'true') {
-                        registerHeader.innerHTML = '<h1>注册已关闭</h1><p>系统已关闭注册功能，请联系管理员</p>';
-                        registerForm.style.display = 'none';
-                        return;
-                    }
-                    // 无用户时（或携带 ?first=1 参数时）显示管理员提示
-                    const urlParams = new URLSearchParams(window.location.search);
-                    if (configData.no_users === 'true' || urlParams.get('first') === '1') {
-                        firstAdminBanner.classList.add('show');
-                    }
-                }
-            } catch (error) {
-                console.error('检查注册配置失败:', error);
-            }
+    <form id="register-form" autocomplete="on">
+      <div class="field">
+        <label class="field-label" for="username">用户名 <span class="req">*</span></label>
+        <div class="field-wrap">
+          <span class="fi"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></span>
+          <input class="field-input" type="text" id="username" placeholder="用户名" required autocomplete="username">
+        </div>
+      </div>
 
-            registerForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const username = document.getElementById('username').value.trim();
-                const password = document.getElementById('password').value;
-                const confirmPassword = document.getElementById('confirm-password').value;
-                const nickname = document.getElementById('nickname').value.trim();
-                const email = document.getElementById('email').value.trim();
+      <div class="field">
+        <label class="field-label" for="password">密码 <span class="req">*</span></label>
+        <div class="field-wrap">
+          <span class="fi"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <input class="field-input" type="password" id="password" placeholder="至少 6 位" required autocomplete="new-password">
+          <button type="button" class="pwd-btn" id="pwdBtn1" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <div class="field-hint">密码至少 6 位</div>
+      </div>
 
-                if (!username || !password || !confirmPassword) {
-                    showError('请填写必填项');
-                    return;
-                }
+      <div class="field">
+        <label class="field-label" for="confirm-password">确认密码 <span class="req">*</span></label>
+        <div class="field-wrap">
+          <span class="fi"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+          <input class="field-input" type="password" id="confirm-password" placeholder="再次输入密码" required autocomplete="new-password">
+          <button type="button" class="pwd-btn" id="pwdBtn2" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+      </div>
 
-                if (password !== confirmPassword) {
-                    showError('两次输入的密码不一致');
-                    return;
-                }
+      <div class="divider"></div>
 
-                if (password.length < 6) {
-                    showError('密码长度不能少于6位');
-                    return;
-                }
+      <div class="row">
+        <div class="field">
+          <label class="field-label" for="nickname">昵称</label>
+          <div class="field-wrap">
+            <span class="fi"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+            <input class="field-input" type="text" id="nickname" placeholder="昵称（选填）" autocomplete="nickname">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="email">邮箱</label>
+          <div class="field-wrap">
+            <span class="fi"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+            <input class="field-input" type="email" id="email" placeholder="邮箱（选填）" autocomplete="email">
+          </div>
+        </div>
+      </div>
 
-                registerBtn.disabled = true;
-                registerBtn.textContent = '注册中...';
+      <button type="submit" class="btn" id="register-btn">注册账户</button>
+    </form>
+    <div class="links">已有账户？<a href="login.html">立即登录</a></div>
+  </div>
+</div>
 
-                try {
-                    // 对密码进行 MD5 加密（前端第一次 MD5）
-                    const hashedPassword = MD5(password);
-                    const response = await fetch('/api/auth/register', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ 
-                            username, 
-                            password: hashedPassword,
-                            nickname: nickname || undefined,
-                            email: email || undefined
-                        })
-                    });
+<script>
+(function () {
+  const THEME_KEY = 'auth_theme';
+  const html = document.documentElement;
+  function getSystemTheme() { return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+  function applyTheme(t) { html.setAttribute('data-theme', t || getSystemTheme()); }
+  applyTheme(localStorage.getItem(THEME_KEY));
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem(THEME_KEY, next);
+  });
+})();
 
-                    const data = await response.json();
+document.addEventListener('DOMContentLoaded', async function () {
+  const form = document.getElementById('register-form');
+  const btn = document.getElementById('register-btn');
+  const alertEl = document.getElementById('alert');
+  const alertText = document.getElementById('alert-text');
+  const adminBanner = document.getElementById('admin-banner');
+  const formTitle = document.getElementById('form-title');
+  const formSub = document.getElementById('form-sub');
 
-                    if (response.ok) {
-                        localStorage.setItem('token', data.token);
-                        localStorage.setItem('currentUser', JSON.stringify(data.user));
-                        window.location.href = 'index.html';
-                    } else {
-                        showError(data.error || '注册失败，请稍后重试');
-                    }
-                } catch (error) {
-                    showError('网络错误，请稍后重试');
-                    console.error('Register error:', error);
-                } finally {
-                    registerBtn.disabled = false;
-                    registerBtn.textContent = '注册';
-                }
-            });
+  const tog = (btnId, inputId) => document.getElementById(btnId).addEventListener('click', () => { const el = document.getElementById(inputId); el.type = el.type === 'text' ? 'password' : 'text'; });
+  tog('pwdBtn1', 'password'); tog('pwdBtn2', 'confirm-password');
 
-            function showError(message) {
-                errorMessage.textContent = message;
-                errorMessage.classList.add('show');
-                setTimeout(() => {
-                    errorMessage.classList.remove('show');
-                }, 5000);
-            }
-        });
-    </script>
+  try {
+    const r = await fetch('/api/config/system');
+    if (r.ok) {
+      const cfg = await r.json();
+      const isFirst = cfg.no_users === 'true' || new URLSearchParams(window.location.search).get('first') === '1';
+      if (cfg.allow_register === 'false' && !isFirst) { formTitle.textContent = '注册已关闭'; formSub.textContent = '请联系管理员'; form.style.display = 'none'; return; }
+      if (isFirst) { adminBanner.classList.add('show'); formTitle.textContent = '初始化设置'; formSub.textContent = '创建第一个管理员账户'; }
+    }
+  } catch (e) {}
+
+  function showAlert(msg) { alertText.textContent = msg; alertEl.classList.add('show'); setTimeout(() => alertEl.classList.remove('show'), 5000); }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm-password').value;
+    const nickname = document.getElementById('nickname').value.trim();
+    const email = document.getElementById('email').value.trim();
+    if (!username || !password || !confirm) { showAlert('请填写必填项'); return; }
+    if (password !== confirm) { showAlert('两次输入的密码不一致'); return; }
+    if (password.length < 6) { showAlert('密码长度不能少于 6 位'); return; }
+    btn.disabled = true; btn.textContent = '注册中…';
+    try {
+      const r = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: MD5(password), nickname: nickname || undefined, email: email || undefined })
+      });
+      const data = await r.json();
+      if (r.ok) { localStorage.setItem('token', data.token); localStorage.setItem('currentUser', JSON.stringify(data.user)); window.location.href = 'index.html'; }
+      else { showAlert(data.error || '注册失败，请稍后重试'); }
+    } catch (e) { showAlert('网络错误，请稍后重试'); }
+    finally { btn.disabled = false; btn.textContent = '注册账户'; }
+  });
+});
+</script>
 </body>
 </html>
