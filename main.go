@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"bookmark/app/logger"
@@ -57,12 +58,20 @@ const (
 	defaultLogMode = logModeRelease
 )
 
+type versionCheckCache struct {
+	latestVersion string
+	downloadURL   string
+	checkedAt     time.Time
+}
+
 type server struct {
 	db                *sql.DB
 	httpClient        *http.Client
 	faviconChan       chan int64 // 图标获取任务队列
 	iconPath          string     // 图标存储路径
 	securityQuestions *logic.SecurityQuestions
+	verCache          *versionCheckCache
+	verCacheMu        sync.Mutex
 }
 
 // 全局配置
@@ -394,6 +403,7 @@ func main() {
 		r.Get("/stats", s.tokenAuthMiddleware(s.handleUserStats))
 		r.Get("/metadata", s.handleMetadata)
 		r.Get("/version", s.handleGetVersion)
+		r.Get("/version/check", s.tokenAuthMiddleware(s.handleCheckVersion))
 		r.Post("/folders", s.optionalAuthMiddleware(s.handleCreateFolder))
 		r.Post("/bookmarks", s.optionalAuthMiddleware(s.handleCreateBookmark))
 		r.Put("/nodes/{id}", s.optionalAuthMiddleware(s.handleUpdateNode))
@@ -2723,6 +2733,83 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 // handleGetVersion 返回应用版本信息
 func (s *server) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"version": appVersion})
+}
+
+// handleCheckVersion 检查是否有新版本（结果缓存 24 小时）
+func (s *server) handleCheckVersion(w http.ResponseWriter, r *http.Request) {
+	s.verCacheMu.Lock()
+	defer s.verCacheMu.Unlock()
+
+	if s.verCache != nil && time.Since(s.verCache.checkedAt) < 24*time.Hour {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"current":      appVersion,
+			"latest":       s.verCache.latestVersion,
+			"download_url": s.verCache.downloadURL,
+			"has_update":   isNewerVersion(s.verCache.latestVersion, appVersion),
+		})
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), "GET",
+		"https://api.github.com/repos/TechFunWay/bookmarks/releases/latest", nil)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"current": appVersion, "has_update": false})
+		return
+	}
+	req.Header.Set("User-Agent", "bookmarks-app/"+appVersion)
+	resp, err := s.httpClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"current": appVersion, "has_update": false})
+		return
+	}
+	defer resp.Body.Close()
+
+	var release struct {
+		TagName string `json:"tag_name"`
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil || release.TagName == "" {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"current": appVersion, "has_update": false})
+		return
+	}
+
+	s.verCache = &versionCheckCache{
+		latestVersion: release.TagName,
+		downloadURL:   release.HTMLURL,
+		checkedAt:     time.Now(),
+	}
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"current":      appVersion,
+		"latest":       release.TagName,
+		"download_url": release.HTMLURL,
+		"has_update":   isNewerVersion(release.TagName, appVersion),
+	})
+}
+
+// isNewerVersion 比较两个 semver 字符串，latest > current 返回 true
+func isNewerVersion(latest, current string) bool {
+	parse := func(v string) [3]int {
+		v = strings.TrimPrefix(v, "v")
+		parts := strings.SplitN(v, ".", 3)
+		var nums [3]int
+		for i, p := range parts {
+			if i >= 3 {
+				break
+			}
+			fmt.Sscanf(p, "%d", &nums[i])
+		}
+		return nums
+	}
+	l, c := parse(latest), parse(current)
+	for i := 0; i < 3; i++ {
+		if l[i] > c[i] {
+			return true
+		}
+		if l[i] < c[i] {
+			return false
+		}
+	}
+	return false
 }
 
 // handleCheckDuplicates 检查重复书签
