@@ -51,7 +51,7 @@
         // 默认首页支持 6 个展示模板和整页目标（侧边 / 门户 / 旧版首页）
         // view 为历史遗留值，经 view.html 按用户偏好跳转
         const TEMPLATE_PAGES = { 'view-sidebar': '/view-sidebar.html', 'view-portal': '/view-portal.html', view: '/view.html', pc: '/pc.html' };
-        const VALID_TEMPLATES = ['magazine', 'masonry', 'timeline', 'minimal', 'grid', 'table'];
+        const VALID_TEMPLATES = ['magazine', 'masonry', 'timeline', 'minimal', 'grid', 'table', 'nav'];
 
         function resolveDefaultUrl(name) {
             if (!name) return null;
@@ -99,6 +99,11 @@
 
             if (!token) {
                 sysConfig = await loadSystemConfig();
+                // 无任何用户时，引导首次注册（优先于登录检查）
+                if (sysConfig.no_users === 'true') {
+                    window.location.href = 'register.html?first=1';
+                    return;
+                }
                 if (sysConfig.require_login !== 'false') {
                     window.location.href = 'login.html';
                     return;
