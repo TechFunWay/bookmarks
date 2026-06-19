@@ -341,6 +341,10 @@
     async function init() {
       const urlParams = new URLSearchParams(window.location.search);
       const tParam = urlParams.get('t');
+
+      // selector=1：始终展示模板选择器，不做任何跳转
+      const selectorMode = urlParams.get('selector') === '1';
+      if (selectorMode) { document.getElementById('app').classList.add('ready'); return; }
       const validTemplates = ['magazine', 'masonry', 'timeline', 'minimal', 'grid', 'table', 'nav'];
       // 默认值还支持整页跳转目标：侧边 / 门户 / 旧版首页
       // view 为历史遗留值，经 view.html 按用户偏好跳转
