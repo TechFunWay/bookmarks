@@ -4,6 +4,18 @@
 
 ![Bookmark Manager](bookmarks.png)
 
+---
+
+# 🚀 **最新动态与更新日志**
+
+> **👉 完整更新日志、各平台下载链接和 Docker 部署配置请查看：[CHANGELOG.md](CHANGELOG.md)**
+>
+> **📥 下载地址**：[Gitee Releases](https://gitee.com/TechFunWay/bookmarks/releases) | [GitHub Releases](https://github.com/TechFunWay/bookmarks/releases)
+
+**最新版本：v3.0.0** - 全新版本，包含最新功能和优化 | [查看详情](CHANGELOG.md#v300) | [立即下载 (Gitee)](https://gitee.com/TechFunWay/bookmarks/releases/tag/v3.0.0) | [立即下载 (GitHub)](https://github.com/TechFunWay/bookmarks/releases/tag/v3.0.0)
+
+---
+
 ## 功能特性
 
 - 📁 **文件夹管理** - 创建、编辑、删除文件夹，支持嵌套结构

@@ -34,6 +34,7 @@ release
 /data
 /bookmarks
 bookmarks
+bookmark
 techfunway.bookmarks/app/server/bookmarks
 techfunway.bookmarks/app/server/reset-password
 techfunway.bookmarks/app/server/edge-extension.zip
