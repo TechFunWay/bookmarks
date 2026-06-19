@@ -2625,6 +2625,11 @@ func (s *server) handleGetSystemConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var userCount int
+	if err := s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users").Scan(&userCount); err == nil && userCount == 0 {
+		config["no_users"] = "true"
+	}
+
 	respondJSON(w, http.StatusOK, config)
 }
 

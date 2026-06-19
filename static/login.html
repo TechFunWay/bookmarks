@@ -228,11 +228,16 @@
             // 初始化时加载保存的信息
             loadSavedCredentials();
 
-            // 检查是否允许注册
+            // 检查系统配置
             try {
                 const response = await fetch('/api/config/system');
                 if (response.ok) {
                     const configData = await response.json();
+                    // 无任何用户时，引导首次注册
+                    if (configData.no_users === 'true') {
+                        window.location.href = 'register.html?first=1';
+                        return;
+                    }
                     if (configData.allow_register === 'false') {
                         registerLink.style.display = 'none';
                     }
