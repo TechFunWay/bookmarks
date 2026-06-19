@@ -124,6 +124,35 @@
         .error-message.show {
             display: block;
         }
+        .first-admin-banner {
+            display: none;
+            align-items: flex-start;
+            gap: 10px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #faf0ff 100%);
+            border: 1px solid #c7d4ff;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: #444;
+            line-height: 1.6;
+        }
+        .first-admin-banner.show {
+            display: flex;
+        }
+        .first-admin-banner-icon {
+            font-size: 22px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+        .first-admin-banner strong {
+            display: block;
+            font-size: 14px;
+            font-weight: 700;
+            color: #4a5bcd;
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 <body>
@@ -132,6 +161,13 @@
             <div class="register-header">
                 <h1>网址收藏夹</h1>
                 <p>创建一个新账户开始使用</p>
+            </div>
+            <div id="first-admin-banner" class="first-admin-banner">
+                <span class="first-admin-banner-icon">🛡️</span>
+                <div>
+                    <strong>首次注册将成为管理员</strong>
+                    系统中尚无任何用户，您注册的账户将自动获得管理员权限，可管理所有书签和系统设置。
+                </div>
             </div>
             <div id="error-message" class="error-message"></div>
             <form id="register-form">
@@ -171,16 +207,22 @@
             const errorMessage = document.getElementById('error-message');
             const registerBox = document.querySelector('.register-box');
             const registerHeader = document.querySelector('.register-header');
+            const firstAdminBanner = document.getElementById('first-admin-banner');
 
-            // 检查是否允许注册
+            // 检查系统配置
             try {
                 const response = await fetch('/api/config/system');
                 if (response.ok) {
                     const configData = await response.json();
-                    if (configData.allow_register === 'false') {
+                    if (configData.allow_register === 'false' && configData.no_users !== 'true') {
                         registerHeader.innerHTML = '<h1>注册已关闭</h1><p>系统已关闭注册功能，请联系管理员</p>';
                         registerForm.style.display = 'none';
                         return;
+                    }
+                    // 无用户时（或携带 ?first=1 参数时）显示管理员提示
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (configData.no_users === 'true' || urlParams.get('first') === '1') {
+                        firstAdminBanner.classList.add('show');
                     }
                 }
             } catch (error) {
