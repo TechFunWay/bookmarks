@@ -294,8 +294,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	// WAL 模式支持多读并发；写操作由 SQLite 内部串行化，busy_timeout 保证写竞争时等待而非报错
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
 
 	// 初始化数据库
 	if err := initializeDB(db); err != nil {
