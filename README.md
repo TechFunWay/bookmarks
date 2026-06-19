@@ -12,7 +12,7 @@
 >
 > **📥 下载地址**：[Gitee Releases](https://gitee.com/TechFunWay/bookmarks/releases) | [GitHub Releases](https://github.com/TechFunWay/bookmarks/releases)
 
-**最新版本：v3.0.0** - 全新版本，包含最新功能和优化 | [查看详情](CHANGELOG.md#v300) | [立即下载 (Gitee)](https://gitee.com/TechFunWay/bookmarks/releases/tag/v3.0.0) | [立即下载 (GitHub)](https://github.com/TechFunWay/bookmarks/releases/tag/v3.0.0)
+**最新版本：v3.1.0** - 全新版本，包含最新功能和优化 | [查看详情](CHANGELOG.md#v300) | [立即下载 (Gitee)](https://gitee.com/TechFunWay/bookmarks/releases/tag/v3.1.0) | [立即下载 (GitHub)](https://github.com/TechFunWay/bookmarks/releases/tag/v3.1.0)
 
 ---
 
