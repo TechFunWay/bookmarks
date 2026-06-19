@@ -32,17 +32,17 @@
       return this.loadPublicTree();
     },
     getCurrentTemplate(){
-      const m=window.location.pathname.match(/\/template-(magazine|masonry|timeline|minimal|grid|table)\.html/);
+      const m=window.location.pathname.match(/\/template-(magazine|masonry|timeline|minimal|grid|table|nav)\.html/);
       return m?m[1]:null;
     },
     getRememberedTemplate(sys){
       const s=localStorage.getItem('bookmark_template');
-      if(s&&['magazine','masonry','timeline','minimal','grid','table'].includes(s))return s;
+      if(s&&['magazine','masonry','timeline','minimal','grid','table','nav'].includes(s))return s;
       if(sys&&sys.default_template)return sys.default_template;
       return 'magazine';
     },
     setUserTemplate(n){
-      if(['magazine','masonry','timeline','minimal','grid','table'].includes(n)){
+      if(['magazine','masonry','timeline','minimal','grid','table','nav'].includes(n)){
         localStorage.setItem('bookmark_template',n);
         window.location.href=`/template-${n}.html`;
       }else if(n==='view-sidebar'||n==='view-portal'){
@@ -140,6 +140,7 @@ html[data-theme="light"] .t-sw{--bg:#fff;--tc:#111;--bc:#e5e5e5;--hc:#f5f5f5;--a
         {id:'minimal',n:'极简',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="6" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="16" width="18" height="2" rx="1"/></svg>'},
         {id:'grid',n:'卡片网格',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>'},
         {id:'table',n:'表格',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="16" height="3" rx="1"/><rect x="4" y="10" width="16" height="3" rx="1"/><rect x="4" y="15" width="16" height="3" rx="1"/><line x1="10" y1="5" x2="10" y2="18" stroke="currentColor" stroke-width="0.5"/><line x1="16" y1="5" x2="16" y2="18" stroke="currentColor" stroke-width="0.5"/></svg>'},
+        {id:'nav',n:'导航',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="11" y="3" width="10" height="5" rx="1"/><rect x="11" y="10" width="10" height="5" rx="1"/><rect x="11" y="17" width="10" height="4" rx="1"/></svg>'},
         {id:'view-sidebar',n:'侧边',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="6" height="16" rx="1"/><rect x="11" y="4" width="10" height="4" rx="1"/><rect x="11" y="10" width="10" height="4" rx="1"/><rect x="11" y="16" width="10" height="4" rx="1"/></svg>'},
         {id:'view-portal',n:'门户',i:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="6" rx="1"/><rect x="3" y="11" width="4" height="4" rx="1"/><rect x="9" y="11" width="4" height="4" rx="1"/><rect x="15" y="11" width="4" height="4" rx="1"/><rect x="3" y="17" width="4" height="4" rx="1"/><rect x="9" y="17" width="4" height="4" rx="1"/><rect x="15" y="17" width="4" height="4" rx="1"/></svg>'}
       ];
