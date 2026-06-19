@@ -2153,6 +2153,18 @@ const app = createApp({
       this.confirmDialog = { visible: true, title, message, icon, type, loading: false, onConfirm };
     },
     closeConfirm() { this.confirmDialog.visible = false; },
+    checkSecurityQuestionsReminder() {
+      this.confirmDialog.visible = true;
+      this.confirmDialog.title = '设置安全问题';
+      this.confirmDialog.message = '为了账号安全，建议您设置安全问题。设置后，如果忘记密码可以通过安全问题重置密码。是否现在设置？';
+      this.confirmDialog.icon = '🛡️';
+      this.confirmDialog.type = 'info';
+      this.confirmDialog.loading = false;
+      this.confirmDialog.onConfirm = () => {
+        this.openSecurityQuestionsModal();
+        this.confirmDialog.visible = false;
+      };
+    },
     async doConfirm() {
       if (!this.confirmDialog.onConfirm) { this.confirmDialog.visible = false; return; }
       this.confirmDialog.loading = true;
