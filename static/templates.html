@@ -398,9 +398,6 @@
       }
       if (adminDefault) localStorage.setItem('bookmark_admin_default', adminDefault);
 
-      // e) 用户本地选择优先（含切换器记住的侧边/门户）
-      const localTemplate = localStorage.getItem('bookmark_template');
-      if (localTemplate && redirectTo(resolveUrl(localTemplate))) return;
 
       // f) 管理员默认值兜底
       if (redirectTo(resolveUrl(adminDefault))) return;
