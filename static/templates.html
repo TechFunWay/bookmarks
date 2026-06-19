@@ -276,6 +276,19 @@
           <p class="card-tagline">结构化表格，快速浏览</p>
         </a>
 
+        <a href="/template-nav.html" class="card" onclick="selectTemplate(event, 'nav')">
+          <div class="preview-container">
+            <svg viewBox="0 0 80 60" fill="currentColor">
+              <rect x="8" y="8" width="16" height="44" rx="2" opacity="0.8"/>
+              <rect x="28" y="8" width="44" height="11" rx="2" opacity="0.7"/>
+              <rect x="28" y="22" width="44" height="11" rx="2" opacity="0.55"/>
+              <rect x="28" y="36" width="44" height="11" rx="2" opacity="0.4"/>
+            </svg>
+          </div>
+          <h2 class="card-title">导航</h2>
+          <p class="card-tagline">左侧分类导航 + 宽屏图标布局</p>
+        </a>
+
         <a href="/view-sidebar.html" class="card" onclick="selectTemplate(event, 'view-sidebar')">
           <div class="preview-container">
             <svg viewBox="0 0 80 60" fill="currentColor">
@@ -328,7 +341,7 @@
     async function init() {
       const urlParams = new URLSearchParams(window.location.search);
       const tParam = urlParams.get('t');
-      const validTemplates = ['magazine', 'masonry', 'timeline', 'minimal', 'grid', 'table'];
+      const validTemplates = ['magazine', 'masonry', 'timeline', 'minimal', 'grid', 'table', 'nav'];
       // 默认值还支持整页跳转目标：侧边 / 门户 / 旧版首页
       // view 为历史遗留值，经 view.html 按用户偏好跳转
       const pageTargets = { 'view-sidebar': '/view-sidebar.html', 'view-portal': '/view-portal.html', view: '/view.html', pc: '/pc.html' };

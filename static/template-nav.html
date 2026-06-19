@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>书签 · 导航</title>
+  <link rel="stylesheet" href="template-common.css">
+  <style>
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* ── Layout ── */
+    .t-root {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Top Bar ── */
+    .t-topbar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+      height: 60px;
+      background: var(--bg-elev-1);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 200;
+    }
+
+    .t-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      flex-shrink: 0;
+      color: var(--text-primary);
+    }
+
+    .t-logo svg {
+      width: 28px;
+      height: 28px;
+      color: var(--accent);
+    }
+
+    .t-topbar-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .t-search {
+      flex: 1;
+      position: relative;
+      max-width: 560px;
+    }
+
+    .t-search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .t-search-input {
+      width: 100%;
+      height: 38px;
+      padding: 0 40px 0 40px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+
+    .t-search-input::placeholder { color: var(--text-muted); }
+
+    .t-search-input:focus {
+      border-color: var(--accent);
+      background: var(--bg-base);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .t-search-clear {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg-elev-3);
+      border: none;
+      cursor: pointer;
+      border-radius: 50%;
+    }
+
+    .t-search-clear:hover { color: var(--text-primary); }
+
+    .t-topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .t-icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .t-icon-btn:hover {
+      background: var(--bg-elev-3);
+      border-color: var(--border-strong);
+      color: var(--text-primary);
+    }
+
+    .t-icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── Body: sidebar + content ── */
+    .t-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .t-sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg-elev-1);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .t-sidebar::-webkit-scrollbar { width: 4px; }
+    .t-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .t-sidebar::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    .t-sidebar-head {
+      padding: 16px 16px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .t-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 16px;
+      cursor: pointer;
+      border-radius: 8px;
+      margin: 1px 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+      text-decoration: none;
+    }
+
+    .t-nav-item:hover {
+      background: var(--bg-elev-2);
+      color: var(--text-primary);
+    }
+
+    .t-nav-item.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .t-nav-item.active .t-nav-dot {
+      background: var(--accent);
+    }
+
+    .t-nav-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .t-nav-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg-base);
+      padding: 1px 7px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+
+    .t-nav-item.active .t-nav-count {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .t-sidebar-footer {
+      margin-top: auto;
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .t-sidebar-footer a {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.15s;
+    }
+
+    .t-sidebar-footer a:hover { color: var(--accent); }
+
+    .t-version-text {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ── Main content ── */
+    .t-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background: var(--bg-base);
+    }
+
+    .t-content::-webkit-scrollbar { width: 6px; }
+    .t-content::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+    .t-content::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    /* ── Folder section ── */
+    .t-section {
+      padding: 32px 40px 8px;
+    }
+
+    .t-section:first-child { padding-top: 32px; }
+
+    .t-section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .t-section-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-soft);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .t-section-icon svg {
+      width: 16px;
+      height: 16px;
+      color: var(--accent);
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .t-section-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .t-section-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--bg-elev-1);
+      padding: 2px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    /* ── Bookmark grid ── */
+    .t-bm-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    /* ultra-wide: more columns */
+    @media (min-width: 1800px) {
+      .t-bm-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      }
+    }
+
+    @media (min-width: 2400px) {
+      .t-bm-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      }
+    }
+
+    .t-bm-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s, background 0.15s;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .t-bm-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: var(--gradient-card);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .t-bm-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+      box-shadow: 0 6px 24px rgba(99, 102, 241, 0.12);
+    }
+
+    .t-bm-card:hover::before { opacity: 1; }
+
+    .t-bm-favicon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    .t-bm-favicon img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+    }
+
+    .t-bm-favicon svg {
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+    }
+
+    .t-bm-info {
+      flex: 1;
+      min-width: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .t-bm-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+
+    .t-bm-url {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+      font-family: var(--font-mono);
+    }
+
+    .t-bm-card mark {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+
+    /* ── Empty & Loading ── */
+    .t-empty {
+      text-align: center;
+      padding: 80px 40px;
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+
+    .t-empty-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 16px;
+      opacity: 0.3;
+    }
+
+    /* ── Search results mode ── */
+    .t-search-results-header {
+      padding: 24px 40px 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .t-search-results-header strong {
+      color: var(--accent);
+    }
+
+    /* ── Mobile sidebar toggle ── */
+    .t-sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 150;
+    }
+
+    .t-mobile-menu-btn {
+      display: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .t-mobile-menu-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .t-sidebar {
+        position: fixed;
+        top: 60px;
+        left: 0;
+        bottom: 0;
+        z-index: 160;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        width: 260px;
+        box-shadow: var(--shadow-lg);
+      }
+
+      .t-sidebar.open {
+        transform: translateX(0);
+      }
+
+      .t-sidebar-overlay.show {
+        display: block;
+      }
+
+      .t-mobile-menu-btn {
+        display: flex;
+      }
+
+      .t-section {
+        padding: 24px 20px 8px;
+      }
+
+      .t-topbar {
+        padding: 0 16px;
+        gap: 10px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .t-search { max-width: none; }
+      .t-logo-text { display: none; }
+      .t-topbar-divider { display: none; }
+      .t-bm-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+    }
+
+    /* ── Wide sidebar for extra-wide screens ── */
+    @media (min-width: 2000px) {
+      .t-sidebar { width: 260px; }
+    }
+
+    /* Scroll margin for anchored sections */
+    .t-section[id] { scroll-margin-top: 20px; }
+  </style>
+</head>
+<body>
+<div class="t-root">
+
+  <!-- Top Bar -->
+  <header class="t-topbar">
+    <button class="t-mobile-menu-btn" id="mobileMenuBtn" aria-label="切换导航">
+      <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
+    <div class="t-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span class="t-logo-text">导航</span>
+    </div>
+
+    <div class="t-topbar-divider"></div>
+
+    <div class="t-search">
+      <svg class="t-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" class="t-search-input" id="searchInput" placeholder="搜索书签…" autocomplete="off" aria-label="搜索书签">
+      <button class="t-search-clear" id="searchClear" aria-label="清空">✕</button>
+    </div>
+
+    <div class="t-topbar-right">
+      <div id="authContainer"></div>
+      <button class="t-icon-btn" id="themeToggle" aria-label="切换主题">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Body -->
+  <div class="t-body">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div class="t-sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Left sidebar nav -->
+    <nav class="t-sidebar" id="sidebar" aria-label="书签分类">
+      <div class="t-sidebar-head">分类</div>
+      <div id="navList"></div>
+      <div class="t-sidebar-footer">
+        <a href="/">← 返回主应用</a>
+        <span class="t-version-text t-version"></span>
+      </div>
+    </nav>
+
+    <!-- Main content area -->
+    <main class="t-content" id="contentArea">
+      <div id="mainContent">
+        <div class="t-empty">
+          <svg class="t-empty-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="8" y="16" width="48" height="36" rx="4"/>
+            <path d="M8 24h48"/>
+            <circle cx="18" cy="20" r="2"/>
+            <circle cx="26" cy="20" r="2"/>
+          </svg>
+          加载中…
+        </div>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<script src="template-shell.js"></script>
+<script>
+(function () {
+  const TS = window.TemplateShell;
+
+  TS.initTheme();
+
+  document.getElementById('themeToggle').addEventListener('click', () => TS.toggleTheme());
+
+  const searchInput = document.getElementById('searchInput');
+  const searchClear = document.getElementById('searchClear');
+  const navList = document.getElementById('navList');
+  const mainContent = document.getElementById('mainContent');
+  const contentArea = document.getElementById('contentArea');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+
+  const fallbackSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+  const folderSvg = `<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+
+  // Mobile sidebar toggle
+  const openSidebar = () => { sidebar.classList.add('open'); overlay.classList.add('show'); };
+  const closeSidebar = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
+  mobileMenuBtn.addEventListener('click', () => sidebar.classList.contains('open') ? closeSidebar() : openSidebar());
+  overlay.addEventListener('click', closeSidebar);
+
+  // Escape key closes sidebar on mobile
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+
+  let allBookmarks = [];
+  let groups = []; // [{id, name, items}]
+  let activeSection = '';
+
+  function slugify(str) {
+    return 'sec-' + str.replace(/[^a-zA-Z0-9一-龥]/g, '-');
+  }
+
+  function faviconHtml(bm) {
+    if (bm.favicon_url) {
+      return `<img src="${TS.escapeHtml(bm.favicon_url)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">${fallbackSvg}</span>`;
+    }
+    return fallbackSvg;
+  }
+
+  function renderCard(bm, q) {
+    const title = q ? TS.highlightText(bm.title, q) : TS.escapeHtml(bm.title);
+    const urlText = TS.escapeHtml(tryHostname(bm.url));
+    return `<a href="${TS.escapeHtml(bm.url)}" target="_blank" rel="noopener noreferrer" class="t-bm-card" title="${TS.escapeHtml(bm.title)}">
+      <div class="t-bm-favicon">${faviconHtml(bm)}</div>
+      <div class="t-bm-info">
+        <div class="t-bm-title">${title}</div>
+        <div class="t-bm-url">${urlText}</div>
+      </div>
+    </a>`;
+  }
+
+  function tryHostname(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+  }
+
+  function buildGroups(tree) {
+    const raw = TS.groupByFolder(tree);
+    return Object.entries(raw)
+      .filter(([, items]) => items.length > 0)
+      .map(([name, items]) => ({ id: slugify(name), name, items }));
+  }
+
+  function renderAll(q) {
+    let html = '';
+    if (q) {
+      const filtered = TS.searchBookmarks(allBookmarks, q);
+      if (!filtered.length) {
+        html = `<div class="t-empty"><svg class="t-empty-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="28" cy="28" r="18"/><line x1="40" y1="40" x2="56" y2="56"/></svg>未找到匹配的书签</div>`;
+      } else {
+        html += `<div class="t-search-results-header">共找到 <strong>${filtered.length}</strong> 条结果</div>`;
+        html += `<div class="t-section"><div class="t-bm-grid">`;
+        for (const bm of filtered) html += renderCard(bm, q);
+        html += `</div></div>`;
+      }
+      updateNav(null);
+    } else {
+      for (const g of groups) {
+        html += `<div class="t-section" id="${g.id}">
+          <div class="t-section-header">
+            <div class="t-section-icon">${folderSvg}</div>
+            <span class="t-section-title">${TS.escapeHtml(g.name)}</span>
+            <span class="t-section-count">${g.items.length}</span>
+          </div>
+          <div class="t-bm-grid">`;
+        for (const bm of g.items) html += renderCard(bm, '');
+        html += `</div></div>`;
+      }
+      updateNav(groups[0] ? groups[0].id : null);
+    }
+    mainContent.innerHTML = html;
+    searchClear.style.display = q ? 'flex' : 'none';
+  }
+
+  function renderNav() {
+    let html = '';
+    for (const g of groups) {
+      html += `<a class="t-nav-item" href="#${g.id}" data-section="${g.id}" title="${TS.escapeHtml(g.name)}">
+        <span class="t-nav-label">${TS.escapeHtml(g.name)}</span>
+        <span class="t-nav-count">${g.items.length}</span>
+      </a>`;
+    }
+    navList.innerHTML = html;
+
+    navList.addEventListener('click', e => {
+      const item = e.target.closest('[data-section]');
+      if (!item) return;
+      e.preventDefault();
+      const id = item.getAttribute('data-section');
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setActiveNav(id);
+      }
+      closeSidebar();
+    });
+  }
+
+  function updateNav(defaultId) {
+    const items = navList.querySelectorAll('.t-nav-item');
+    items.forEach(item => item.classList.remove('active'));
+    if (defaultId) {
+      const el = navList.querySelector(`[data-section="${defaultId}"]`);
+      if (el) el.classList.add('active');
+    }
+  }
+
+  function setActiveNav(id) {
+    activeSection = id;
+    const items = navList.querySelectorAll('.t-nav-item');
+    items.forEach(item => {
+      item.classList.toggle('active', item.getAttribute('data-section') === id);
+    });
+  }
+
+  // Highlight active section as user scrolls
+  function setupScrollSpy() {
+    const observer = new IntersectionObserver(entries => {
+      if (searchInput.value.trim()) return;
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          setActiveNav(entry.target.id);
+          break;
+        }
+      }
+    }, { root: contentArea, rootMargin: '-10% 0px -80% 0px', threshold: 0 });
+
+    for (const g of groups) {
+      const el = document.getElementById(g.id);
+      if (el) observer.observe(el);
+    }
+  }
+
+  // Search
+  let searchTimer;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => renderAll(searchInput.value.trim()), 150);
+  });
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    renderAll('');
+    searchInput.focus();
+  });
+
+  async function init() {
+    const tree = await TS.loadUserTree();
+    allBookmarks = TS.flattenTree(tree);
+    groups = buildGroups(tree);
+
+    if (!groups.length) {
+      mainContent.innerHTML = `<div class="t-empty"><svg class="t-empty-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="16" width="48" height="36" rx="4"/><path d="M8 24h48"/></svg>暂无书签</div>`;
+      TS.mountSwitcher(document.body, 'nav');
+      return;
+    }
+
+    renderNav();
+    renderAll('');
+    setupScrollSpy();
+
+    TS.mountAuthButton(document.getElementById('authContainer'));
+    TS.mountVersionFooter();
+    TS.mountSwitcher(document.body, 'nav');
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
