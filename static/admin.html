@@ -688,7 +688,7 @@
         <div class="brand-mark">⚡</div>
         <div class="brand-text">
           <div class="brand-name">Bookmarks</div>
-          <div class="brand-sub">控制台 v2.3</div>
+          <div class="brand-sub">控制台 {{ appVersion }}</div>
         </div>
       </div>
       <nav class="nav-list">
@@ -1797,6 +1797,7 @@ const app = createApp({
       resetModal: { visible: false, user: null, newPassword: '', loading: false, error: '', success: false, successPassword: '' },
       deleteModal: { visible: false, user: null, loading: false, error: '' },
       confirmDialog: { visible: false, title: '', message: '', icon: '⚠️', type: 'danger', loading: false, onConfirm: null },
+      appVersion: '',
       updateBanner: { visible: false, version: '', current: '', downloadUrl: '' },
       toasts: [],
       changePasswordModal: { visible: false, oldPassword: '', newPassword: '', confirmPassword: '', loading: false, error: '' },
@@ -2408,6 +2409,7 @@ const app = createApp({
     document.documentElement.dataset.theme = this.theme;
     const authed = await this.checkAuth();
     if (!authed) return;
+    fetch('/api/version').then(r => r.json()).then(d => { this.appVersion = d.version || ''; }).catch(() => {});
     this.checkForUpdate();
     document.addEventListener('click', (e) => {
       if (this.userMenuOpen && !e.target.closest('.user-chip') && !e.target.closest('.user-menu')) {
