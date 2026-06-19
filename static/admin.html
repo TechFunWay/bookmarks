@@ -226,6 +226,19 @@
     .topbar-actions { display: flex; align-items: center; gap: 6px; }
     .content { padding: 28px 32px 80px; max-width: 1400px; margin: 0 auto; }
 
+    /* 新版本提示条 */
+    .update-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 32px;
+      background: linear-gradient(90deg, rgba(99,102,241,0.15) 0%, rgba(6,182,212,0.10) 100%);
+      border-bottom: 1px solid rgba(99,102,241,0.3);
+      font-size: 13px; color: var(--text-primary);
+    }
+    .update-banner a { color: var(--accent); text-decoration: none; font-weight: 600; margin-left: 8px; }
+    .update-banner a:hover { text-decoration: underline; }
+    .update-banner-close { cursor: pointer; color: var(--text-muted); font-size: 18px; line-height: 1; padding: 0 4px; }
+    .update-banner-close:hover { color: var(--text-primary); }
+
     /* Mobile sidebar */
     .mobile-toggle { display: none; }
     .sidebar-backdrop { display: none; }
@@ -764,6 +777,15 @@
           </button>
         </div>
       </header>
+
+      <!-- 新版本提示条 -->
+      <div class="update-banner" v-if="updateBanner.visible">
+        <span>🎉 发现新版本 <strong>{{ updateBanner.version }}</strong>，当前版本 {{ updateBanner.current }}，建议升级以获得最新功能和修复。
+          <a :href="updateBanner.downloadUrl" target="_blank">前往下载</a>
+        </span>
+        <span class="update-banner-close" @click="updateBanner.visible = false" title="关闭">×</span>
+      </div>
+
       <div class="content">
         <!-- 普通用户仪表盘 -->
         <transition name="fade">
@@ -1775,6 +1797,7 @@ const app = createApp({
       resetModal: { visible: false, user: null, newPassword: '', loading: false, error: '', success: false, successPassword: '' },
       deleteModal: { visible: false, user: null, loading: false, error: '' },
       confirmDialog: { visible: false, title: '', message: '', icon: '⚠️', type: 'danger', loading: false, onConfirm: null },
+      updateBanner: { visible: false, version: '', current: '', downloadUrl: '' },
       toasts: [],
       changePasswordModal: { visible: false, oldPassword: '', newPassword: '', confirmPassword: '', loading: false, error: '' },
       securityQuestionsModal: { visible: false, question1: '', answer1: '', question2: '', answer2: '', question3: '', answer3: '', loading: false, error: '', hasQuestions: false, savedQuestions: {} },
@@ -2153,6 +2176,19 @@ const app = createApp({
       this.confirmDialog = { visible: true, title, message, icon, type, loading: false, onConfirm };
     },
     closeConfirm() { this.confirmDialog.visible = false; },
+    async checkForUpdate() {
+      try {
+        const res = await fetch('/api/version/check', { headers: this.getHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.has_update) {
+          this.updateBanner.version = data.latest;
+          this.updateBanner.current = data.current;
+          this.updateBanner.downloadUrl = data.download_url;
+          this.updateBanner.visible = true;
+        }
+      } catch {}
+    },
     checkSecurityQuestionsReminder() {
       this.confirmDialog.visible = true;
       this.confirmDialog.title = '设置安全问题';
@@ -2372,6 +2408,7 @@ const app = createApp({
     document.documentElement.dataset.theme = this.theme;
     const authed = await this.checkAuth();
     if (!authed) return;
+    this.checkForUpdate();
     document.addEventListener('click', (e) => {
       if (this.userMenuOpen && !e.target.closest('.user-chip') && !e.target.closest('.user-menu')) {
         this.userMenuOpen = false;
