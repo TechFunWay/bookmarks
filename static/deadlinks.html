@@ -369,6 +369,20 @@ createApp({
   gap: 1.5rem;
 }
 
+/* 全局 style.css 把 html/body 设为 overflow:hidden，导致超出一屏的内容无法滚动；
+   本页内容是纵向长列表，改为整页滚动。只让 html 作为滚动容器、body 保持
+   overflow:visible，sticky 头部才能正确固定在顶部（若 body 也设为 auto，body
+   会变成滚动容器导致头部跟着内容一起滚走）。 */
+html {
+  overflow-y: auto !important;
+  height: auto !important;
+}
+body {
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 100vh;
+}
+
 .app-main {
   width: 100%;
   max-width: 100%;
@@ -376,6 +390,7 @@ createApp({
   grid-template-columns: 1fr !important;
   gap: 0 !important;
   height: auto !important;
+  overflow: visible !important;
 }
 
 /* 说明文案 */
