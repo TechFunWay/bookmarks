@@ -1265,6 +1265,11 @@
                   <span class="settings-item-label">去重复</span>
                   <span class="settings-item-value">›</span>
                 </div>
+                <div class="settings-item" @click="openDeadLinkCheck">
+                  <span class="settings-item-icon">🧹</span>
+                  <span class="settings-item-label">清理失效</span>
+                  <span class="settings-item-value">›</span>
+                </div>
                 <div class="settings-item" @click="showAccountSheet=false; apiKeyModal.visible=true; apiKeyModal.key=''">
                   <span class="settings-item-icon">🔌</span>
                   <span class="settings-item-label">API Key</span>
@@ -1296,6 +1301,11 @@
               <div class="settings-item" @click="openDuplicateCheck">
                 <span class="settings-item-icon">🔍</span>
                 <span class="settings-item-label">去重复</span>
+                <span class="settings-item-value">›</span>
+              </div>
+              <div class="settings-item" @click="openDeadLinkCheck">
+                <span class="settings-item-icon">🧹</span>
+                <span class="settings-item-label">清理失效</span>
                 <span class="settings-item-value">›</span>
               </div>
               <div class="settings-item" @click="openFolderView">
@@ -1940,6 +1950,10 @@ document.addEventListener('DOMContentLoaded', () => {
       openDuplicateCheck() {
         this.showAccountSheet = false;
         window.location.href = '/mobile_duplicate.html';
+      },
+      openDeadLinkCheck() {
+        this.showAccountSheet = false;
+        window.location.href = '/mobile_deadlinks.html';
       },
       openUserManagement() {
         this.showAccountSheet = false;
