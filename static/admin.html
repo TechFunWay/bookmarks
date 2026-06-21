@@ -736,6 +736,7 @@
             <div class="menu-section">
               <div class="menu-label">工具</div>
               <button class="menu-item" @click="openDuplicateCheck(); userMenuOpen = false"><span class="mi-icon">🔍</span><span class="mi-label">去重复</span></button>
+              <button class="menu-item" @click="openDeadLinkCheck(); userMenuOpen = false"><span class="mi-icon">🧹</span><span class="mi-label">清理失效</span></button>
               <button class="menu-item" @click="showImportDialog(); userMenuOpen = false"><span class="mi-icon">📥</span><span class="mi-label">导入 JSON</span></button>
               <button class="menu-item" @click="showEdgeImportDialog(); userMenuOpen = false"><span class="mi-icon">🌐</span><span class="mi-label">导入 Edge</span></button>
               <button class="menu-item" @click="showUpdateMetadataDialog(); userMenuOpen = false"><span class="mi-icon">🔄</span><span class="mi-label">更新书签信息</span></button>
@@ -2229,6 +2230,7 @@ const app = createApp({
 
     handleLogout() { localStorage.removeItem('token'); window.location.href = '/login.html'; },
     openDuplicateCheck() { window.location.href = '/duplicate.html'; },
+    openDeadLinkCheck() { window.location.href = '/deadlinks.html'; },
     async loadTree() { try { const res = await fetch('/api/tree', { headers: this.getHeaders() }); if (res.ok) this.tree = await res.json(); } catch {} },
     getFolderPath(id) { const find = (nodes, path = []) => { for (const node of nodes) { if (node.id === id) return [...path, node.title].join(' / '); if (node.children) { const f = find(node.children, [...path, node.title]); if (f) return f; } } return null; }; return find(this.tree) || ''; },
     findNodeById(id, nodes) { for (const node of nodes) { if (node.id === id) return node; if (node.children) { const f = this.findNodeById(id, node.children); if (f) return f; } } return null; },
