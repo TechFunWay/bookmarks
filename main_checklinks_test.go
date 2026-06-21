@@ -52,7 +52,7 @@ func TestCheckURL(t *testing.T) {
 	}))
 	defer notFoundSrv.Close()
 
-	// 只支持 GET、对 HEAD 返回 405 —— 验证 HEAD 失败回退 GET。
+	// 对 HEAD 返回 405、对 GET 返回 200 —— 检测应只用 GET，故判为 ok。
 	headBlockedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
 			w.WriteHeader(405)
@@ -62,8 +62,8 @@ func TestCheckURL(t *testing.T) {
 	}))
 	defer headBlockedSrv.Close()
 
-	// 对 HEAD 返回 404、对 GET 返回 200 —— 真实站点(如 example.com)的行为，
-	// 必须以 GET 复核结果为准，不能因 HEAD 的 404 就误判为失效。
+	// 对 HEAD 返回 404、对 GET 返回 200 —— 真实站点(如 example.com)的行为。
+	// 检测只用 GET，绝不能因 HEAD 的 404 就误判为失效。
 	headNotFoundSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
 			w.WriteHeader(404)
@@ -80,10 +80,10 @@ func TestCheckURL(t *testing.T) {
 		t.Fatalf("404 server: got %q want dead", cat)
 	}
 	if code, cat, _ := srv.checkURL(context.Background(), headBlockedSrv.URL); cat != "ok" || code != 200 {
-		t.Fatalf("head-blocked server: got code=%d cat=%q want 200/ok (GET fallback)", code, cat)
+		t.Fatalf("head-blocked server: got code=%d cat=%q want 200/ok (GET only)", code, cat)
 	}
 	if code, cat, _ := srv.checkURL(context.Background(), headNotFoundSrv.URL); cat != "ok" || code != 200 {
-		t.Fatalf("head-404/get-200 server: got code=%d cat=%q want 200/ok (GET fallback)", code, cat)
+		t.Fatalf("head-404/get-200 server: got code=%d cat=%q want 200/ok (GET only)", code, cat)
 	}
 	if _, cat, _ := srv.checkURL(context.Background(), "http://127.0.0.1:1/nope"); cat != "dead" {
 		t.Fatalf("connection refused: got %q want dead", cat)
