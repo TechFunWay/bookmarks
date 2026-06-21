@@ -62,6 +62,17 @@ func TestCheckURL(t *testing.T) {
 	}))
 	defer headBlockedSrv.Close()
 
+	// 对 HEAD 返回 404、对 GET 返回 200 —— 真实站点(如 example.com)的行为，
+	// 必须以 GET 复核结果为准，不能因 HEAD 的 404 就误判为失效。
+	headNotFoundSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(404)
+			return
+		}
+		w.WriteHeader(200)
+	}))
+	defer headNotFoundSrv.Close()
+
 	if _, cat, _ := srv.checkURL(context.Background(), okSrv.URL); cat != "ok" {
 		t.Fatalf("ok server: got %q want ok", cat)
 	}
@@ -70,6 +81,9 @@ func TestCheckURL(t *testing.T) {
 	}
 	if code, cat, _ := srv.checkURL(context.Background(), headBlockedSrv.URL); cat != "ok" || code != 200 {
 		t.Fatalf("head-blocked server: got code=%d cat=%q want 200/ok (GET fallback)", code, cat)
+	}
+	if code, cat, _ := srv.checkURL(context.Background(), headNotFoundSrv.URL); cat != "ok" || code != 200 {
+		t.Fatalf("head-404/get-200 server: got code=%d cat=%q want 200/ok (GET fallback)", code, cat)
 	}
 	if _, cat, _ := srv.checkURL(context.Background(), "http://127.0.0.1:1/nope"); cat != "dead" {
 		t.Fatalf("connection refused: got %q want dead", cat)
