@@ -7,6 +7,7 @@
   <link rel="icon" href="/favicon.ico" />
   <script src="js/md5.js"></script>
   <script src="/vue.global.prod.js"></script>
+  <script src="js/admin-deadlinks-panel.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -702,6 +703,9 @@
         <a class="nav-item" :class="{ active: currentTab === 'bookmarks' }" @click="switchTab('bookmarks')">
           <span class="nav-icon">📚</span><span>书签管理</span>
         </a>
+        <a class="nav-item" :class="{ active: currentTab === 'deadlinks' }" @click="switchTab('deadlinks')">
+          <span class="nav-icon">🧹</span><span>清理失效</span>
+        </a>
         <a v-if="currentUser?.is_admin" class="nav-item" :class="{ active: currentTab === 'userbookmarks' }" @click="switchTab('userbookmarks')">
           <span class="nav-icon">🗂️</span><span>用户书签</span>
         </a>
@@ -1258,6 +1262,11 @@
             </div>
           </div>
         </div>
+        </transition>
+
+        <!-- Deadlinks Tab -->
+        <transition name="fade">
+        <deadlinks-panel v-if="currentTab === 'deadlinks'"></deadlinks-panel>
         </transition>
       </div>
     </div>
@@ -1835,10 +1844,10 @@ const app = createApp({
   },
   computed: {
     pageTitle() {
-      return { dashboard: '仪表盘', users: '用户管理', bookmarks: '我的书签', userbookmarks: '用户书签', logs: '操作日志', settings: this.currentUser?.is_admin ? '系统设置' : '个性化设置', background: '背景外观' }[this.currentTab] || '';
+      return { dashboard: '仪表盘', users: '用户管理', bookmarks: '我的书签', userbookmarks: '用户书签', logs: '操作日志', settings: this.currentUser?.is_admin ? '系统设置' : '个性化设置', background: '背景外观', deadlinks: '清理失效' }[this.currentTab] || '';
     },
     pageSub() {
-      return { dashboard: '系统关键指标 + AI 智能洞察', users: '创建、编辑、启用/禁用用户', bookmarks: '管理你的书签与文件夹', userbookmarks: '选择用户，查看与管理其书签', logs: '审计日志 + 异常检测', settings: this.currentUser?.is_admin ? '全局与显示配置' : '显示配置与个性化', background: '自定义背景与主题' }[this.currentTab] || '';
+      return { dashboard: '系统关键指标 + AI 智能洞察', users: '创建、编辑、启用/禁用用户', bookmarks: '管理你的书签与文件夹', userbookmarks: '选择用户，查看与管理其书签', logs: '审计日志 + 异常检测', settings: this.currentUser?.is_admin ? '全局与显示配置' : '显示配置与个性化', background: '自定义背景与主题', deadlinks: '检测并清理打不开的书签' }[this.currentTab] || '';
     },
     userInitial() { return (this.currentUser?.username || '?').charAt(0).toUpperCase(); },
     allSelected() { return this.pageUsers.length > 0 && this.pageUsers.every(u => this.selectedUsers.includes(u.id) || (u.is_admin && u.id === this.currentUserId)); },
@@ -2430,6 +2439,8 @@ const app = createApp({
     this.loadTree();
   },
 });
+
+app.component('deadlinks-panel', window.DeadlinksPanel);
 
 app.mount('#app');
 </script>
