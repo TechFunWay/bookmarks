@@ -50,7 +50,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v3.1.0"
+	appVersion = "v3.2.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
