@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>清理失效书签 - 网址收藏夹</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/vue.global.prod.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body style="background: url(/img/background.jpg); background-size: cover;">
+<div id="app" v-cloak>
+
+  <header class="app-header">
+    <h1>清理失效书签<span class="subtitle-artistic">每天都很哇塞</span></h1>
+    <div class="header-actions">
+      <button class="primary" @click="startCheck" :disabled="checking">
+        <span v-if="!checking">🔗</span>
+        <span v-else>⏳</span>
+        <span>{{ checking ? '检测中...' : '开始检测' }}</span>
+      </button>
+      <button class="danger" v-if="checking" @click="stopCheck">
+        <span>⏹</span>
+        <span>停止检测</span>
+      </button>
+      <button class="tertiary" @click="goBack">
+        <span>🔙</span>
+        <span>返回</span>
+      </button>
+      <div class="theme-toggle">
+        <span class="theme-toggle-icon moon-icon">🌙</span>
+        <div class="theme-toggle-btn" @click="toggleTheme"></div>
+        <span class="theme-toggle-icon sun-icon">☀️</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="deadlinks-container">
+
+      <!-- 说明文案 -->
+      <div class="desc-banner">
+        检测书签链接是否可访问。<strong>确定失效</strong>=链接打不开（404/无法连接），<strong>疑似失效</strong>=可能是反爬或临时故障(403/5xx)，请自行确认后再删除。
+      </div>
+
+      <!-- 进度条 -->
+      <div class="progress-area" v-if="total > 0 || checking">
+        <div class="progress-text">
+          已检测 {{ done }} / {{ total }}，发现失效 {{ deadList.length + suspList.length }} 个
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" :style="{ width: total > 0 ? (done / total * 100) + '%' : '0%' }"></div>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div class="empty-state" v-if="!checking && total === 0">
+        <div class="empty-icon">🔗</div>
+        <h3>开始检测失效书签</h3>
+        <p>点击上方"开始检测"按钮，系统将逐批检测书签链接的可访问性</p>
+      </div>
+
+      <!-- 全部正常 -->
+      <div class="empty-state" v-if="!checking && total > 0 && deadList.length === 0 && suspList.length === 0">
+        <div class="empty-icon">✅</div>
+        <h3>没有发现失效书签</h3>
+        <p>所有书签链接均可正常访问</p>
+      </div>
+
+      <!-- 批量操作栏 -->
+      <div class="batch-bar" v-if="deadList.length > 0 || suspList.length > 0">
+        <button class="secondary" @click="toggleSelectAll">
+          {{ allSelected ? '取消全选' : '全选' }}
+        </button>
+        <button class="danger" @click="deleteSelected" :disabled="selectedCount === 0">
+          删除选中 ({{ selectedCount }})
+        </button>
+        <button class="danger" @click="deleteAllDead" :disabled="deadList.length === 0">
+          一键删除全部确定失效 ({{ deadList.length }})
+        </button>
+      </div>
+
+      <!-- 确定失效 -->
+      <div v-if="deadList.length > 0" class="result-section">
+        <div class="section-header dead">
+          <span class="section-badge dead-badge">确定失效</span>
+          <span class="section-count">{{ deadList.length }} 个</span>
+        </div>
+        <div class="bookmark-list">
+          <div class="bookmark-row" v-for="row in deadList" :key="row.id">
+            <input type="checkbox" v-model="row.checked" class="row-checkbox" />
+            <img v-if="row.favicon_url" :src="row.favicon_url" class="row-favicon" @error="$event.target.style.display='none'" />
+            <span v-else class="row-favicon-placeholder">🔗</span>
+            <div class="row-info">
+              <div class="row-title">
+                <a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+              </div>
+              <div class="row-url">
+                <a :href="row.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ row.url }}</a>
+              </div>
+              <div class="row-meta">
+                <span class="meta-item">📁 {{ row.path || '/' }}</span>
+                <span class="meta-item reason dead-reason">{{ row.reason }}</span>
+              </div>
+            </div>
+            <button class="danger small" @click="deleteOne(row, 'deadList')">🗑️ 删除</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 疑似失效 -->
+      <div v-if="suspList.length > 0" class="result-section">
+        <div class="section-header susp">
+          <span class="section-badge susp-badge">疑似失效</span>
+          <span class="section-count">{{ suspList.length }} 个</span>
+        </div>
+        <div class="bookmark-list">
+          <div class="bookmark-row" v-for="row in suspList" :key="row.id">
+            <input type="checkbox" v-model="row.checked" class="row-checkbox" />
+            <img v-if="row.favicon_url" :src="row.favicon_url" class="row-favicon" @error="$event.target.style.display='none'" />
+            <span v-else class="row-favicon-placeholder">🔗</span>
+            <div class="row-info">
+              <div class="row-title">
+                <a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+              </div>
+              <div class="row-url">
+                <a :href="row.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ row.url }}</a>
+              </div>
+              <div class="row-meta">
+                <span class="meta-item">📁 {{ row.path || '/' }}</span>
+                <span class="meta-item reason susp-reason">{{ row.reason }}</span>
+              </div>
+            </div>
+            <button class="danger small" @click="deleteOne(row, 'suspList')">🗑️ 删除</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Toast 提示 -->
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type === 'error'" class="toast-overlay" @click="dismissToast"></div>
+  </transition>
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type !== 'error'" :class="['toast', toast.type]" @click="dismissToast">
+      {{ toast.message }}
+    </div>
+  </transition>
+  <transition name="toast-fade">
+    <div v-if="toast.visible && toast.type === 'error'" :class="['toast', 'error']" @click="dismissToast">
+      <div class="toast-error-header">
+        <span class="toast-error-icon">⚠️</span>
+        <span class="toast-error-msg">{{ toast.message }}</span>
+      </div>
+      <button class="toast-error-close" @click.stop="dismissToast">知道了</button>
+    </div>
+  </transition>
+
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      token: localStorage.getItem('token') || null,
+      checking: false,
+      stopped: false,
+      total: 0,
+      done: 0,
+      deadList: [],
+      suspList: [],
+      toast: { visible: false, message: '', type: 'success', timer: null },
+    };
+  },
+  computed: {
+    selectedCount() {
+      return [...this.deadList, ...this.suspList].filter(x => x.checked).length;
+    },
+    allSelected() {
+      const all = [...this.deadList, ...this.suspList];
+      return all.length > 0 && all.every(x => x.checked);
+    },
+  },
+  methods: {
+    async checkAuth() {
+      const token = localStorage.getItem('token');
+      if (token) { this.token = token; return true; }
+      try {
+        const r = await fetch('/api/config/system');
+        if (r.ok) {
+          const d = await r.json();
+          if (d.require_login === 'false') return true;
+        }
+      } catch (e) { console.error('checkAuth error:', e); }
+      window.location.href = '/login.html';
+      return false;
+    },
+
+    goBack() { window.location.href = '/'; },
+
+    toggleTheme() {
+      const html = document.documentElement;
+      const newTheme = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    },
+
+    authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      const t = localStorage.getItem('token');
+      if (t) h['Authorization'] = t;
+      return h;
+    },
+
+    async loadBookmarks() {
+      const r = await fetch('/api/tree', { headers: this.authHeaders() });
+      const data = await r.json();
+      const out = [];
+      const walk = (nodes, path) => {
+        for (const n of nodes || []) {
+          if (n.type === 'folder') {
+            walk(n.children, path + '/' + n.title);
+          } else if (n.url) {
+            out.push({ id: n.id, title: n.title, url: n.url, favicon_url: n.favicon_url, path: path || '/' });
+          }
+        }
+      };
+      walk(Array.isArray(data) ? data : (data.children || []), '');
+      return out;
+    },
+
+    async startCheck() {
+      this.checking = true;
+      this.stopped = false;
+      this.deadList = [];
+      this.suspList = [];
+      this.total = 0;
+      this.done = 0;
+      let all;
+      try {
+        all = await this.loadBookmarks();
+      } catch (e) {
+        console.error('加载书签失败', e);
+        this.showToast('加载书签失败，请重试', 'error');
+        this.checking = false;
+        return;
+      }
+      this.total = all.length;
+      const byId = Object.fromEntries(all.map(b => [b.id, b]));
+      const BATCH = 20;
+      for (let i = 0; i < all.length; i += BATCH) {
+        if (this.stopped) break;
+        const batch = all.slice(i, i + BATCH).map(b => ({ id: b.id, url: b.url }));
+        try {
+          const r = await fetch('/api/check-links', {
+            method: 'POST', headers: this.authHeaders(),
+            body: JSON.stringify({ bookmarks: batch }),
+          });
+          const resp = await r.json();
+          for (const res of (resp.data?.results || [])) {
+            const b = byId[res.id];
+            if (!b) continue;
+            const row = { ...b, code: res.code, reason: res.reason, checked: res.category === 'dead' };
+            if (res.category === 'dead') this.deadList.push(row);
+            else if (res.category === 'suspicious') this.suspList.push(row);
+          }
+        } catch (e) {
+          console.error('batch failed', e);
+        }
+        this.done = Math.min(i + BATCH, all.length);
+      }
+      this.checking = false;
+      if (!this.stopped) {
+        this.done = this.total;
+        const found = this.deadList.length + this.suspList.length;
+        if (found > 0) {
+          this.showToast(`检测完成，发现 ${found} 个失效书签`, 'warning');
+        } else {
+          this.showToast('检测完成，所有书签均正常', 'success');
+        }
+      }
+    },
+
+    stopCheck() { this.stopped = true; },
+
+    async deleteOne(row, listName) {
+      if (!confirm('确定删除该书签？\n' + row.title)) return;
+      const r = await fetch('/api/nodes/' + row.id, { method: 'DELETE', headers: this.authHeaders() });
+      if (r.ok) {
+        const arr = this[listName];
+        const idx = arr.findIndex(x => x.id === row.id);
+        if (idx >= 0) arr.splice(idx, 1);
+        this.showToast('删除成功', 'success');
+      } else {
+        this.showToast('删除失败', 'error');
+      }
+    },
+
+    async deleteSelected() {
+      const ids = [...this.deadList, ...this.suspList].filter(x => x.checked).map(x => x.id);
+      if (ids.length === 0) { alert('未选中任何书签'); return; }
+      if (!confirm('确定删除选中的 ' + ids.length + ' 个书签？')) return;
+      await this.batchDelete(ids);
+    },
+
+    async deleteAllDead() {
+      const ids = this.deadList.map(x => x.id);
+      if (ids.length === 0) { alert('没有确定失效的书签'); return; }
+      if (!confirm('确定删除全部 ' + ids.length + ' 个确定失效的书签？')) return;
+      await this.batchDelete(ids);
+    },
+
+    async batchDelete(ids) {
+      const r = await fetch('/api/nodes/batch-delete', {
+        method: 'POST', headers: this.authHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      if (r.ok) {
+        const set = new Set(ids);
+        this.deadList = this.deadList.filter(x => !set.has(x.id));
+        this.suspList = this.suspList.filter(x => !set.has(x.id));
+        this.showToast('批量删除成功', 'success');
+      } else {
+        this.showToast('批量删除失败', 'error');
+      }
+    },
+
+    toggleSelectAll() {
+      const target = !this.allSelected;
+      this.deadList.forEach(x => x.checked = target);
+      this.suspList.forEach(x => x.checked = target);
+    },
+
+    showToast(message, type = 'success') {
+      if (this.toast.timer) { clearTimeout(this.toast.timer); this.toast.timer = null; }
+      this.toast.visible = true;
+      this.toast.message = message;
+      this.toast.type = type;
+      if (type === 'error') return;
+      const duration = type === 'warning' ? 3500 : 2200;
+      this.toast.timer = setTimeout(() => { this.toast.visible = false; this.toast.timer = null; }, duration);
+    },
+
+    dismissToast() {
+      if (this.toast.timer) { clearTimeout(this.toast.timer); this.toast.timer = null; }
+      this.toast.visible = false;
+    },
+  },
+  async mounted() {
+    await this.checkAuth();
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+  },
+}).mount('#app');
+</script>
+
+<style>
+.deadlinks-container {
+  width: 100%;
+  padding: 2rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.app-main {
+  width: 100%;
+  max-width: 100%;
+  display: block !important;
+  grid-template-columns: 1fr !important;
+  gap: 0 !important;
+  height: auto !important;
+}
+
+/* 说明文案 */
+.desc-banner {
+  background: rgba(255, 255, 255, 0.9);
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  font-size: 0.95rem;
+  color: #555;
+  line-height: 1.6;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] .desc-banner {
+  background: rgba(40, 40, 40, 0.92);
+  color: #ccc;
+  border-color: #d97706;
+}
+
+/* 进度区 */
+.progress-area {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] .progress-area {
+  background: rgba(40, 40, 40, 0.92);
+}
+
+.progress-text {
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 0.5rem;
+}
+
+[data-theme="dark"] .progress-text {
+  color: #aaa;
+}
+
+.progress-bar-wrap {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .progress-bar-wrap {
+  background: #374151;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+[data-theme="dark"] .empty-state h3 {
+  color: #e0e0e0;
+}
+
+.empty-state p {
+  color: #666;
+}
+
+[data-theme="dark"] .empty-state p {
+  color: #aaa;
+}
+
+/* 批量操作栏 */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  padding: 0.875rem 1.25rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] .batch-bar {
+  background: rgba(40, 40, 40, 0.92);
+}
+
+/* 结果分区 */
+.result-section {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+[data-theme="dark"] .result-section {
+  background: rgba(40, 40, 40, 0.95);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+[data-theme="dark"] .section-header {
+  border-bottom-color: #404040;
+}
+
+.section-header.dead {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.section-header.susp {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+[data-theme="dark"] .section-header.dead {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+[data-theme="dark"] .section-header.susp {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.section-badge {
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.2rem 0.7rem;
+  border-radius: 10px;
+  color: #fff;
+}
+
+.dead-badge {
+  background: #ef4444;
+}
+
+.susp-badge {
+  background: #f59e0b;
+}
+
+.section-count {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+[data-theme="dark"] .section-count {
+  color: #aaa;
+}
+
+/* 书签列表 */
+.bookmark-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.bookmark-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.bookmark-row:last-child {
+  border-bottom: none;
+}
+
+[data-theme="dark"] .bookmark-row {
+  border-bottom-color: #404040;
+}
+
+.row-checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.row-favicon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+.row-favicon-placeholder {
+  flex-shrink: 0;
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-title {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  word-break: break-all;
+}
+
+.row-title a {
+  color: #333;
+  text-decoration: none;
+}
+
+.row-title a:hover {
+  text-decoration: underline;
+  color: #2196f3;
+}
+
+[data-theme="dark"] .row-title a {
+  color: #e0e0e0;
+}
+
+.row-url {
+  margin-bottom: 0.25rem;
+}
+
+.url-link {
+  font-size: 0.8rem;
+  color: #2196f3;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.url-link:hover {
+  text-decoration: underline;
+}
+
+.row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+[data-theme="dark"] .row-meta {
+  color: #888;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.reason {
+  font-weight: 500;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.dead-reason {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.susp-reason {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+[data-theme="dark"] .dead-reason {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+}
+
+[data-theme="dark"] .susp-reason {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+}
+
+/* 滚动条 */
+.bookmark-list::-webkit-scrollbar { width: 8px; }
+.bookmark-list::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+.bookmark-list::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+.bookmark-list::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+[data-theme="dark"] .bookmark-list::-webkit-scrollbar-track { background: #2d2d2d; }
+[data-theme="dark"] .bookmark-list::-webkit-scrollbar-thumb { background: #4a4a4a; }
+[data-theme="dark"] .bookmark-list::-webkit-scrollbar-thumb:hover { background: #5a5a5a; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  z-index: 2000;
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(255,255,255,0.2);
+  min-width: 300px;
+  max-width: 400px;
+  word-wrap: break-word;
+  cursor: pointer;
+}
+
+.toast.success {
+  background: linear-gradient(45deg, #10b981, #34d399);
+  box-shadow: 0 16px 40px rgba(16,185,129,0.4);
+  animation: pulse 2s infinite;
+}
+
+.toast.warning {
+  background: linear-gradient(45deg, #f59e0b, #fbbf24);
+  box-shadow: 0 16px 40px rgba(245,158,11,0.4);
+  animation: pulse 1.5s infinite;
+}
+
+.toast.error {
+  background: linear-gradient(135deg, #c0392b, #e74c3c);
+  box-shadow: 0 24px 60px rgba(192,57,43,0.55);
+  border-color: rgba(255,255,255,0.25);
+  animation: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px 28px 20px;
+  min-width: 320px;
+  max-width: 480px;
+}
+
+.toast-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1999;
+}
+
+.toast .toast-error-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.toast .toast-error-icon {
+  font-size: 22px;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.toast .toast-error-msg {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.toast .toast-error-close {
+  display: block;
+  width: 100%;
+  padding: 9px 0;
+  background: rgba(255,255,255,0.18);
+  border: 1.5px solid rgba(255,255,255,0.35);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s;
+  letter-spacing: 0.5px;
+}
+
+.toast .toast-error-close:hover {
+  background: rgba(255,255,255,0.28);
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active { transition: all 0.3s ease; }
+.toast-fade-enter-from,
+.toast-fade-leave-to { opacity: 0; }
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@media (max-width: 768px) {
+  .deadlinks-container { padding: 1rem; }
+  .batch-bar { flex-direction: column; align-items: flex-start; }
+  .bookmark-row { flex-wrap: wrap; }
+}
+</style>
+</body>
+</html>

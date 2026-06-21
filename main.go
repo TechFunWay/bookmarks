@@ -417,6 +417,7 @@ func main() {
 		r.Get("/config", s.optionalAuthMiddleware(s.handleGetConfig))
 		r.Post("/config", s.optionalAuthMiddleware(s.handleUpdateConfig))
 		r.Get("/check-duplicates", s.optionalAuthMiddleware(s.handleCheckDuplicates))
+		r.Post("/check-links", s.optionalAuthMiddleware(s.handleCheckLinks))
 	})
 
 	// 浏览器书签同步接口（使用 API Key 认证）
@@ -2894,6 +2895,116 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 			"duplicateCount":          len(duplicates),
 			"duplicateBookmarksCount": duplicateBookmarksCount,
 		},
+	})
+}
+
+// classifyLinkResult 根据 HTTP 状态码和传输层错误把链接分类为 ok / dead / suspicious。
+// dead = 确定失效（传输层错误、404、410）；suspicious = 疑似失效（其他 4xx、5xx，可能是反爬或临时故障）。
+func classifyLinkResult(code int, err error) (category string, reason string) {
+	if err != nil {
+		return "dead", err.Error()
+	}
+	switch {
+	case code >= 200 && code < 400:
+		return "ok", ""
+	case code == 404 || code == 410:
+		return "dead", http.StatusText(code)
+	case code >= 400 && code < 500:
+		return "suspicious", http.StatusText(code)
+	case code >= 500:
+		return "suspicious", http.StatusText(code)
+	default:
+		return "suspicious", http.StatusText(code)
+	}
+}
+
+const linkCheckUserAgent = "Mozilla/5.0 (compatible; bookmarks-checker/1.0)"
+
+// checkURL 检测单个 URL 是否可访问：先 HEAD，HEAD 不被支持(405/501)或失败时回退 GET。
+func (s *server) checkURL(ctx context.Context, rawURL string) (code int, category string, reason string) {
+	doReq := func(method string) (int, error) {
+		req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
+		if err != nil {
+			return 0, err
+		}
+		req.Header.Set("User-Agent", linkCheckUserAgent)
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+
+	statusCode, err := doReq(http.MethodHead)
+	if err != nil || statusCode == 405 || statusCode == 501 {
+		// HEAD 失败或不被支持，回退 GET
+		if gc, gerr := doReq(http.MethodGet); gerr == nil {
+			statusCode, err = gc, nil
+		} else if err == nil {
+			// HEAD 成功但状态是 405/501，GET 又失败：以 GET 的错误为准，
+			// 并把状态码清零，避免对外报告误导性的 405/501
+			statusCode, err = 0, gerr
+		}
+	}
+
+	category, reason = classifyLinkResult(statusCode, err)
+	return statusCode, category, reason
+}
+
+type checkLinksRequest struct {
+	Bookmarks []struct {
+		ID  int64  `json:"id"`
+		URL string `json:"url"`
+	} `json:"bookmarks"`
+}
+
+type linkResult struct {
+	ID       int64  `json:"id"`
+	Code     int    `json:"code"`
+	Category string `json:"category"`
+	Reason   string `json:"reason"`
+}
+
+// handleCheckLinks 并发检测一批书签链接是否失效。前端分批调用，实时展示进度。
+func (s *server) handleCheckLinks(w http.ResponseWriter, r *http.Request) {
+	var req checkLinksRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	if len(req.Bookmarks) == 0 {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"data":    map[string]interface{}{"results": []linkResult{}},
+		})
+		return
+	}
+	if len(req.Bookmarks) > 100 {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("单批最多检测 100 个，收到 %d 个", len(req.Bookmarks)))
+		return
+	}
+
+	const concurrency = 10
+	sem := make(chan struct{}, concurrency)
+	results := make([]linkResult, len(req.Bookmarks))
+	var wg sync.WaitGroup
+
+	for i, b := range req.Bookmarks {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, id int64, rawURL string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			code, category, reason := s.checkURL(r.Context(), rawURL)
+			results[idx] = linkResult{ID: id, Code: code, Category: category, Reason: reason}
+		}(i, b.ID, b.URL)
+	}
+	wg.Wait()
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    map[string]interface{}{"results": results},
 	})
 }
 
