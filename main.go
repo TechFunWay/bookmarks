@@ -2942,8 +2942,9 @@ func (s *server) checkURL(ctx context.Context, rawURL string) (code int, categor
 		if gc, gerr := doReq(http.MethodGet); gerr == nil {
 			statusCode, err = gc, nil
 		} else if err == nil {
-			// HEAD 成功但状态是 405/501，GET 又失败：以 GET 的错误为准
-			err = gerr
+			// HEAD 成功但状态是 405/501，GET 又失败：以 GET 的错误为准，
+			// 并把状态码清零，避免对外报告误导性的 405/501
+			statusCode, err = 0, gerr
 		}
 	}
 
