@@ -110,6 +110,7 @@ window.DeadlinksPanel = {
         } catch (e) { console.error('batch failed', e); }
         this.done = Math.min(i + BATCH, all.length);
       }
+      if (!this.stopped) this.done = this.total;
       this.checking = false;
     },
     stopCheck() { this.stopped = true; },
