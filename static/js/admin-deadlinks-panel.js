@@ -38,7 +38,7 @@ window.DeadlinksPanel = {
           </div>
         </div>
         <div v-if="suspList.length" style="margin-top:16px;">
-          <div style="margin:4px 0 10px;"><span class="badge" style="background:var(--amber);color:#1a1a2e;">疑似失效 {{ suspList.length }}</span></div>
+          <div style="margin:4px 0 10px;"><span class="badge" style="background:var(--amber);color:var(--text-primary);">疑似失效 {{ suspList.length }}</span></div>
           <div v-for="row in suspList" :key="row.id" class="dl-row">
             <input type="checkbox" v-model="row.checked">
             <img v-if="row.favicon_url" :src="row.favicon_url" class="dl-fav" @error="row.favicon_url=null">
