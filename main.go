@@ -417,6 +417,7 @@ func main() {
 		r.Get("/config", s.optionalAuthMiddleware(s.handleGetConfig))
 		r.Post("/config", s.optionalAuthMiddleware(s.handleUpdateConfig))
 		r.Get("/check-duplicates", s.optionalAuthMiddleware(s.handleCheckDuplicates))
+		r.Post("/check-links", s.optionalAuthMiddleware(s.handleCheckLinks))
 	})
 
 	// 浏览器书签同步接口（使用 API Key 认证）
@@ -2948,6 +2949,62 @@ func (s *server) checkURL(ctx context.Context, rawURL string) (code int, categor
 
 	category, reason = classifyLinkResult(statusCode, err)
 	return statusCode, category, reason
+}
+
+type checkLinksRequest struct {
+	Bookmarks []struct {
+		ID  int64  `json:"id"`
+		URL string `json:"url"`
+	} `json:"bookmarks"`
+}
+
+type linkResult struct {
+	ID       int64  `json:"id"`
+	Code     int    `json:"code"`
+	Category string `json:"category"`
+	Reason   string `json:"reason"`
+}
+
+// handleCheckLinks 并发检测一批书签链接是否失效。前端分批调用，实时展示进度。
+func (s *server) handleCheckLinks(w http.ResponseWriter, r *http.Request) {
+	var req checkLinksRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	if len(req.Bookmarks) == 0 {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"data":    map[string]interface{}{"results": []linkResult{}},
+		})
+		return
+	}
+	if len(req.Bookmarks) > 100 {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("单批最多检测 100 个，收到 %d 个", len(req.Bookmarks)))
+		return
+	}
+
+	const concurrency = 10
+	sem := make(chan struct{}, concurrency)
+	results := make([]linkResult, len(req.Bookmarks))
+	var wg sync.WaitGroup
+
+	for i, b := range req.Bookmarks {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, id int64, rawURL string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			code, category, reason := s.checkURL(r.Context(), rawURL)
+			results[idx] = linkResult{ID: id, Code: code, Category: category, Reason: reason}
+		}(i, b.ID, b.URL)
+	}
+	wg.Wait()
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    map[string]interface{}{"results": results},
+	})
 }
 
 // buildBookmarkPath 构建书签路径
