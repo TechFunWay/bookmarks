@@ -2920,11 +2920,15 @@ func classifyLinkResult(code int, err error) (category string, reason string) {
 
 const linkCheckUserAgent = "Mozilla/5.0 (compatible; bookmarks-checker/1.0)"
 
-// checkURL 检测单个 URL 是否可访问：先 HEAD 作为健康链接的快速通道，
-// 只要 HEAD 结果不是 ok 就用 GET 复核（与浏览器实际打开网页一致）。
+// checkURL 检测单个 URL 是否可访问。
+//
+// 直接用 GET（与浏览器实际打开网页一致），不使用 HEAD：很多服务器/CDN 对
+// HEAD 处理不可靠——会返回 404/403，或干脆超时不响应（即便 GET 完全正常，
+// 如 example.com、example.com），用 HEAD 反而更慢、更易误判。
+// 传输错误（多为瞬时超时/网络抖动）会重试一次，进一步降低误判。
 func (s *server) checkURL(ctx context.Context, rawURL string) (code int, category string, reason string) {
-	doReq := func(method string) (int, error) {
-		req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
+	doGet := func() (int, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 		if err != nil {
 			return 0, err
 		}
@@ -2933,20 +2937,14 @@ func (s *server) checkURL(ctx context.Context, rawURL string) (code int, categor
 		if err != nil {
 			return 0, err
 		}
-		defer resp.Body.Close()
+		resp.Body.Close()
 		return resp.StatusCode, nil
 	}
 
-	// HEAD 仅作为「健康链接」的快速通道。很多服务器/CDN 对 HEAD 处理不可靠
-	// （会返回 404/403/405 等，但 GET 其实正常，如 example.com），因此只要
-	// HEAD 的结果不是 ok，就用 GET 复核——这能显著减少误判为失效。
-	statusCode, err := doReq(http.MethodHead)
-	if cat, _ := classifyLinkResult(statusCode, err); cat != "ok" {
-		if gc, gerr := doReq(http.MethodGet); gerr != nil {
-			statusCode, err = 0, gerr
-		} else {
-			statusCode, err = gc, nil
-		}
+	statusCode, err := doGet()
+	if err != nil && ctx.Err() == nil {
+		// 瞬时网络错误重试一次（仅当整体上下文尚未取消）
+		statusCode, err = doGet()
 	}
 
 	category, reason = classifyLinkResult(statusCode, err)
