@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func TestClassifyLinkResult(t *testing.T) {
@@ -69,5 +73,51 @@ func TestCheckURL(t *testing.T) {
 	}
 	if _, cat, _ := srv.checkURL(context.Background(), "http://127.0.0.1:1/nope"); cat != "dead" {
 		t.Fatalf("connection refused: got %q want dead", cat)
+	}
+}
+
+func TestHandleCheckLinks(t *testing.T) {
+	srv := &server{httpClient: http.DefaultClient}
+
+	okSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+	defer okSrv.Close()
+	deadSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) }))
+	defer deadSrv.Close()
+	suspSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(403) }))
+	defer suspSrv.Close()
+
+	r := chi.NewRouter()
+	r.Post("/api/check-links", srv.handleCheckLinks)
+
+	body := map[string]any{"bookmarks": []map[string]any{
+		{"id": 1, "url": okSrv.URL},
+		{"id": 2, "url": deadSrv.URL},
+		{"id": 3, "url": suspSrv.URL},
+	}}
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/api/check-links", bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	rec := do(t, r, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Results []struct {
+				ID       int64  `json:"id"`
+				Category string `json:"category"`
+			} `json:"results"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, rec.Body.String())
+	}
+	got := map[int64]string{}
+	for _, x := range resp.Data.Results {
+		got[x.ID] = x.Category
+	}
+	if got[1] != "ok" || got[2] != "dead" || got[3] != "suspicious" {
+		t.Fatalf("categories wrong: %+v", got)
 	}
 }
