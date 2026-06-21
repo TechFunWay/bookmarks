@@ -2897,6 +2897,59 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// classifyLinkResult 根据 HTTP 状态码和传输层错误把链接分类为 ok / dead / suspicious。
+// dead = 确定失效（传输层错误、404、410）；suspicious = 疑似失效（其他 4xx、5xx，可能是反爬或临时故障）。
+func classifyLinkResult(code int, err error) (category string, reason string) {
+	if err != nil {
+		return "dead", err.Error()
+	}
+	switch {
+	case code >= 200 && code < 400:
+		return "ok", ""
+	case code == 404 || code == 410:
+		return "dead", http.StatusText(code)
+	case code >= 400 && code < 500:
+		return "suspicious", http.StatusText(code)
+	case code >= 500:
+		return "suspicious", http.StatusText(code)
+	default:
+		return "suspicious", http.StatusText(code)
+	}
+}
+
+const linkCheckUserAgent = "Mozilla/5.0 (compatible; bookmarks-checker/1.0)"
+
+// checkURL 检测单个 URL 是否可访问：先 HEAD，HEAD 不被支持(405/501)或失败时回退 GET。
+func (s *server) checkURL(ctx context.Context, rawURL string) (code int, category string, reason string) {
+	doReq := func(method string) (int, error) {
+		req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
+		if err != nil {
+			return 0, err
+		}
+		req.Header.Set("User-Agent", linkCheckUserAgent)
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+
+	statusCode, err := doReq(http.MethodHead)
+	if err != nil || statusCode == 405 || statusCode == 501 {
+		// HEAD 失败或不被支持，回退 GET
+		if gc, gerr := doReq(http.MethodGet); gerr == nil {
+			statusCode, err = gc, nil
+		} else if err == nil {
+			// HEAD 成功但状态是 405/501，GET 又失败：以 GET 的错误为准
+			err = gerr
+		}
+	}
+
+	category, reason = classifyLinkResult(statusCode, err)
+	return statusCode, category, reason
+}
+
 // buildBookmarkPath 构建书签路径
 func (s *server) buildBookmarkPath(parentID int64, userID int64) (string, error) {
 	if parentID == 0 {
