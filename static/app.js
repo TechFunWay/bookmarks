@@ -1096,8 +1096,8 @@ goToLogin() {
      It will be read and overwritten.
      DO NOT EDIT! -->
 <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
-<TITLE>Bookmarks</TITLE>
-<H1>Bookmarks</H1>
+<TITLE>网址收藏夹</TITLE>
+<H1>网址收藏夹</H1>
 <DL><p>`;
       
       // 递归生成HTML内容

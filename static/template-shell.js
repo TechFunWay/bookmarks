@@ -307,7 +307,7 @@ html[data-theme="light"] .t-sw{--bg:#fff;--tc:#111;--bc:#e5e5e5;--hc:#f5f5f5;--a
       if(!els.length)return;
       fetch('/api/version').then(r=>r.json()).then(d=>{
         const v=d&&d.version?d.version:'';
-        els.forEach(el=>{el.textContent='Bookmarks '+v;});
+        els.forEach(el=>{el.textContent='网址收藏夹 '+v;});
       }).catch(()=>{});
     }
   };
