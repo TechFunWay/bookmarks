@@ -290,6 +290,21 @@
     /* ============ Transitions ============ */
     .fade-enter-active, .fade-leave-active { transition: opacity .2s; }
     .fade-enter-from, .fade-leave-to { opacity: 0; }
+    .options-bar { background: var(--surface); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
+    .options-label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+    .options-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .opt-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 20px; background: var(--surface2); font-size: 12px; color: var(--text2); cursor: pointer; border: 1px solid var(--border); }
+    .opt-chip.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+    .opt-chip input { margin: 0; width: 14px; height: 14px; accent-color: var(--primary); }
+    .bm-checkbox { width: 18px; height: 18px; margin-right: 8px; accent-color: var(--primary); flex-shrink: 0; }
+    .action-bar { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
+    .bar-btn.small { padding: 6px 14px; font-size: 13px; border-radius: var(--radius-sm); }
+    .dlg-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;}
+    .dlg-box{background:var(--surface);border-radius:var(--radius-lg);padding:20px;margin:0 20px;max-width:360px;width:100%;box-shadow:var(--shadow-lg);}
+    .dlg-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:8px;}
+    .dlg-body{font-size:14px;color:var(--text2);line-height:1.6;white-space:pre-wrap;margin-bottom:16px;}
+    .dlg-btns{display:flex;gap:8px;justify-content:flex-end;}
+
   </style>
 </head>
 <body>
@@ -325,6 +340,18 @@
       </div>
     </div>
 
+    <!-- 重复判定选项 -->
+    <div class="options-bar">
+      <div class="options-label">重复判定规则：</div>
+      <div class="options-list">
+        <label class="opt-chip" :class="{ active: opts.ignoreScheme }"><input type="checkbox" v-model="opts.ignoreScheme" :disabled="checking"> HTTP和HTTPS计重复</label>
+        <label class="opt-chip" :class="{ active: opts.ignoreWWW }"><input type="checkbox" v-model="opts.ignoreWWW" :disabled="checking"> www.与无www计重复</label>
+        <label class="opt-chip" :class="{ active: opts.ignoreTrailingSlash }"><input type="checkbox" v-model="opts.ignoreTrailingSlash" :disabled="checking"> 末尾有无/计重复</label>
+        <label class="opt-chip" :class="{ active: opts.ignoreQuery }"><input type="checkbox" v-model="opts.ignoreQuery" :disabled="checking"> ?后参数计重复</label>
+        <label class="opt-chip" :class="{ active: opts.crossFolder }"><input type="checkbox" v-model="opts.crossFolder" :disabled="checking"> 不同文件夹计重复</label>
+      </div>
+    </div>
+
     <!-- Empty: Not started -->
     <div class="empty-state" v-if="!checking && !checked">
       <div class="empty-icon">🔍</div>
@@ -340,14 +367,21 @@
     </div>
 
     <!-- Duplicate Groups -->
+      <div class="action-bar" v-if="groups.length">
+        <button class="bar-btn secondary small" @click="toggleSelectAll">{{ allSelected ? "取消全选" : "全选" }}</button>
+        <button class="bar-btn danger small" :disabled="selectedCount===0" @click="deleteSelected">删除选中 ({{ selectedCount }})</button>
+        <button class="bar-btn danger small" @click="cleanAll">一键清理</button>
+      </div>
+
     <div v-if="groups.length > 0">
       <div class="duplicate-card" v-for="(g, gi) in groups" :key="g.url">
         <div class="card-header">
           <a :href="g.url" target="_blank" rel="noopener noreferrer" class="card-url">{{ g.url }}</a>
           <span class="count-badge">{{ g.bookmarks.length }}个重复</span>
+          <span class="scheme-badge" v-if="g.hasSchemeMismatch">⚠️ HTTP/HTTPS 混合</span>
         </div>
         <div class="bookmark-item" v-for="(bm, bi) in g.bookmarks" :key="bm.id">
-          <div class="bm-title">{{ bm.title }}</div>
+          <input type="checkbox" v-model="bm.checked" class="bm-checkbox"> <div class="bm-title">{{ bm.title }}</div>
           <div class="bm-path">📁 {{ bm.path }}</div>
           <button class="bm-delete-btn" @click="deleteBm(g, gi, bi)" :disabled="bm.deleting">
             {{ bm.deleting ? '⏳ 删除中...' : '🗑️ 删除' }}
@@ -363,6 +397,21 @@
       {{ checking ? '⏳ 检查中...' : '开始检测' }}
     </button>
   </div>
+
+
+    <!-- 确认弹窗 -->
+    <transition name="fade">
+      <div v-if="dlg.show" class="dlg-overlay" @click.self="dlg.show=false">
+        <div class="dlg-box">
+          <div class="dlg-title">{{ dlg.title }}</div>
+          <div class="dlg-body">{{ dlg.message }}</div>
+          <div class="dlg-btns">
+            <button class="bar-btn secondary small" @click="dlg.show=false">取消</button>
+            <button class="bar-btn danger small" @click="dlg.show=false; dlg.onOk()">确认删除</button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
   <!-- Toast -->
   <transition name="fade">
@@ -381,17 +430,55 @@ createApp({
       token: localStorage.getItem('token') || null,
       checking: false,
       checked: false,
+      opts: { ignoreScheme: true, ignoreWWW: false, ignoreTrailingSlash: false, ignoreQuery: false, crossFolder: false },
       groups: [],
       stats: { total: 0, urls: 0, bookmarks: 0 },
       toast: { visible: false, message: '', type: 'success', timer: null },
+      dlg: { show: false, title: "", message: "", onOk() {} },
     };
   },
   computed: {
     isDark() {
-      return document.documentElement.getAttribute('data-theme') === 'dark';
+    },
+    allSelected() {
+      const all = this.groups.flatMap(g => g.bookmarks);
+      return all.length > 0 && all.every(b => b.checked);
+    },
+    selectedCount() {
+      return this.groups.flatMap(g => g.bookmarks).filter(b => b.checked).length;
     },
   },
   methods: {
+    toggleSelectAll() {
+      const target = !this.allSelected;
+      this.groups.forEach(g => g.bookmarks.forEach(b => b.checked = target));
+    },
+    async deleteSelected() {
+      const ids = this.groups.flatMap(g => g.bookmarks).filter(b => b.checked).map(b => b.id);
+      if (ids.length === 0) { this.showToast("未选中任何书签", "warning"); return; }
+      this.showConfirm("批量删除", "确定删除选中的 " + ids.length + " 个书签？", () => this.batchDelete(ids)); return;
+      await this.batchDelete(ids);
+    },
+    async cleanAll() {
+      const ids = this.groups.flatMap(g => g.bookmarks.slice(1)).map(b => b.id);
+      if (ids.length === 0) { this.showToast("没有可清理的重复书签", "warning"); return; }
+      
+      this.showConfirm("一键清理", "确定一键清理 " + ids.length + " 个重复书签？\n每组将保留一个，其余全部删除。", () => this.batchDelete(ids)); return;
+      await this.batchDelete(ids);
+    },
+    async batchDelete(ids) {
+      const r = await fetch("/api/nodes/batch-delete", {
+        method: "POST", headers: this.authHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      if (r.ok) {
+        const set = new Set(ids);
+        this.groups = this.groups.map(g => ({
+          ...g, bookmarks: g.bookmarks.filter(b => !set.has(b.id)),
+        })).filter(g => g.bookmarks.length > 1);
+      } else { this.showToast("批量删除失败", "error"); }
+    },
+
     goBack() { window.location.href = '/mobile.html'; },
 
     toggleTheme() {
@@ -428,13 +515,19 @@ createApp({
       this.groups = [];
 
       try {
-        const r = await fetch('/api/check-duplicates', {
+        const params = new URLSearchParams();
+        if (this.opts.ignoreScheme) params.set('ignore_scheme', 'true');
+        if (this.opts.ignoreWWW) params.set('ignore_www', 'true');
+        if (this.opts.ignoreTrailingSlash) params.set('ignore_trailing_slash', 'true');
+        if (this.opts.ignoreQuery) params.set('ignore_query', 'true');
+        if (this.opts.crossFolder) params.set('cross_folder', 'true');
+        const r = await fetch('/api/check-duplicates?' + params.toString(), {
           headers: this.authHeaders(),
         });
         const data = await r.json();
 
         if (data.success) {
-          this.groups = data.data.duplicates || [];
+          this.groups = (data.data.duplicates || []).map(x => ({ url: x.url, hasSchemeMismatch: x.hasSchemeMismatch, bookmarks: (x.bookmarks || []).map((b, i) => ({ ...b, checked: i > 0 })) }));
           this.stats = {
             total: data.data.totalBookmarks || 0,
             urls: data.data.duplicateCount || 0,
@@ -460,8 +553,11 @@ createApp({
     async deleteBm(group, groupIndex, bmIndex) {
       const bm = group.bookmarks[bmIndex];
       if (!bm || !bm.id) return;
-      if (!confirm('确定删除该书签？\n' + bm.title)) return;
+      this.showConfirm('删除书签', '确定删除「' + bm.title + '」？', () => this._doDeleteBm(group, groupIndex, bmIndex));
+    },
 
+    async _doDeleteBm(group, groupIndex, bmIndex) {
+      const bm = group.bookmarks[bmIndex];
       bm.deleting = true;
       try {
         const r = await fetch('/api/nodes/' + bm.id, {
@@ -486,6 +582,10 @@ createApp({
         this.showToast('删除失败，请重试', 'error');
         bm.deleting = false;
       }
+    },
+
+    showConfirm(title, msg, onOk) {
+      this.dlg = { show: true, title, message: msg, onOk };
     },
 
     showToast(message, type = 'success') {
