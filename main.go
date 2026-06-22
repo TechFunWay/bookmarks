@@ -50,7 +50,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v3.2.0"
+	appVersion = "v3.3.0"
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -2594,6 +2594,40 @@ func normalizeURL(input string) (string, error) {
 	return parsed.String(), nil
 }
 
+// dupeKeyOptions 去重规范化选项
+type dupeKeyOptions struct {
+	crossFolder       bool // 不同文件夹计重复
+	ignoreScheme       bool // HTTP/HTTPS 视为相同
+	ignoreWWW          bool // www. 与无 www 视为相同
+	ignoreTrailingSlash bool // 末尾 / 差异忽略
+	ignoreQuery        bool // ? 参数差异忽略
+}
+
+// normalizeURLKey 将 URL 按用户选择的规则规范化后返回，用于去重比较。
+func normalizeURLKey(rawURL string, opts dupeKeyOptions) string {
+	s := rawURL
+	if opts.ignoreScheme {
+		s = strings.TrimPrefix(s, "https://")
+		s = strings.TrimPrefix(s, "http://")
+	}
+	if opts.ignoreWWW {
+		s = strings.Replace(s, "://www.", "://", 1)
+		// 如果已经去掉了 scheme（ignoreScheme=true），也要处理没有 scheme 的情况
+		if opts.ignoreScheme {
+			s = strings.TrimPrefix(s, "www.")
+		}
+	}
+	if opts.ignoreQuery {
+		if idx := strings.Index(s, "?"); idx >= 0 {
+			s = s[:idx]
+		}
+	}
+	if opts.ignoreTrailingSlash {
+		s = strings.TrimRight(s, "/")
+	}
+	return s
+}
+
 func optionalString(value string) *string {
 	if value == "" {
 		return nil
@@ -2814,8 +2848,23 @@ func isNewerVersion(latest, current string) bool {
 }
 
 // handleCheckDuplicates 检查重复书签
+//
+// 支持查询参数让用户自定义重复判定规则：
+//   ignore_scheme=true      忽略 http/https 协议前缀
+//   ignore_www=true          忽略 www. 主机名前缀
+//   ignore_trailing_slash=true  忽略路径末尾的 /
+//   ignore_query=true        忽略 ? 查询参数
 func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
+	q := r.URL.Query()
+
+	opts := dupeKeyOptions{
+		crossFolder:         q.Get("cross_folder") == "true",
+		ignoreScheme:        q.Get("ignore_scheme") == "true",
+		ignoreWWW:           q.Get("ignore_www") == "true",
+		ignoreTrailingSlash: q.Get("ignore_trailing_slash") == "true",
+		ignoreQuery:         q.Get("ignore_query") == "true",
+	}
 
 	// 查询所有书签
 	rows, err := s.db.Query(`
@@ -2839,26 +2888,40 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 		Path     string `json:"path"`
 	}
 
-	// 按URL分组
+	// 按规范化 URL 分组
 	urlBookmarks := make(map[string][]bookmarkInfo)
+	hasHTTP := make(map[string]bool)  // 记录该规范化 key 下是否有 http 版本
+	hasHTTPS := make(map[string]bool) // 记录是否有 https 版本
 	for rows.Next() {
 		var b bookmarkInfo
 		if err := rows.Scan(&b.ID, &b.Title, &b.URL, &b.ParentID, &b.Position); err != nil {
 			continue
 		}
-		urlBookmarks[b.URL] = append(urlBookmarks[b.URL], b)
+		key := normalizeURLKey(b.URL, opts)
+		if !opts.crossFolder {
+			key = fmt.Sprintf("%d|%s", b.ParentID, key)
+		}
+		urlBookmarks[key] = append(urlBookmarks[key], b)
+		if opts.ignoreScheme {
+			if strings.HasPrefix(b.URL, "https://") {
+				hasHTTPS[key] = true
+			} else {
+				hasHTTP[key] = true
+			}
+		}
 	}
 
 	// 查找重复的URL（数量大于1）
 	var duplicates []struct {
-		URL       string         `json:"url"`
-		Bookmarks []bookmarkInfo `json:"bookmarks"`
+		URL              string         `json:"url"`
+		Bookmarks        []bookmarkInfo `json:"bookmarks"`
+		HasSchemeMismatch bool          `json:"hasSchemeMismatch"`
 	}
 
 	totalBookmarks := 0
 	duplicateBookmarksCount := 0
 
-	for url, bookmarks := range urlBookmarks {
+	for key, bookmarks := range urlBookmarks {
 		totalBookmarks += len(bookmarks)
 
 		if len(bookmarks) > 1 {
@@ -2871,12 +2934,16 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 				bookmarks[i].Path = path
 			}
 
+			// 展示 URL 用去协议后的规范化 key（http 和 https 版本都能看懂）
+			displayURL := key
 			duplicates = append(duplicates, struct {
-				URL       string         `json:"url"`
-				Bookmarks []bookmarkInfo `json:"bookmarks"`
+				URL              string         `json:"url"`
+				Bookmarks        []bookmarkInfo `json:"bookmarks"`
+				HasSchemeMismatch bool          `json:"hasSchemeMismatch"`
 			}{
-				URL:       url,
-				Bookmarks: bookmarks,
+				URL:              displayURL,
+				Bookmarks:        bookmarks,
+				HasSchemeMismatch: hasHTTP[key] && hasHTTPS[key],
 			})
 			duplicateBookmarksCount += len(bookmarks)
 		}

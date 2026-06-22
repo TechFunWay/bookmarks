@@ -135,3 +135,30 @@ func TestHandleCheckLinks(t *testing.T) {
 		t.Fatalf("categories wrong: %+v", got)
 	}
 }
+
+func TestNormalizeURLKey(t *testing.T) {
+	tests := []struct {
+		name string
+		opts dupeKeyOptions
+		raw  string
+		want string
+	}{
+		{"no opts", dupeKeyOptions{}, "https://www.x.com/path?a=1", "https://www.x.com/path?a=1"},
+		{"ignore scheme", dupeKeyOptions{ignoreScheme: true}, "https://x.com/", "x.com/"},
+		{"ignore scheme http", dupeKeyOptions{ignoreScheme: true}, "http://x.com/", "x.com/"},
+		{"ignore www", dupeKeyOptions{ignoreWWW: true}, "https://www.x.com/", "https://x.com/"},
+		{"ignore www+scheme", dupeKeyOptions{ignoreScheme: true, ignoreWWW: true}, "https://www.x.com/", "x.com/"},
+		{"ignore trailing slash", dupeKeyOptions{ignoreTrailingSlash: true}, "https://x.com/a/", "https://x.com/a"},
+		{"ignore query", dupeKeyOptions{ignoreQuery: true}, "https://x.com/a?b=c", "https://x.com/a"},
+		{"all combined", dupeKeyOptions{ignoreScheme: true, ignoreWWW: true, ignoreTrailingSlash: true, ignoreQuery: true},
+			"https://www.x.com/path/?a=1", "x.com/path"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeURLKey(tt.raw, tt.opts)
+			if got != tt.want {
+				t.Fatalf("normalizeURLKey(%q, %+v) = %q, want %q", tt.raw, tt.opts, got, tt.want)
+			}
+		})
+	}
+}

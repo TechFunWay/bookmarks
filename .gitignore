@@ -40,3 +40,5 @@ bookmark
 techfunway.bookmarks/app/server/bookmarks
 techfunway.bookmarks/app/server/reset-password
 techfunway.bookmarks/app/server/edge-extension.zip
+# Playwright 测试产物
+test-results/
