@@ -114,6 +114,22 @@ func TestCheckURL(t *testing.T) {
 	} else if et != "connection" {
 		t.Fatalf("connection refused error_type: got %q want connection", et)
 	}
+
+	// 302 跳转后 404：首次请求是 302（能访问），应判为 ok，不应因最终 404 误判为 dead。
+	// 复现腾讯云活动页等场景：/act/pro/codingplan → 302 → /act/redirect → 404。
+	redirectThenDead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/page" {
+			w.WriteHeader(302)
+			w.Header().Set("Location", "/gone")
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer redirectThenDead.Close()
+
+	if _, cat, _, _ := srv.checkURL(context.Background(), redirectThenDead.URL+"/page"); cat != "ok" {
+		t.Fatalf("redirect-then-404: got %q want ok (首次 302 应算能访问)", cat)
+	}
 }
 
 func TestHandleCheckLinks(t *testing.T) {

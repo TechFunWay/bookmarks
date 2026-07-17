@@ -3013,35 +3013,70 @@ func classifyLinkResult(code int, err error) (category, reason, errorType string
 
 const linkCheckUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+// noRedirectClient 不自动跟随重定向的 HTTP 客户端，用于捕获首次请求状态码。
+var noRedirectClient = &http.Client{
+	Timeout: 15 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
 // checkURL 检测单个 URL 是否可访问。
 //
 // 直接用 GET（与浏览器实际打开网页一致），不使用 HEAD：很多服务器/CDN 对
 // HEAD 处理不可靠——会返回 404/403，或干脆超时不响应（即便 GET 完全正常，
 // 如 example.com、example.com），用 HEAD 反而更慢、更易误判。
 // 传输错误（多为瞬时超时/网络抖动）会重试一次，进一步降低误判。
+// 重定向策略：记录首次请求状态码，若首次为 2xx/3xx 则算「能访问」，避免
+// 中间页（如 /act/redirect → 404）误判为失效。
 func (s *server) checkURL(ctx context.Context, rawURL string) (code int, category, reason, errorType string) {
-	doGet := func() (int, error) {
+	doCheck := func() (int, string, string, string, bool) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 		if err != nil {
-			return 0, err
+			cat, rsn, et := classifyLinkResult(0, err)
+			return 0, cat, rsn, et, true
 		}
 		req.Header.Set("User-Agent", linkCheckUserAgent)
-		resp, err := s.httpClient.Do(req)
+
+		// 第一次请求：不跟随重定向，捕获真实状态码
+		firstResp, err := noRedirectClient.Do(req)
 		if err != nil {
-			return 0, err
+			cat, rsn, et := classifyLinkResult(0, err)
+			return 0, cat, rsn, et, true
 		}
-		resp.Body.Close()
-		return resp.StatusCode, nil
+		firstResp.Body.Close()
+		firstCode := firstResp.StatusCode
+
+		// 若首次请求成功（2xx/3xx），直接返回——不管后续重定向变成什么
+		if firstCode >= 200 && firstCode < 400 {
+			cat, rsn, et := classifyLinkResult(firstCode, nil)
+			return firstCode, cat, rsn, et, false
+		}
+
+		// 首次非 2xx/3xx，跟随重定向拿最终状态
+		finalReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			cat, rsn, et := classifyLinkResult(firstCode, nil)
+			return firstCode, cat, rsn, et, false
+		}
+		finalReq.Header.Set("User-Agent", linkCheckUserAgent)
+		finalResp, err := s.httpClient.Do(finalReq)
+		if err != nil {
+			cat, rsn, et := classifyLinkResult(firstCode, nil)
+			return firstCode, cat, rsn, et, false
+		}
+		finalResp.Body.Close()
+		cat, rsn, et := classifyLinkResult(finalResp.StatusCode, nil)
+		return finalResp.StatusCode, cat, rsn, et, false
 	}
 
-	statusCode, err := doGet()
-	if err != nil && ctx.Err() == nil {
+	code, category, reason, errorType, retryable := doCheck()
+	if retryable && ctx.Err() == nil {
 		// 瞬时网络错误重试一次（仅当整体上下文尚未取消）
-		statusCode, err = doGet()
+		code, category, reason, errorType, _ = doCheck()
 	}
 
-	category, reason, errorType = classifyLinkResult(statusCode, err)
-	return statusCode, category, reason, errorType
+	return code, category, reason, errorType
 }
 
 type checkLinksRequest struct {
