@@ -10,7 +10,7 @@ window.DeadlinksPanel = {
         <div style="flex:1;min-width:200px;color:var(--text-secondary);font-size:13px;" v-if="total>0">
           已检测 {{ done }} / {{ total }}，发现失效 {{ deadList.length + suspList.length }}
         </div>
-        <div style="color:var(--text-muted);font-size:13px;" v-else>检测书签链接是否可访问。确定失效=打不开(404/无法连接)，疑似失效=可能反爬或临时故障(403/5xx)，请自行确认。</div>
+        <div style="color:var(--text-muted);font-size:13px;" v-else>检测书签链接是否可访问。确定失效=404/410；疑似失效=其他 4xx/5xx 或网络问题（超时/DNS/连接/TLS）。网络不通可能是服务器出站/代理问题，请确认后再删。</div>
       </div>
       <div style="height:6px;background:var(--bg-elev-3);border-radius:3px;overflow:hidden;" v-if="total>0">
         <div :style="{width: (total? Math.round(done/total*100):0)+'%', height:'100%', background:'var(--accent)', transition:'width .2s'}"></div>
@@ -58,9 +58,9 @@ window.DeadlinksPanel = {
       </div>
       <!-- 按状态码 -->
       <div class="card-bd" v-else>
-        <div v-for="group in statusGroups" :key="group.code">
+        <div v-for="group in statusGroups" :key="group.key">
           <div class="dl-group-hd">
-            <span class="badge" :style="{background: group.dead?'var(--rose-soft)':'var(--amber)', color: group.dead?'var(--rose)':'var(--text-primary)'}">{{ group.code===0 ? '—' : group.code }} {{ group.label }} · {{ group.rows.length }}</span>
+            <span class="badge" :style="{background: group.dead?'var(--rose-soft)':'var(--amber)', color: group.dead?'var(--rose)':'var(--text-primary)'}">{{ group.code ? group.code : '—' }} {{ group.label }} · {{ group.rows.length }}</span>
             <button class="btn btn-sm btn-ghost" @click="selectGroup(group)">{{ group.rows.every(r=>r.checked) ? '取消本组' : '全选本组' }}</button>
             <button class="btn btn-sm btn-danger" @click="deleteGroup(group)">删除本组</button>
           </div>
@@ -92,17 +92,37 @@ window.DeadlinksPanel = {
     selectedCount() {
       return [...this.deadList, ...this.suspList].filter(x => x.checked).length;
     },
-    // 按状态码归组：deadList + suspList 合并后按 code 分组，无法连接(code 0)置顶，其余按状态码升序
+    // 按状态码/网络错误类型归组：HTTP 按 code；网络错误(code 0)按 error_type 拆分
     statusGroups() {
       const map = new Map();
       for (const r of [...this.deadList, ...this.suspList]) {
-        const code = r.code || 0;
-        if (!map.has(code)) map.set(code, []);
-        map.get(code).push(r);
+        const key = (r.code && r.code !== 0)
+          ? 'http:' + r.code
+          : 'err:' + (r.error_type || 'unknown');
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(r);
       }
+      const rank = { timeout: 1, dns: 2, connection: 3, tls: 4, unknown: 5 };
       return [...map.entries()]
-        .sort((a, b) => (a[0] === 0 ? -1 : b[0] === 0 ? 1 : a[0] - b[0]))
-        .map(([code, rows]) => ({ code, rows, label: window.deadlinkStatusLabel(code), dead: window.deadlinkIsDeadCode(code) }));
+        .sort((a, b) => {
+          const [ka, kb] = [a[0], b[0]];
+          const aErr = ka.startsWith('err:');
+          const bErr = kb.startsWith('err:');
+          if (aErr !== bErr) return aErr ? -1 : 1;
+          if (aErr) {
+            const ta = ka.slice(4), tb = kb.slice(4);
+            return (rank[ta] || 9) - (rank[tb] || 9);
+          }
+          return Number(ka.slice(5)) - Number(kb.slice(5));
+        })
+        .map(([key, rows]) => {
+          if (key.startsWith('http:')) {
+            const code = Number(key.slice(5));
+            return { key, code, error_type: '', rows, label: window.deadlinkStatusLabel(code), dead: window.deadlinkIsDeadCode(code) };
+          }
+          const et = key.slice(4);
+          return { key, code: 0, error_type: et, rows, label: window.deadlinkErrorLabel(et), dead: false };
+        });
     },
   },
   methods: {
@@ -140,7 +160,7 @@ window.DeadlinksPanel = {
           const data = await r.json();
           for (const res of (data.data?.results || [])) {
             const b = byId[res.id]; if (!b) continue;
-            const row = { ...b, code: res.code, reason: res.reason, checked: res.category === 'dead' };
+            const row = { ...b, code: res.code, reason: res.reason, error_type: res.error_type || '', checked: res.category === 'dead' };
             if (res.category === 'dead') this.deadList.push(row);
             else if (res.category === 'suspicious') this.suspList.push(row);
           }
@@ -199,12 +219,29 @@ window.DeadlinksPanel = {
 
 // HTTP 状态码 → 中文标签（清理失效「按状态码」视图共用，挂到 window 供手机端复用）
 window.deadlinkStatusLabel = function(code) {
-  const m = { 0: '无法连接/超时', 403: '禁止访问', 404: '链接不存在', 410: '已永久删除', 429: '请求过多', 500: '服务器错误', 502: '网关错误', 503: '服务不可用', 504: '网关超时' };
+  const m = {
+    0: '无法连接',
+    301: '永久重定向', 302: '临时重定向', 307: '临时重定向', 308: '永久重定向',
+    401: '未授权', 403: '禁止访问', 404: '链接不存在', 408: '请求超时', 410: '已永久删除',
+    429: '请求过多',
+    500: '服务器错误', 502: '网关错误', 503: '服务不可用', 504: '网关超时'
+  };
   return m[code] || ('HTTP ' + code);
 };
-// 是否归为「确定失效」类（红色）：无法连接、404、410
+// 网络错误类型 → 中文标签
+window.deadlinkErrorLabel = function(errorType) {
+  const m = {
+    timeout: '超时',
+    dns: 'DNS 解析失败',
+    connection: '连接失败',
+    tls: 'TLS/证书错误',
+    unknown: '网络错误'
+  };
+  return m[errorType] || '网络错误';
+};
+// 是否归为「确定失效」类（红色）：仅 404、410
 window.deadlinkIsDeadCode = function(code) {
-  return code === 0 || code === 404 || code === 410;
+  return code === 404 || code === 410;
 };
 
 (function(){
