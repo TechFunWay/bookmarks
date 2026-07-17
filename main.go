@@ -35,6 +35,8 @@ import (
 	"bookmark/app/logic"
 	"bookmark/app/utils"
 
+	"github.com/chromedp/chromedp"
+	"github.com/chromedp/cdproto/network"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -3021,6 +3023,44 @@ var noRedirectClient = &http.Client{
 	},
 }
 
+// checkURLWithBrowser 用 headless Chrome 检测 URL，可绕过 Cloudflare 等 JS 挑战。
+// 返回最终 HTTP 状态码（0 表示超时或错误）。
+func checkURLWithBrowser(ctx context.Context, rawURL string) int {
+	ctx, cancel := chromedp.NewExecAllocator(ctx, append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+	)...)
+	defer cancel()
+
+	ctx, cancel = chromedp.NewContext(ctx)
+	defer cancel()
+	ctx, cancel = context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	var statusCode int
+	err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			// 监听网络响应，获取 HTTP 状态码
+			chromedp.ListenTarget(ctx, func(ev interface{}) {
+				if e, ok := ev.(*network.EventResponseReceived); ok {
+					if string(e.Type) == "Document" {
+						statusCode = int(e.Response.Status)
+					}
+				}
+			})
+			return nil
+		}),
+		chromedp.Navigate(rawURL),
+		chromedp.Sleep(3*time.Second), // 等待 JS 执行（Cloudflare 挑战）
+	)
+	if err != nil {
+		return 0
+	}
+	return statusCode
+}
+
 // checkURL 检测单个 URL 是否可访问。
 //
 // 直接用 GET（与浏览器实际打开网页一致），不使用 HEAD：很多服务器/CDN 对
@@ -3074,6 +3114,18 @@ func (s *server) checkURL(ctx context.Context, rawURL string) (code int, categor
 	if retryable && ctx.Err() == nil {
 		// 瞬时网络错误重试一次（仅当整体上下文尚未取消）
 		code, category, reason, errorType, _ = doCheck()
+	}
+
+	// HTTP 返回 403 时，用 headless Chrome 重试——可能是 Cloudflare JS 挑战
+	if code == 403 && ctx.Err() == nil {
+		browserCode := checkURLWithBrowser(ctx, rawURL)
+		if browserCode >= 200 && browserCode < 400 {
+			return browserCode, "ok", "", ""
+		}
+		if browserCode > 0 {
+			cat, rsn, et := classifyLinkResult(browserCode, nil)
+			return browserCode, cat, rsn, et
+		}
 	}
 
 	return code, category, reason, errorType
