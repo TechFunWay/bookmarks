@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -329,7 +330,7 @@ func main() {
 		db: db,
 		httpClient: &http.Client{
 			Transport: transport,
-			Timeout:   10 * time.Second,
+			Timeout:   15 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				// 允许最多10次重定向
 				if len(via) >= 10 {
@@ -2965,27 +2966,52 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// classifyTransportError 将传输层错误细分为 timeout/dns/connection/tls。
+func classifyTransportError(err error) (errorType, reason string) {
+	if err == nil {
+		return "", ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout", "请求超时"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "timeout", "请求超时"
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return "dns", "DNS 解析失败"
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "no such host") || strings.Contains(msg, "server misbehaving") {
+		return "dns", "DNS 解析失败"
+	}
+	if strings.Contains(msg, "tls:") || strings.Contains(msg, "certificate") || strings.Contains(msg, "x509:") {
+		return "tls", "TLS/证书错误"
+	}
+	return "connection", "连接失败"
+}
+
 // classifyLinkResult 根据 HTTP 状态码和传输层错误把链接分类为 ok / dead / suspicious。
-// dead = 确定失效（传输层错误、404、410）；suspicious = 疑似失效（其他 4xx、5xx，可能是反爬或临时故障）。
-func classifyLinkResult(code int, err error) (category string, reason string) {
+// dead = 确定失效（仅 404、410）；suspicious = 疑似失效（其他 4xx、5xx、全部网络错误）。
+func classifyLinkResult(code int, err error) (category, reason, errorType string) {
 	if err != nil {
-		return "dead", err.Error()
+		et, r := classifyTransportError(err)
+		return "suspicious", r, et
 	}
 	switch {
 	case code >= 200 && code < 400:
-		return "ok", ""
+		return "ok", "", ""
 	case code == 404 || code == 410:
-		return "dead", http.StatusText(code)
-	case code >= 400 && code < 500:
-		return "suspicious", http.StatusText(code)
-	case code >= 500:
-		return "suspicious", http.StatusText(code)
+		return "dead", http.StatusText(code), ""
+	case code >= 400:
+		return "suspicious", http.StatusText(code), ""
 	default:
-		return "suspicious", http.StatusText(code)
+		return "suspicious", http.StatusText(code), ""
 	}
 }
 
-const linkCheckUserAgent = "Mozilla/5.0 (compatible; bookmarks-checker/1.0)"
+const linkCheckUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 // checkURL 检测单个 URL 是否可访问。
 //
@@ -2993,7 +3019,7 @@ const linkCheckUserAgent = "Mozilla/5.0 (compatible; bookmarks-checker/1.0)"
 // HEAD 处理不可靠——会返回 404/403，或干脆超时不响应（即便 GET 完全正常，
 // 如 example.com、example.com），用 HEAD 反而更慢、更易误判。
 // 传输错误（多为瞬时超时/网络抖动）会重试一次，进一步降低误判。
-func (s *server) checkURL(ctx context.Context, rawURL string) (code int, category string, reason string) {
+func (s *server) checkURL(ctx context.Context, rawURL string) (code int, category, reason, errorType string) {
 	doGet := func() (int, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 		if err != nil {
@@ -3014,8 +3040,8 @@ func (s *server) checkURL(ctx context.Context, rawURL string) (code int, categor
 		statusCode, err = doGet()
 	}
 
-	category, reason = classifyLinkResult(statusCode, err)
-	return statusCode, category, reason
+	category, reason, errorType = classifyLinkResult(statusCode, err)
+	return statusCode, category, reason, errorType
 }
 
 type checkLinksRequest struct {
@@ -3026,10 +3052,11 @@ type checkLinksRequest struct {
 }
 
 type linkResult struct {
-	ID       int64  `json:"id"`
-	Code     int    `json:"code"`
-	Category string `json:"category"`
-	Reason   string `json:"reason"`
+	ID        int64  `json:"id"`
+	Code      int    `json:"code"`
+	Category  string `json:"category"`
+	Reason    string `json:"reason"`
+	ErrorType string `json:"error_type"`
 }
 
 // handleCheckLinks 并发检测一批书签链接是否失效。前端分批调用，实时展示进度。
@@ -3062,8 +3089,8 @@ func (s *server) handleCheckLinks(w http.ResponseWriter, r *http.Request) {
 		go func(idx int, id int64, rawURL string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			code, category, reason := s.checkURL(r.Context(), rawURL)
-			results[idx] = linkResult{ID: id, Code: code, Category: category, Reason: reason}
+			code, category, reason, errorType := s.checkURL(r.Context(), rawURL)
+			results[idx] = linkResult{ID: id, Code: code, Category: category, Reason: reason, ErrorType: errorType}
 		}(i, b.ID, b.URL)
 	}
 	wg.Wait()

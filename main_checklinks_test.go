@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,28 +15,51 @@ import (
 
 func TestClassifyLinkResult(t *testing.T) {
 	cases := []struct {
-		name string
-		code int
-		err  error
-		want string
+		name        string
+		code        int
+		err         error
+		wantCat     string
+		wantErrType string
 	}{
-		{"transport error", 0, errors.New("dial tcp: no such host"), "dead"},
-		{"200 ok", 200, nil, "ok"},
-		{"301 redirect", 301, nil, "ok"},
-		{"404 dead", 404, nil, "dead"},
-		{"410 dead", 410, nil, "dead"},
-		{"403 suspicious", 403, nil, "suspicious"},
-		{"429 suspicious", 429, nil, "suspicious"},
-		{"500 suspicious", 500, nil, "suspicious"},
-		{"503 suspicious", 503, nil, "suspicious"},
+		{"timeout", 0, context.DeadlineExceeded, "suspicious", "timeout"},
+		{"dns", 0, &net.DNSError{Err: "no such host", Name: "x.test"}, "suspicious", "dns"},
+		{"connection refused", 0, &net.OpError{Op: "dial", Err: errors.New("connect: connection refused")}, "suspicious", "connection"},
+		{"tls", 0, errors.New("tls: handshake failure"), "suspicious", "tls"},
+		{"200 ok", 200, nil, "ok", ""},
+		{"301 ok", 301, nil, "ok", ""},
+		{"404 dead", 404, nil, "dead", ""},
+		{"410 dead", 410, nil, "dead", ""},
+		{"403 suspicious", 403, nil, "suspicious", ""},
+		{"429 suspicious", 429, nil, "suspicious", ""},
+		{"500 suspicious", 500, nil, "suspicious", ""},
+		{"504 suspicious", 504, nil, "suspicious", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, _ := classifyLinkResult(c.code, c.err)
-			if got != c.want {
-				t.Fatalf("classifyLinkResult(%d,%v) = %q, want %q", c.code, c.err, got, c.want)
+			cat, _, et := classifyLinkResult(c.code, c.err)
+			if cat != c.wantCat || et != c.wantErrType {
+				t.Fatalf("classifyLinkResult(%d,%v) = cat=%q et=%q, want cat=%q et=%q",
+					c.code, c.err, cat, et, c.wantCat, c.wantErrType)
 			}
 		})
+	}
+}
+
+func TestTransportErrorsAreSuspicious(t *testing.T) {
+	errs := []error{
+		context.DeadlineExceeded,
+		&net.DNSError{Err: "no such host", Name: "x"},
+		errors.New("dial tcp 127.0.0.1:1: connect: connection refused"),
+		errors.New("tls: failed to verify certificate"),
+	}
+	for _, e := range errs {
+		cat, _, _ := classifyLinkResult(0, e)
+		if cat == "dead" {
+			t.Fatalf("transport error %v classified as dead", e)
+		}
+		if cat != "suspicious" {
+			t.Fatalf("transport error %v: got %q want suspicious", e, cat)
+		}
 	}
 }
 
@@ -73,20 +97,22 @@ func TestCheckURL(t *testing.T) {
 	}))
 	defer headNotFoundSrv.Close()
 
-	if _, cat, _ := srv.checkURL(context.Background(), okSrv.URL); cat != "ok" {
+	if _, cat, _, _ := srv.checkURL(context.Background(), okSrv.URL); cat != "ok" {
 		t.Fatalf("ok server: got %q want ok", cat)
 	}
-	if _, cat, _ := srv.checkURL(context.Background(), notFoundSrv.URL); cat != "dead" {
+	if _, cat, _, _ := srv.checkURL(context.Background(), notFoundSrv.URL); cat != "dead" {
 		t.Fatalf("404 server: got %q want dead", cat)
 	}
-	if code, cat, _ := srv.checkURL(context.Background(), headBlockedSrv.URL); cat != "ok" || code != 200 {
+	if code, cat, _, _ := srv.checkURL(context.Background(), headBlockedSrv.URL); cat != "ok" || code != 200 {
 		t.Fatalf("head-blocked server: got code=%d cat=%q want 200/ok (GET only)", code, cat)
 	}
-	if code, cat, _ := srv.checkURL(context.Background(), headNotFoundSrv.URL); cat != "ok" || code != 200 {
+	if code, cat, _, _ := srv.checkURL(context.Background(), headNotFoundSrv.URL); cat != "ok" || code != 200 {
 		t.Fatalf("head-404/get-200 server: got code=%d cat=%q want 200/ok (GET only)", code, cat)
 	}
-	if _, cat, _ := srv.checkURL(context.Background(), "http://127.0.0.1:1/nope"); cat != "dead" {
-		t.Fatalf("connection refused: got %q want dead", cat)
+	if _, cat, _, et := srv.checkURL(context.Background(), "http://127.0.0.1:1/nope"); cat != "suspicious" {
+		t.Fatalf("connection refused: got %q want suspicious", cat)
+	} else if et != "connection" {
+		t.Fatalf("connection refused error_type: got %q want connection", et)
 	}
 }
 
@@ -119,8 +145,9 @@ func TestHandleCheckLinks(t *testing.T) {
 	var resp struct {
 		Data struct {
 			Results []struct {
-				ID       int64  `json:"id"`
-				Category string `json:"category"`
+				ID        int64  `json:"id"`
+				Category  string `json:"category"`
+				ErrorType string `json:"error_type"`
 			} `json:"results"`
 		} `json:"data"`
 	}
