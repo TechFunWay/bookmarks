@@ -41,7 +41,7 @@
 
       <!-- 说明文案 -->
       <div class="desc-banner">
-        检测书签链接是否可访问。<strong>确定失效</strong>=链接打不开（404/无法连接），<strong>疑似失效</strong>=可能是反爬或临时故障(403/5xx)，请自行确认后再删除。
+        检测书签链接是否可访问。<strong>确定失效</strong>=404/410，<strong>疑似失效</strong>=其他 4xx/5xx 或网络问题（超时/DNS/连接/TLS）。网络不通可能是服务器出站/代理问题，请确认后再删。
       </div>
 
       <!-- 进度条 -->
@@ -70,6 +70,10 @@
 
       <!-- 批量操作栏 -->
       <div class="batch-bar" v-if="deadList.length > 0 || suspList.length > 0">
+        <div class="view-seg">
+          <button :class="{ active: viewMode === 'severity' }" @click="viewMode = 'severity'">按失效程度</button>
+          <button :class="{ active: viewMode === 'status' }" @click="viewMode = 'status'">按状态码</button>
+        </div>
         <button class="secondary" @click="toggleSelectAll">
           {{ allSelected ? '取消全选' : '全选' }}
         </button>
@@ -81,61 +85,96 @@
         </button>
       </div>
 
-      <!-- 确定失效 -->
-      <div v-if="deadList.length > 0" class="result-section">
-        <div class="section-header dead">
-          <span class="section-badge dead-badge">确定失效</span>
-          <span class="section-count">{{ deadList.length }} 个</span>
-        </div>
-        <div class="bookmark-list">
-          <div class="bookmark-row" v-for="row in deadList" :key="row.id">
-            <input type="checkbox" v-model="row.checked" class="row-checkbox" />
-            <img v-if="row.favicon_url" :src="row.favicon_url" class="row-favicon" @error="$event.target.style.display='none'" />
-            <span v-else class="row-favicon-placeholder">🔗</span>
-            <div class="row-info">
-              <div class="row-title">
-                <a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+      <!-- 按失效程度 -->
+      <template v-if="viewMode === 'severity'">
+        <!-- 确定失效 -->
+        <div v-if="deadList.length > 0" class="result-section">
+          <div class="section-header dead">
+            <span class="section-badge dead-badge">确定失效</span>
+            <span class="section-count">{{ deadList.length }} 个</span>
+          </div>
+          <div class="bookmark-list">
+            <div class="bookmark-row" v-for="row in deadList" :key="row.id">
+              <input type="checkbox" v-model="row.checked" class="row-checkbox" />
+              <img v-if="row.favicon_url" :src="row.favicon_url" class="row-favicon" @error="$event.target.style.display='none'" />
+              <span v-else class="row-favicon-placeholder">🔗</span>
+              <div class="row-info">
+                <div class="row-title">
+                  <a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+                </div>
+                <div class="row-url">
+                  <a :href="row.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ row.url }}</a>
+                </div>
+                <div class="row-meta">
+                  <span class="meta-item">📁 {{ row.path || '/' }}</span>
+                  <span class="meta-item reason dead-reason">{{ row.reason }}</span>
+                </div>
               </div>
-              <div class="row-url">
-                <a :href="row.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ row.url }}</a>
-              </div>
-              <div class="row-meta">
-                <span class="meta-item">📁 {{ row.path || '/' }}</span>
-                <span class="meta-item reason dead-reason">{{ row.reason }}</span>
-              </div>
+              <button class="danger small" @click="deleteOne(row)">🗑️ 删除</button>
             </div>
-            <button class="danger small" @click="deleteOne(row, 'deadList')">🗑️ 删除</button>
           </div>
         </div>
-      </div>
 
-      <!-- 疑似失效 -->
-      <div v-if="suspList.length > 0" class="result-section">
-        <div class="section-header susp">
-          <span class="section-badge susp-badge">疑似失效</span>
-          <span class="section-count">{{ suspList.length }} 个</span>
-        </div>
-        <div class="bookmark-list">
-          <div class="bookmark-row" v-for="row in suspList" :key="row.id">
-            <input type="checkbox" v-model="row.checked" class="row-checkbox" />
-            <img v-if="row.favicon_url" :src="row.favicon_url" class="row-favicon" @error="$event.target.style.display='none'" />
-            <span v-else class="row-favicon-placeholder">🔗</span>
-            <div class="row-info">
-              <div class="row-title">
-                <a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+        <!-- 疑似失效 -->
+        <div v-if="suspList.length > 0" class="result-section">
+          <div class="section-header susp">
+            <span class="section-badge susp-badge">疑似失效</span>
+            <span class="section-count">{{ suspList.length }} 个</span>
+          </div>
+          <div class="bookmark-list">
+            <div class="bookmark-row" v-for="row in suspList" :key="row.id">
+              <input type="checkbox" v-model="row.checked" class="row-checkbox" />
+              <img v-if="row.favicon_url" :src="row.favicon_url" class="row-favicon" @error="$event.target.style.display='none'" />
+              <span v-else class="row-favicon-placeholder">🔗</span>
+              <div class="row-info">
+                <div class="row-title">
+                  <a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+                </div>
+                <div class="row-url">
+                  <a :href="row.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ row.url }}</a>
+                </div>
+                <div class="row-meta">
+                  <span class="meta-item">📁 {{ row.path || '/' }}</span>
+                  <span class="meta-item reason susp-reason">{{ row.reason }}</span>
+                </div>
               </div>
-              <div class="row-url">
-                <a :href="row.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ row.url }}</a>
-              </div>
-              <div class="row-meta">
-                <span class="meta-item">📁 {{ row.path || '/' }}</span>
-                <span class="meta-item reason susp-reason">{{ row.reason }}</span>
-              </div>
+              <button class="danger small" @click="deleteOne(row)">🗑️ 删除</button>
             </div>
-            <button class="danger small" @click="deleteOne(row, 'suspList')">🗑️ 删除</button>
           </div>
         </div>
-      </div>
+      </template>
+
+      <!-- 按状态码 -->
+      <template v-else>
+        <div v-for="group in statusGroups" :key="group.key" class="result-section">
+          <div class="section-header" :class="group.dead ? 'dead' : 'susp'">
+            <span class="section-badge" :class="group.dead ? 'dead-badge' : 'susp-badge'">{{ group.code ? group.code : '—' }} {{ group.label }}</span>
+            <span class="section-count">{{ group.rows.length }} 个</span>
+            <button class="secondary small" @click="selectGroup(group)">{{ group.rows.every(r => r.checked) ? '取消本组' : '全选本组' }}</button>
+            <button class="danger small" @click="deleteGroup(group)">删除本组</button>
+          </div>
+          <div class="bookmark-list">
+            <div class="bookmark-row" v-for="row in group.rows" :key="row.id">
+              <input type="checkbox" v-model="row.checked" class="row-checkbox" />
+              <img v-if="row.favicon_url" :src="row.favicon_url" class="row-favicon" @error="$event.target.style.display='none'" />
+              <span v-else class="row-favicon-placeholder">🔗</span>
+              <div class="row-info">
+                <div class="row-title">
+                  <a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.title }}</a>
+                </div>
+                <div class="row-url">
+                  <a :href="row.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ row.url }}</a>
+                </div>
+                <div class="row-meta">
+                  <span class="meta-item">📁 {{ row.path || '/' }}</span>
+                  <span class="meta-item reason" :class="group.dead ? 'dead-reason' : 'susp-reason'">{{ row.reason }}</span>
+                </div>
+              </div>
+              <button class="danger small" @click="deleteOne(row)">🗑️ 删除</button>
+            </div>
+          </div>
+        </div>
+      </template>
 
     </div>
   </main>
@@ -174,6 +213,7 @@ createApp({
       done: 0,
       deadList: [],
       suspList: [],
+      viewMode: 'severity',
       toast: { visible: false, message: '', type: 'success', timer: null },
     };
   },
@@ -184,6 +224,37 @@ createApp({
     allSelected() {
       const all = [...this.deadList, ...this.suspList];
       return all.length > 0 && all.every(x => x.checked);
+    },
+    statusGroups() {
+      const map = new Map();
+      for (const r of [...this.deadList, ...this.suspList]) {
+        const key = (r.code && r.code !== 0)
+          ? 'http:' + r.code
+          : 'err:' + (r.error_type || 'unknown');
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(r);
+      }
+      const rank = { timeout: 1, dns: 2, connection: 3, tls: 4, unknown: 5 };
+      return [...map.entries()]
+        .sort((a, b) => {
+          const [ka, kb] = [a[0], b[0]];
+          const aErr = ka.startsWith('err:');
+          const bErr = kb.startsWith('err:');
+          if (aErr !== bErr) return aErr ? -1 : 1;
+          if (aErr) {
+            const ta = ka.slice(4), tb = kb.slice(4);
+            return (rank[ta] || 9) - (rank[tb] || 9);
+          }
+          return Number(ka.slice(5)) - Number(kb.slice(5));
+        })
+        .map(([key, rows]) => {
+          if (key.startsWith('http:')) {
+            const code = Number(key.slice(5));
+            return { key, code, error_type: '', rows, label: this.statusLabel(code), dead: this.isDeadCode(code) };
+          }
+          const et = key.slice(4);
+          return { key, code: 0, error_type: et, rows, label: this.errorLabel(et), dead: false };
+        });
     },
   },
   methods: {
@@ -265,7 +336,7 @@ createApp({
           for (const res of (resp.data?.results || [])) {
             const b = byId[res.id];
             if (!b) continue;
-            const row = { ...b, code: res.code, reason: res.reason, checked: res.category === 'dead' };
+            const row = { ...b, code: res.code, reason: res.reason, error_type: res.error_type || '', checked: res.category === 'dead' };
             if (res.category === 'dead') this.deadList.push(row);
             else if (res.category === 'suspicious') this.suspList.push(row);
           }
@@ -288,13 +359,35 @@ createApp({
 
     stopCheck() { this.stopped = true; },
 
-    async deleteOne(row, listName) {
+    statusLabel(code) {
+      const m = {
+        0: '无法连接',
+        301: '永久重定向', 302: '临时重定向', 307: '临时重定向', 308: '永久重定向',
+        401: '未授权', 403: '禁止访问', 404: '链接不存在', 408: '请求超时', 410: '已永久删除',
+        429: '请求过多',
+        500: '服务器错误', 502: '网关错误', 503: '服务不可用', 504: '网关超时'
+      };
+      return m[code] || ('HTTP ' + code);
+    },
+    errorLabel(errorType) {
+      const m = {
+        timeout: '超时',
+        dns: 'DNS 解析失败',
+        connection: '连接失败',
+        tls: 'TLS/证书错误',
+        unknown: '网络错误'
+      };
+      return m[errorType] || '网络错误';
+    },
+    isDeadCode(code) {
+      return code === 404 || code === 410;
+    },
+
+    async deleteOne(row) {
       if (!confirm('确定删除该书签？\n' + row.title)) return;
       const r = await fetch('/api/nodes/' + row.id, { method: 'DELETE', headers: this.authHeaders() });
       if (r.ok) {
-        const arr = this[listName];
-        const idx = arr.findIndex(x => x.id === row.id);
-        if (idx >= 0) arr.splice(idx, 1);
+        this.removeIds([row.id]);
         this.showToast('删除成功', 'success');
       } else {
         this.showToast('删除失败', 'error');
@@ -315,19 +408,35 @@ createApp({
       await this.batchDelete(ids);
     },
 
+    selectGroup(group) {
+      const target = !group.rows.every(r => r.checked);
+      group.rows.forEach(r => r.checked = target);
+    },
+
+    async deleteGroup(group) {
+      const ids = group.rows.map(r => r.id);
+      if (ids.length === 0) return;
+      if (!confirm('确定删除「' + group.label + '」分组的 ' + ids.length + ' 个书签？')) return;
+      await this.batchDelete(ids);
+    },
+
     async batchDelete(ids) {
       const r = await fetch('/api/nodes/batch-delete', {
         method: 'POST', headers: this.authHeaders(),
         body: JSON.stringify({ ids }),
       });
       if (r.ok) {
-        const set = new Set(ids);
-        this.deadList = this.deadList.filter(x => !set.has(x.id));
-        this.suspList = this.suspList.filter(x => !set.has(x.id));
+        this.removeIds(ids);
         this.showToast('批量删除成功', 'success');
       } else {
         this.showToast('批量删除失败', 'error');
       }
+    },
+
+    removeIds(ids) {
+      const set = new Set(ids);
+      this.deadList = this.deadList.filter(x => !set.has(x.id));
+      this.suspList = this.suspList.filter(x => !set.has(x.id));
     },
 
     toggleSelectAll() {
@@ -367,6 +476,41 @@ createApp({
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.view-seg {
+  display: inline-flex;
+  background: var(--bg-elev-3, rgba(0,0,0,.06));
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.view-seg button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #666);
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.view-seg button.active {
+  background: var(--bg-elev-1, #fff);
+  color: var(--text-primary, #111);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+.batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 /* 全局 style.css 把 html/body 设为 overflow:hidden，导致超出一屏的内容无法滚动；

@@ -418,7 +418,7 @@
 
     <!-- Description -->
     <div class="desc-banner">
-      检测书签链接是否可访问。<strong>确定失效</strong>=链接打不开（404/无法连接），<strong>疑似失效</strong>=可能是反爬或临时故障(403/5xx)，请自行确认后再删除。
+      检测书签链接是否可访问。<strong>确定失效</strong>=404/410，<strong>疑似失效</strong>=其他 4xx/5xx 或网络问题（超时/DNS/连接/TLS）。网络不通可能是服务器出站/代理问题，请确认后再删。
     </div>
 
     <!-- Progress -->
@@ -496,9 +496,9 @@
 
     <!-- 按状态码 -->
     <template v-else>
-      <div v-for="group in statusGroups" :key="group.code">
+      <div v-for="group in statusGroups" :key="group.key">
         <div class="group-title">
-          <span class="section-badge" :style="{ background: group.dead ? 'var(--danger)' : '#f59e0b', color: '#fff' }">{{ group.code === 0 ? '—' : group.code }}</span>
+          <span class="section-badge" :style="{ background: group.dead ? 'var(--danger)' : '#f59e0b', color: '#fff' }">{{ group.code ? group.code : '—' }}</span>
           <span class="section-count">{{ group.label }} · {{ group.rows.length }} 个</span>
           <div class="group-actions">
             <button class="group-btn" @click="selectGroup(group)">{{ group.rows.every(r => r.checked) ? '取消' : '全选' }}</button>
@@ -576,17 +576,37 @@ createApp({
       const all = [...this.deadList, ...this.suspList];
       return all.length > 0 && all.every(x => x.checked);
     },
-    // 按状态码归组：无法连接(code 0)置顶，其余按状态码升序
+    // 按状态码/网络错误类型归组：HTTP 按 code；网络错误(code 0)按 error_type 拆分
     statusGroups() {
       const map = new Map();
       for (const r of [...this.deadList, ...this.suspList]) {
-        const code = r.code || 0;
-        if (!map.has(code)) map.set(code, []);
-        map.get(code).push(r);
+        const key = (r.code && r.code !== 0)
+          ? 'http:' + r.code
+          : 'err:' + (r.error_type || 'unknown');
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(r);
       }
+      const rank = { timeout: 1, dns: 2, connection: 3, tls: 4, unknown: 5 };
       return [...map.entries()]
-        .sort((a, b) => (a[0] === 0 ? -1 : b[0] === 0 ? 1 : a[0] - b[0]))
-        .map(([code, rows]) => ({ code, rows, label: this.statusLabel(code), dead: this.isDeadCode(code) }));
+        .sort((a, b) => {
+          const [ka, kb] = [a[0], b[0]];
+          const aErr = ka.startsWith('err:');
+          const bErr = kb.startsWith('err:');
+          if (aErr !== bErr) return aErr ? -1 : 1;
+          if (aErr) {
+            const ta = ka.slice(4), tb = kb.slice(4);
+            return (rank[ta] || 9) - (rank[tb] || 9);
+          }
+          return Number(ka.slice(5)) - Number(kb.slice(5));
+        })
+        .map(([key, rows]) => {
+          if (key.startsWith('http:')) {
+            const code = Number(key.slice(5));
+            return { key, code, error_type: '', rows, label: this.statusLabel(code), dead: this.isDeadCode(code) };
+          }
+          const et = key.slice(4);
+          return { key, code: 0, error_type: et, rows, label: this.errorLabel(et), dead: false };
+        });
     },
   },
   methods: {
@@ -668,7 +688,7 @@ createApp({
           for (const res of (resp.data?.results || [])) {
             const b = byId[res.id];
             if (!b) continue;
-            const row = { ...b, code: res.code, reason: res.reason, checked: res.category === 'dead' };
+            const row = { ...b, code: res.code, reason: res.reason, error_type: res.error_type || '', checked: res.category === 'dead' };
             if (res.category === 'dead') this.deadList.push(row);
             else if (res.category === 'suspicious') this.suspList.push(row);
           }
@@ -692,11 +712,27 @@ createApp({
     stopCheck() { this.stopped = true; },
 
     statusLabel(code) {
-      const m = { 0: '无法连接/超时', 403: '禁止访问', 404: '链接不存在', 410: '已永久删除', 429: '请求过多', 500: '服务器错误', 502: '网关错误', 503: '服务不可用', 504: '网关超时' };
+      const m = {
+        0: '无法连接',
+        301: '永久重定向', 302: '临时重定向', 307: '临时重定向', 308: '永久重定向',
+        401: '未授权', 403: '禁止访问', 404: '链接不存在', 408: '请求超时', 410: '已永久删除',
+        429: '请求过多',
+        500: '服务器错误', 502: '网关错误', 503: '服务不可用', 504: '网关超时'
+      };
       return m[code] || ('HTTP ' + code);
     },
+    errorLabel(errorType) {
+      const m = {
+        timeout: '超时',
+        dns: 'DNS 解析失败',
+        connection: '连接失败',
+        tls: 'TLS/证书错误',
+        unknown: '网络错误'
+      };
+      return m[errorType] || '网络错误';
+    },
     isDeadCode(code) {
-      return code === 0 || code === 404 || code === 410;
+      return code === 404 || code === 410;
     },
 
     async deleteOne(row) {
