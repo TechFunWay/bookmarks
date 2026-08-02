@@ -1,0 +1,13 @@
+{
+  "name": "网址收藏夹",
+  "short_name": "收藏夹",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0078d4",
+  "background_color": "#f5f5f5",
+  "icons": [
+    { "src": "/app-icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/app-icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
