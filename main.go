@@ -449,6 +449,10 @@ func main() {
 		log.Fatalf("failed to create static filesystem: %v", err)
 	}
 	fileServer := http.FileServer(http.FS(staticFiles))
+	r.Get("/manifest.webmanifest", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/manifest+json")
+		fileServer.ServeHTTP(w, req)
+	})
 	r.Handle("/*", fileServer)
 	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
