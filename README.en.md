@@ -4,6 +4,10 @@ A simple and easy-to-use bookmark management tool built with Go backend and Vue.
 
 ![Bookmark Manager](bookmarks.png)
 
+## Application screenshot
+
+![Bookmark manager application](docs/screenshots/app-screenshot.jpg)
+
 ## Features
 
 - 📁 **Folder Management** - Create, edit, delete folders with nested structure support
@@ -15,6 +19,20 @@ A simple and easy-to-use bookmark management tool built with Go backend and Vue.
 - 📱 **Responsive Design** - Adapts to different screen sizes
 - ⚡ **Fast Performance** - SQLite-based local database for quick queries
 - 🔒 **Secure & Reliable** - Supports intranet HTTPS sites
+
+## Multi-user isolation, permissions, and public bookmarks
+
+The application supports multiple accounts in one instance, including deployments on a family NAS. Bookmark data and most account settings are logically isolated by user ID in the same SQLite database; each user does not get a separate database file.
+
+| Topic | Current behavior |
+| --- | --- |
+| Folders, bookmarks, and ordering | Isolated for normal user APIs. Queries and mutations are scoped to the authenticated user's `user_id`. |
+| Theme, background, and layout settings | Mixed. Display options, items per row, default homepage, folder-view scale, and desktop background are stored in per-user configuration. Some theme, mobile view/background, and template-sort preferences still use browser `localStorage`, so they may carry over when switching accounts in the same browser. |
+| Browser extension sync | Scoped to the user that owns the `X-API-Key`. Do not share an API key between accounts. |
+| Administrator access | Administrators can view, edit, delete, reorder, pre-create, and export another user's bookmark data through the protected admin APIs. |
+| No-login mode | A request without a valid token is mapped to the first active administrator account. All anonymous visitors therefore use the same administrator data. A valid token still selects that user's own data. |
+
+The current release supports public bookmarks through `public` visibility, `/public-bookmarks.html`, and `/api/public-tree`. It does not yet provide a shared-folder model: folders are still owned by one user, there is no per-folder collaboration permission, and there is no one-click “copy public bookmark to my collection” action. Administrators can pre-create copies for individual users, but that is not a single shared public collection. Shared folders, a maintained public collection, and copy-to-own-collection workflows remain future features.
 
 ## Technical Architecture
 
