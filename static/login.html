@@ -230,6 +230,16 @@
     .links a:hover { color: var(--link-hover); }
     .links-sep { opacity: .3; }
 
+    .fnos-panel { margin-top: 6px; padding: 16px; border: 1px solid var(--brand-border); border-radius: 12px; background: var(--input-bg); }
+    .fnos-panel[hidden] { display: none; }
+    .fnos-title { color: var(--text); font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .fnos-desc { color: var(--text-sub); font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
+    .fnos-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .fnos-tab { height: 34px; border: 1px solid var(--input-border); border-radius: 8px; background: transparent; color: var(--text-sub); font: inherit; font-size: 13px; cursor: pointer; }
+    .fnos-tab.active { border-color: var(--accent); background: rgba(99,102,241,.10); color: var(--link); font-weight: 600; }
+    .fnos-panel .field { margin-bottom: 12px; }
+    .fnos-panel .btn { margin-top: 3px; }
+
     @media (max-width: 720px) {
       .brand { display: none; }
       .card { max-width: 420px; }
@@ -296,6 +306,26 @@
       <button type="submit" class="btn" id="login-btn">登录</button>
     </form>
 
+    <div class="fnos-panel" id="fnos-bind-panel" hidden>
+      <div class="fnos-title">绑定飞牛 NAS 账号</div>
+      <div class="fnos-desc" id="fnos-bind-desc"></div>
+      <div class="fnos-tabs">
+        <button type="button" class="fnos-tab active" data-mode="register">创建新账户</button>
+        <button type="button" class="fnos-tab" data-mode="bind">绑定已有账户</button>
+      </div>
+      <form id="fnos-bind-form" autocomplete="on">
+        <div class="field">
+          <label class="field-label" for="fnos-username">应用用户名</label>
+          <div class="field-wrap"><input class="field-input" type="text" id="fnos-username" required autocomplete="username"></div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="fnos-password">应用密码</label>
+          <div class="field-wrap"><input class="field-input" type="password" id="fnos-password" required autocomplete="current-password"></div>
+        </div>
+        <button type="submit" class="btn" id="fnos-bind-btn">创建并绑定</button>
+      </form>
+    </div>
+
     <div class="links">
       <span>还没有账户？</span><a id="register-link" href="register.html">立即注册</a>
       <span class="links-sep">·</span><a href="forgot-password.html">忘记密码</a>
@@ -331,6 +361,12 @@ document.addEventListener('DOMContentLoaded', async function () {
   const uInput = document.getElementById('username');
   const pInput = document.getElementById('password');
   const cbRemember = document.getElementById('remember-me');
+  const fnosPanel = document.getElementById('fnos-bind-panel');
+  const fnosForm = document.getElementById('fnos-bind-form');
+  const fnosUsername = document.getElementById('fnos-username');
+  const fnosPassword = document.getElementById('fnos-password');
+  const fnosButton = document.getElementById('fnos-bind-btn');
+  let fnosMode = 'register';
   document.getElementById('pwdBtn').addEventListener('click', () => { pInput.type = pInput.type === 'text' ? 'password' : 'text'; });
 
   async function autoLogin() {
@@ -346,6 +382,63 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   if (await autoLogin()) return;
+
+  function completeLogin(data) {
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('currentUser', JSON.stringify(data.user));
+    window.location.href = 'index.html';
+  }
+
+  function setFnOSMode(mode) {
+    fnosMode = mode;
+    document.querySelectorAll('.fnos-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.mode === mode));
+    fnosButton.textContent = mode === 'register' ? '创建并绑定' : '验证并绑定';
+    fnosPassword.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
+  }
+
+  async function tryFnOSLogin() {
+    if (!window.__bookmarksFnOSURL || new URLSearchParams(window.location.search).get('force') === '1') return false;
+    try {
+      const r = await fetch('/api/auth/fnos/login', { method: 'POST' });
+      const data = await r.json();
+      if (r.ok && data.binding_required) {
+        document.getElementById('fnos-bind-desc').textContent = `飞牛 NAS 用户“${data.fnos_username}”尚未绑定网址收藏夹账户。`;
+        fnosUsername.value = data.fnos_username || '';
+        form.hidden = true;
+        document.querySelector('.links').hidden = true;
+        fnosPanel.hidden = false;
+        return true;
+      }
+      if (r.ok && data.token) {
+        completeLogin(data);
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  document.querySelectorAll('.fnos-tab').forEach(tab => tab.addEventListener('click', () => setFnOSMode(tab.dataset.mode)));
+  fnosForm.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const username = fnosUsername.value.trim();
+    const password = fnosPassword.value;
+    if (!username || !password) { showAlert('请输入应用用户名和密码'); return; }
+    if (fnosMode === 'register' && password.length < 6) { showAlert('密码长度不能少于 6 位'); return; }
+    fnosButton.disabled = true;
+    fnosButton.textContent = fnosMode === 'register' ? '创建中…' : '验证中…';
+    try {
+      const r = await fetch('/api/auth/fnos/bind', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: fnosMode, username, password: MD5(password) })
+      });
+      const data = await r.json();
+      if (r.ok) { completeLogin(data); return; }
+      showAlert(data.error || '绑定失败，请稍后重试');
+    } catch (e) { showAlert('网络错误，请稍后重试'); }
+    finally { fnosButton.disabled = false; setFnOSMode(fnosMode); }
+  });
+
+  if (await tryFnOSLogin()) return;
 
   if (localStorage.getItem('remember_me') === 'true') {
     uInput.value = localStorage.getItem('saved_username') || '';
@@ -390,9 +483,7 @@ document.addEventListener('DOMContentLoaded', async function () {
           localStorage.removeItem('saved_username'); localStorage.removeItem('saved_password');
           localStorage.setItem('remember_me', 'false');
         }
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('currentUser', JSON.stringify(data.user));
-        window.location.href = 'index.html';
+        completeLogin(data);
       } else { showAlert(data.error || '登录失败，请检查用户名和密码'); }
     } catch (e) { showAlert('网络错误，请稍后重试'); }
     finally { btn.disabled = false; btn.textContent = '登录'; }

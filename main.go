@@ -23,20 +23,23 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"bookmark/app/logger"
 	"bookmark/app/logic"
 	"bookmark/app/utils"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -113,17 +116,17 @@ type node struct {
 }
 
 type user struct {
-	ID                   int64    `json:"id"`
-	Username             string   `json:"username"`
-	Nickname             string   `json:"nickname"`
-	Email                string   `json:"email"`
-	Avatar               *string  `json:"avatar"`
-	IsActive             bool     `json:"is_active"`
-	IsAdmin              bool     `json:"is_admin"`
-	APIKey               *string  `json:"api_key,omitempty"`
-	LastLoginAt          *string  `json:"last_login_at,omitempty"`
-	CreatedAt            string   `json:"created_at"`
-	HasSecurityQuestions bool     `json:"has_security_questions"`
+	ID                   int64   `json:"id"`
+	Username             string  `json:"username"`
+	Nickname             string  `json:"nickname"`
+	Email                string  `json:"email"`
+	Avatar               *string `json:"avatar"`
+	IsActive             bool    `json:"is_active"`
+	IsAdmin              bool    `json:"is_admin"`
+	APIKey               *string `json:"api_key,omitempty"`
+	LastLoginAt          *string `json:"last_login_at,omitempty"`
+	CreatedAt            string  `json:"created_at"`
+	HasSecurityQuestions bool    `json:"has_security_questions"`
 }
 
 type authRequest struct {
@@ -146,6 +149,19 @@ type changePasswordRequest struct {
 type authResponse struct {
 	Token string `json:"token"`
 	User  *user  `json:"user"`
+}
+
+type fnOSIdentity struct {
+	UserID   int64
+	Username string
+}
+
+type fnOSBindRequest struct {
+	Mode     string `json:"mode"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Nickname string `json:"nickname,omitempty"`
+	Email    string `json:"email,omitempty"`
 }
 
 type createUserRequest struct {
@@ -181,6 +197,13 @@ type contextKey string
 const (
 	userContextKey contextKey = "user"
 )
+
+// fnOSGatewayContextKey is only set by the HTTP server that accepts requests
+// from the fnOS Unix socket. Header names alone must never be trusted: a
+// client connected to the normal TCP port can forge them.
+type fnOSGatewayContextKey struct{}
+
+type fnOSGatewayPrefixContextKey struct{}
 
 type StatsRequest struct {
 	AppName    string `json:"app_name"`
@@ -240,6 +263,9 @@ func main() {
 	deviceType := flag.String("deviceType", "", "设备类型")
 	insecureTLS := flag.Bool("insecureTLS", false, "抓取网页元数据时跳过TLS证书验证（用于内网自签名证书环境）")
 	disableStats := flag.Bool("disableStats", false, "禁用匿名使用统计上报（也可设置环境变量 DISABLE_STATS=1）")
+	fnOSApp := flag.Bool("fnos-app", false, "以飞牛 fnOS 统一网关应用模式运行")
+	gatewayPrefix := flag.String("gateway-prefix", "/app/techfunway.bookmarks", "飞牛统一网关应用前缀（仅 -fnos-app）")
+	gatewaySocket := flag.String("gateway-socket", "", "飞牛统一网关 Unix Socket 路径（仅 -fnos-app）")
 	flag.Parse()
 
 	if !*disableStats && os.Getenv("DISABLE_STATS") == "" {
@@ -330,6 +356,9 @@ func main() {
 	if err := upgrader.PerformUpgrade(); err != nil {
 		log.Printf("系统升级失败: %v", err)
 	}
+	if err := ensureFnOSBindingSchema(db); err != nil {
+		log.Fatalf("failed to prepare fnOS account binding schema: %v", err)
+	}
 
 	// 元数据抓取的HTTP客户端；默认验证TLS证书，-insecureTLS 可关闭（内网自签名证书场景）
 	transport := &http.Transport{}
@@ -379,6 +408,10 @@ func main() {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", s.handleRegister)
 			r.Post("/login", s.handleLogin)
+			if *fnOSApp {
+				r.Post("/fnos/login", s.handleFnOSLogin)
+				r.Post("/fnos/bind", s.handleFnOSBind)
+			}
 			r.Post("/logout", s.handleLogout)
 			r.Post("/change-password", s.tokenAuthMiddleware(s.handleChangePassword))
 			r.Post("/regenerate-api-key", s.tokenAuthMiddleware(s.handleRegenerateAPIKey))
@@ -409,9 +442,9 @@ func main() {
 			r.Delete("/nodes/{id}", s.handleAdminDeleteNode)
 			r.Get("/audit-log", s.handleGetAuditLog)
 			r.Get("/audit-log/export", s.handleExportAuditLog)
-				r.Post("/folders", s.handleAdminCreateFolder)
-				r.Post("/bookmarks", s.handleAdminCreateBookmark)
-				r.Put("/nodes/reorder", s.handleAdminReorderNodes)
+			r.Post("/folders", s.handleAdminCreateFolder)
+			r.Post("/bookmarks", s.handleAdminCreateBookmark)
+			r.Put("/nodes/reorder", s.handleAdminReorderNodes)
 		})
 		r.Get("/tree", s.optionalAuthMiddleware(s.handleGetTree))
 		r.Get("/public-tree", s.handleGetPublicTree)
@@ -460,7 +493,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create static filesystem: %v", err)
 	}
-	fileServer := http.FileServer(http.FS(staticFiles))
+	fileServer := fnOSStaticFileServer(staticFiles)
+	if *fnOSApp {
+		prefix := strings.TrimSuffix(*gatewayPrefix, "/")
+		if !strings.HasPrefix(prefix, "/app/") {
+			log.Fatalf("-gateway-prefix 必须以 /app/ 开头: %s", prefix)
+		}
+		r.Get(prefix, func(w http.ResponseWriter, req *http.Request) {
+			http.Redirect(w, req, prefix+"/", http.StatusTemporaryRedirect)
+		})
+		r.Handle(prefix+"/*", fnOSGatewayProxy(prefix, r))
+	}
 	r.Get("/manifest.webmanifest", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/manifest+json")
 		fileServer.ServeHTTP(w, req)
@@ -472,10 +515,12 @@ func main() {
 	iconFileServer := http.FileServer(http.Dir(iconPath))
 	r.Handle("/icons/*", http.StripPrefix("/icons", iconFileServer))
 
-	addr := ":" + *port
-	Debug("Bookmark server running on %s", addr)
-
-	if err := http.ListenAndServe(addr, r); err != nil {
+	Debug("Bookmark server running on :%s", *port)
+	if *fnOSApp {
+		log.Printf("飞牛统一网关: %s", strings.TrimSuffix(*gatewayPrefix, "/"))
+		log.Printf("飞牛网关 Socket: %s", *gatewaySocket)
+	}
+	if err := serveHTTP(r, *port, *fnOSApp, *gatewaySocket); err != nil {
 		log.Fatalf("server exited: %v", err)
 	}
 }
@@ -536,6 +581,165 @@ CREATE INDEX IF NOT EXISTS idx_nodes_user_parent_position ON nodes(user_id, pare
 	}
 
 	return nil
+}
+
+// ensureFnOSBindingSchema is intentionally idempotent. The legacy upgrade
+// ledger has already recorded v3.3.0 for existing installations, so a
+// one-time versioned migration would be skipped there. Running this compact
+// schema check at startup safely covers both old and fresh databases.
+func ensureFnOSBindingSchema(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(users)`)
+	if err != nil {
+		return fmt.Errorf("读取 users 表结构失败: %w", err)
+	}
+	defer rows.Close()
+
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("读取 users 列失败: %w", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("遍历 users 列失败: %w", err)
+	}
+	if len(columns) == 0 {
+		return errors.New("users 表不存在")
+	}
+	if !columns["fnos_user_id"] {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN fnos_user_id INTEGER`); err != nil {
+			return fmt.Errorf("添加 fnos_user_id 失败: %w", err)
+		}
+	}
+	if !columns["fnos_username"] {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN fnos_username TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("添加 fnos_username 失败: %w", err)
+		}
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_fnos_user_id
+		ON users(fnos_user_id) WHERE fnos_user_id IS NOT NULL`); err != nil {
+		return fmt.Errorf("创建 fnOS 用户绑定索引失败: %w", err)
+	}
+	return nil
+}
+
+// fnOSGatewayProxy maps the fnOS application mount path back to the existing
+// router. It keeps the original prefix in the request context so HTML can
+// rewrite root-relative assets and API calls for the iframe environment.
+func fnOSGatewayProxy(prefix string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), fnOSGatewayPrefixContextKey{}, prefix)
+		http.StripPrefix(prefix, next).ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// fnOSStaticFileServer injects a small compatibility layer only for requests
+// that passed through the fnOS application prefix. The historical frontend
+// uses root-relative paths; the layer scopes assets and fetch('/api/...') to
+// the iframe's /app/techfunway.bookmarks mount while leaving normal port-based
+// and Docker deployments unchanged.
+func fnOSStaticFileServer(staticFiles fs.FS) http.Handler {
+	fallback := http.FileServer(http.FS(staticFiles))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prefix, fromGateway := r.Context().Value(fnOSGatewayPrefixContextKey{}).(string)
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if !fromGateway || (path != "" && !strings.HasSuffix(path, ".html")) {
+			fallback.ServeHTTP(w, r)
+			return
+		}
+		if path == "" {
+			path = "index.html"
+		}
+		if strings.Contains(path, "..") {
+			fallback.ServeHTTP(w, r)
+			return
+		}
+		contents, err := fs.ReadFile(staticFiles, path)
+		if err != nil {
+			fallback.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(injectFnOSBootstrap(string(contents), prefix)))
+	})
+}
+
+func injectFnOSBootstrap(page, prefix string) string {
+	base := strings.TrimSuffix(prefix, "/")
+	// Rewrite markup that is loaded before JavaScript (stylesheets, icons and
+	// scripts). Root-relative fetch calls are handled by the bootstrap below.
+	for _, attribute := range []string{"href=\"/", "src=\"/", "action=\"/", "href='/", "src='/", "action='/"} {
+		page = strings.ReplaceAll(page, attribute, strings.TrimSuffix(attribute, "/")+base+"/")
+	}
+	page = strings.ReplaceAll(page, "url('/", "url('"+base+"/")
+	page = strings.ReplaceAll(page, "url(\"/", "url(\""+base+"/")
+	bootstrap := fmt.Sprintf(`<base href="%s/"><script>(function(){const base=%q;window.__bookmarksFnOSURL=function(path){return typeof path==='string'&&path.charAt(0)==='/'&&!path.startsWith(base+'/')?base+path:path;};const nativeFetch=window.fetch.bind(window);window.fetch=function(input,init){if(typeof input==='string'){input=window.__bookmarksFnOSURL(input);}return nativeFetch(input,init);};document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('[href],[src],[action]').forEach(function(el){['href','src','action'].forEach(function(name){const value=el.getAttribute(name);if(value&&value.charAt(0)==='/'){el.setAttribute(name,window.__bookmarksFnOSURL(value));}});});});})();</script>`, base, base)
+	if strings.Contains(page, "</head>") {
+		return strings.Replace(page, "</head>", bootstrap+"</head>", 1)
+	}
+	return bootstrap + page
+}
+
+func serveHTTP(handler http.Handler, port string, fnOSApp bool, gatewaySocket string) error {
+	tcpListener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return err
+	}
+	if !fnOSApp {
+		return (&http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}).Serve(tcpListener)
+	}
+	if gatewaySocket == "" {
+		_ = tcpListener.Close()
+		return errors.New("-fnos-app requires -gateway-socket")
+	}
+	if err := os.MkdirAll(filepath.Dir(gatewaySocket), 0755); err != nil {
+		_ = tcpListener.Close()
+		return fmt.Errorf("创建网关 Socket 目录失败: %w", err)
+	}
+	if err := os.Remove(gatewaySocket); err != nil && !os.IsNotExist(err) {
+		_ = tcpListener.Close()
+		return fmt.Errorf("删除旧网关 Socket 失败: %w", err)
+	}
+	unixListener, err := net.Listen("unix", gatewaySocket)
+	if err != nil {
+		_ = tcpListener.Close()
+		return fmt.Errorf("监听飞牛网关 Socket 失败: %w", err)
+	}
+	defer os.Remove(gatewaySocket)
+
+	directServer := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
+	gatewayServer := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ConnContext: func(ctx context.Context, _ net.Conn) context.Context {
+			return context.WithValue(ctx, fnOSGatewayContextKey{}, true)
+		},
+	}
+	errorsCh := make(chan error, 2)
+	go func() { errorsCh <- directServer.Serve(tcpListener) }()
+	go func() { errorsCh <- gatewayServer.Serve(unixListener) }()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(quit)
+	select {
+	case err := <-errorsCh:
+		if err == http.ErrServerClosed {
+			return nil
+		}
+		return err
+	case <-quit:
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = directServer.Shutdown(ctx)
+		_ = gatewayServer.Shutdown(ctx)
+		return nil
+	}
 }
 
 func (s *server) handleGetTree(w http.ResponseWriter, r *http.Request) {
@@ -1939,12 +2143,12 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 	}
 
 	insertedNode := &node{
-		ID:       newID,
-		Type:     nType,
-		Title:    title,
-		Remark:   remark,
-			Visibility: visibility,
-		Position: nextPos,
+		ID:         newID,
+		Type:       nType,
+		Title:      title,
+		Remark:     remark,
+		Visibility: visibility,
+		Position:   nextPos,
 	}
 	if parentID != nil {
 		copyID := *parentID
@@ -1963,12 +2167,12 @@ func (s *server) insertNode(ctx context.Context, userID int64, nType, title stri
 
 func (s *server) updateNode(ctx context.Context, userID int64, id int64, req updateNodeRequest) error {
 	var current struct {
-		Type     string
-		ParentID sql.NullInt64
-		Title    string
-		URL      sql.NullString
-		Favicon  sql.NullString
-		Remark   string
+		Type       string
+		ParentID   sql.NullInt64
+		Title      string
+		URL        sql.NullString
+		Favicon    sql.NullString
+		Remark     string
 		Visibility string
 	}
 	err := s.db.QueryRowContext(ctx, "SELECT type, parent_id, title, url, favicon_url, remark, visibility FROM nodes WHERE id = ? AND user_id = ?", id, userID).Scan(
@@ -2597,11 +2801,11 @@ func normalizeURL(input string) (string, error) {
 
 // dupeKeyOptions 去重规范化选项
 type dupeKeyOptions struct {
-	crossFolder       bool // 不同文件夹计重复
-	ignoreScheme       bool // HTTP/HTTPS 视为相同
-	ignoreWWW          bool // www. 与无 www 视为相同
+	crossFolder         bool // 不同文件夹计重复
+	ignoreScheme        bool // HTTP/HTTPS 视为相同
+	ignoreWWW           bool // www. 与无 www 视为相同
 	ignoreTrailingSlash bool // 末尾 / 差异忽略
-	ignoreQuery        bool // ? 参数差异忽略
+	ignoreQuery         bool // ? 参数差异忽略
 }
 
 // normalizeURLKey 将 URL 按用户选择的规则规范化后返回，用于去重比较。
@@ -2851,10 +3055,11 @@ func isNewerVersion(latest, current string) bool {
 // handleCheckDuplicates 检查重复书签
 //
 // 支持查询参数让用户自定义重复判定规则：
-//   ignore_scheme=true      忽略 http/https 协议前缀
-//   ignore_www=true          忽略 www. 主机名前缀
-//   ignore_trailing_slash=true  忽略路径末尾的 /
-//   ignore_query=true        忽略 ? 查询参数
+//
+//	ignore_scheme=true      忽略 http/https 协议前缀
+//	ignore_www=true          忽略 www. 主机名前缀
+//	ignore_trailing_slash=true  忽略路径末尾的 /
+//	ignore_query=true        忽略 ? 查询参数
 func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	q := r.URL.Query()
@@ -2914,9 +3119,9 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 
 	// 查找重复的URL（数量大于1）
 	var duplicates []struct {
-		URL              string         `json:"url"`
-		Bookmarks        []bookmarkInfo `json:"bookmarks"`
-		HasSchemeMismatch bool          `json:"hasSchemeMismatch"`
+		URL               string         `json:"url"`
+		Bookmarks         []bookmarkInfo `json:"bookmarks"`
+		HasSchemeMismatch bool           `json:"hasSchemeMismatch"`
 	}
 
 	totalBookmarks := 0
@@ -2938,12 +3143,12 @@ func (s *server) handleCheckDuplicates(w http.ResponseWriter, r *http.Request) {
 			// 展示 URL 用去协议后的规范化 key（http 和 https 版本都能看懂）
 			displayURL := key
 			duplicates = append(duplicates, struct {
-				URL              string         `json:"url"`
-				Bookmarks        []bookmarkInfo `json:"bookmarks"`
-				HasSchemeMismatch bool          `json:"hasSchemeMismatch"`
+				URL               string         `json:"url"`
+				Bookmarks         []bookmarkInfo `json:"bookmarks"`
+				HasSchemeMismatch bool           `json:"hasSchemeMismatch"`
 			}{
-				URL:              displayURL,
-				Bookmarks:        bookmarks,
+				URL:               displayURL,
+				Bookmarks:         bookmarks,
 				HasSchemeMismatch: hasHTTP[key] && hasHTTPS[key],
 			})
 			duplicateBookmarksCount += len(bookmarks)
@@ -4318,6 +4523,7 @@ func (s *server) handleAdminReorderNodes(w http.ResponseWriter, r *http.Request)
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
 // saveBase64Icon 保存base64图标到本地文件
 func saveBase64Icon(iconData string, iconPath string) (string, error) {
 	// 检查是否是base64数据
@@ -5015,6 +5221,294 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Token: token,
 		User:  user,
 	})
+}
+
+func fnOSIdentityFromRequest(r *http.Request) (fnOSIdentity, error) {
+	if r.Context().Value(fnOSGatewayContextKey{}) != true {
+		return fnOSIdentity{}, errors.New("请从飞牛桌面中的应用入口使用一键登录")
+	}
+	userID, err := strconv.ParseInt(r.Header.Get("X-Trim-Userid"), 10, 64)
+	username := strings.TrimSpace(r.Header.Get("X-Trim-Username"))
+	if err != nil || userID <= 0 || username == "" {
+		return fnOSIdentity{}, errors.New("未获取到飞牛 NAS 登录信息")
+	}
+	return fnOSIdentity{UserID: userID, Username: username}, nil
+}
+
+// handleFnOSLogin signs in only an account previously bound to the NAS-local
+// UID. A NAS username is display data and can change, so it is refreshed but
+// never used as the binding key.
+func (s *server) handleFnOSLogin(w http.ResponseWriter, r *http.Request) {
+	identity, err := fnOSIdentityFromRequest(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, err)
+		return
+	}
+
+	var dbUser struct {
+		ID        int64
+		Username  string
+		Nickname  string
+		Email     sql.NullString
+		Avatar    sql.NullString
+		IsActive  int
+		IsAdmin   int
+		Token     sql.NullString
+		APIKey    sql.NullString
+		CreatedAt string
+	}
+	err = s.db.QueryRowContext(r.Context(), `
+		SELECT id, username, nickname, email, avatar, is_active, is_admin, token, api_key, created_at
+		FROM users WHERE fnos_user_id = ?
+	`, identity.UserID).Scan(
+		&dbUser.ID, &dbUser.Username, &dbUser.Nickname, &dbUser.Email, &dbUser.Avatar,
+		&dbUser.IsActive, &dbUser.IsAdmin, &dbUser.Token, &dbUser.APIKey, &dbUser.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"binding_required": true,
+			"fnos_username":    identity.Username,
+		})
+		return
+	}
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if dbUser.IsActive != 1 {
+		respondError(w, http.StatusForbidden, errors.New("账号已被禁用"))
+		return
+	}
+
+	token, apiKey, err := s.ensureUserCredentials(r.Context(), dbUser.ID, dbUser.Token, dbUser.APIKey)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if _, err := s.db.ExecContext(r.Context(), `UPDATE users SET fnos_username = ?, last_login_at = CURRENT_TIMESTAMP WHERE id = ?`, identity.Username, dbUser.ID); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	loggedIn := userFromAuthRow(dbUser.ID, dbUser.Username, dbUser.Nickname, dbUser.Email, dbUser.Avatar, dbUser.IsActive, dbUser.IsAdmin, apiKey, dbUser.CreatedAt)
+	s.logAudit(r.Context(), dbUser.ID, dbUser.Username, "fnos_login", "user", dbUser.ID, "飞牛 NAS 一键登录", r.RemoteAddr)
+	respondJSON(w, http.StatusOK, authResponse{Token: token, User: loggedIn})
+}
+
+// handleFnOSBind either creates an application account or verifies an existing
+// one, then atomically binds it to the current NAS-local UID.
+func (s *server) handleFnOSBind(w http.ResponseWriter, r *http.Request) {
+	identity, err := fnOSIdentityFromRequest(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, err)
+		return
+	}
+	var req fnOSBindRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	req.Mode = strings.TrimSpace(req.Mode)
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+	req.Nickname = strings.TrimSpace(req.Nickname)
+	req.Email = strings.TrimSpace(req.Email)
+	if req.Username == "" || req.Password == "" {
+		respondError(w, http.StatusBadRequest, errors.New("用户名和密码不能为空"))
+		return
+	}
+	if req.Mode != "register" && req.Mode != "bind" {
+		respondError(w, http.StatusBadRequest, errors.New("无效的绑定方式"))
+		return
+	}
+
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback()
+
+	var linkedID int64
+	err = tx.QueryRowContext(r.Context(), `SELECT id FROM users WHERE fnos_user_id = ?`, identity.UserID).Scan(&linkedID)
+	if err == nil {
+		respondError(w, http.StatusConflict, errors.New("当前飞牛 NAS 账号已绑定应用账户"))
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	var dbUser struct {
+		ID         int64
+		Username   string
+		Password   string
+		Nickname   string
+		Email      sql.NullString
+		Avatar     sql.NullString
+		IsActive   int
+		IsAdmin    int
+		Token      sql.NullString
+		APIKey     sql.NullString
+		CreatedAt  string
+		FnOSUserID sql.NullInt64
+	}
+
+	switch req.Mode {
+	case "register":
+		if len(req.Password) < 6 {
+			respondError(w, http.StatusBadRequest, errors.New("密码长度不能少于6位"))
+			return
+		}
+		var allowRegister string
+		if err := tx.QueryRowContext(r.Context(), `SELECT value FROM sys_config WHERE user_id = 0 AND key = ?`, "allow_register").Scan(&allowRegister); err == nil && allowRegister == "false" {
+			respondError(w, http.StatusForbidden, errors.New("系统已关闭注册功能"))
+			return
+		}
+		var userCount int
+		if err := tx.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM users`).Scan(&userCount); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		nickname := req.Nickname
+		if nickname == "" {
+			nickname = req.Username
+		}
+		result, err := tx.ExecContext(r.Context(), `
+			INSERT INTO users (username, password, nickname, email, is_admin, fnos_user_id, fnos_username)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, req.Username, utils.MD5Hash(req.Password, "bookmarks"), nickname, req.Email, userCount == 0, identity.UserID, identity.Username)
+		if err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+				respondError(w, http.StatusConflict, errors.New("用户名已存在"))
+				return
+			}
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		userID, err := result.LastInsertId()
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		dbUser = struct {
+			ID         int64
+			Username   string
+			Password   string
+			Nickname   string
+			Email      sql.NullString
+			Avatar     sql.NullString
+			IsActive   int
+			IsAdmin    int
+			Token      sql.NullString
+			APIKey     sql.NullString
+			CreatedAt  string
+			FnOSUserID sql.NullInt64
+		}{ID: userID, Username: req.Username, Nickname: nickname, IsActive: 1, IsAdmin: boolToInt(userCount == 0), FnOSUserID: sql.NullInt64{Int64: identity.UserID, Valid: true}}
+		if userCount == 0 {
+			if _, err := tx.ExecContext(r.Context(), `UPDATE nodes SET user_id = ? WHERE user_id = 0`, userID); err != nil {
+				Debug("绑定首个飞牛账户时更新 nodes.user_id 失败: %v", err)
+			}
+			if _, err := tx.ExecContext(r.Context(), `UPDATE sys_config SET user_id = ? WHERE user_id = 0`, userID); err != nil {
+				Debug("绑定首个飞牛账户时更新 sys_config.user_id 失败: %v", err)
+			}
+		}
+	case "bind":
+		err := tx.QueryRowContext(r.Context(), `
+			SELECT id, username, password, nickname, email, avatar, is_active, is_admin, token, api_key, created_at, fnos_user_id
+			FROM users WHERE username = ?
+		`, req.Username).Scan(
+			&dbUser.ID, &dbUser.Username, &dbUser.Password, &dbUser.Nickname, &dbUser.Email, &dbUser.Avatar,
+			&dbUser.IsActive, &dbUser.IsAdmin, &dbUser.Token, &dbUser.APIKey, &dbUser.CreatedAt, &dbUser.FnOSUserID,
+		)
+		if errors.Is(err, sql.ErrNoRows) || dbUser.IsActive != 1 {
+			respondError(w, http.StatusUnauthorized, errors.New("用户名或密码错误"))
+			return
+		}
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		doubleHashedPassword := utils.MD5Hash(req.Password, "bookmarks")
+		if dbUser.Password != doubleHashedPassword {
+			if err := bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(doubleHashedPassword)); err != nil {
+				respondError(w, http.StatusUnauthorized, errors.New("用户名或密码错误"))
+				return
+			}
+			if _, err := tx.ExecContext(r.Context(), `UPDATE users SET password = ? WHERE id = ?`, doubleHashedPassword, dbUser.ID); err != nil {
+				respondError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+		if dbUser.FnOSUserID.Valid && dbUser.FnOSUserID.Int64 != identity.UserID {
+			respondError(w, http.StatusConflict, errors.New("该应用账号已绑定其他飞牛 NAS 账号"))
+			return
+		}
+		if _, err := tx.ExecContext(r.Context(), `UPDATE users SET fnos_user_id = ?, fnos_username = ? WHERE id = ?`, identity.UserID, identity.Username, dbUser.ID); err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
+	token := dbUser.Token.String
+	if !dbUser.Token.Valid || token == "" {
+		token = uuid.New().String()
+	}
+	apiKey := dbUser.APIKey.String
+	if !dbUser.APIKey.Valid || apiKey == "" {
+		apiKey = strings.ReplaceAll(uuid.New().String(), "-", "")
+	}
+	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET token = ?, api_key = ?, last_login_at = CURRENT_TIMESTAMP WHERE id = ?`, token, apiKey, dbUser.ID); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		respondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	loggedIn := userFromAuthRow(dbUser.ID, dbUser.Username, dbUser.Nickname, dbUser.Email, dbUser.Avatar, dbUser.IsActive, dbUser.IsAdmin, apiKey, dbUser.CreatedAt)
+	s.logAudit(r.Context(), dbUser.ID, dbUser.Username, "fnos_bind", "user", dbUser.ID, "绑定飞牛 NAS 账号", r.RemoteAddr)
+	respondJSON(w, http.StatusOK, authResponse{Token: token, User: loggedIn})
+}
+
+func (s *server) ensureUserCredentials(ctx context.Context, userID int64, currentToken, currentAPIKey sql.NullString) (string, string, error) {
+	token := currentToken.String
+	if !currentToken.Valid || token == "" {
+		token = uuid.New().String()
+	}
+	apiKey := currentAPIKey.String
+	if !currentAPIKey.Valid || apiKey == "" {
+		apiKey = strings.ReplaceAll(uuid.New().String(), "-", "")
+	}
+	if (!currentToken.Valid || currentToken.String == "") || (!currentAPIKey.Valid || currentAPIKey.String == "") {
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET token = ?, api_key = ? WHERE id = ?`, token, apiKey, userID); err != nil {
+			return "", "", err
+		}
+	}
+	return token, apiKey, nil
+}
+
+func userFromAuthRow(id int64, username, nickname string, email, avatar sql.NullString, isActive, isAdmin int, apiKey, createdAt string) *user {
+	result := &user{ID: id, Username: username, Nickname: nickname, IsActive: isActive == 1, IsAdmin: isAdmin == 1, CreatedAt: createdAt}
+	if email.Valid {
+		result.Email = email.String
+	}
+	if avatar.Valid {
+		result.Avatar = &avatar.String
+	}
+	if apiKey != "" {
+		result.APIKey = &apiKey
+	}
+	return result
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 // handleLogout 用户登出
