@@ -202,6 +202,13 @@ const app = createApp({
         currentUser: null,
         token: localStorage.getItem('token') || null,
         tree: [],
+		// Tree is the source of truth. These caches are rebuilt after each
+		// /api/tree response so Vue does not recursively flatten the whole
+		// tree again for every computed property and render.
+		bookmarkListCache: [],
+		bookmarksByFolder: Object.create(null),
+		nodeIndex: Object.create(null),
+		renderLimit: 100,
         loading: false,
         selectedNodeId: null,
         treeActionsVisible: false,
@@ -393,8 +400,7 @@ const app = createApp({
     },
   computed: {
     totalBookmarks() {
-      // 计算所有书签的总数
-      return this.collectBookmarks(this.tree).length;
+      return this.bookmarkListCache.length;
     },
     selectedNode() {
       if (!this.selectedNodeId) return null;
@@ -416,7 +422,7 @@ const app = createApp({
       };
     },
     bookmarkList() {
-      return this.collectBookmarks(this.tree);
+      return this.bookmarkListCache;
     },
     displayBookmarks() {
       // 如果处于搜索模式，返回搜索结果
@@ -436,13 +442,21 @@ const app = createApp({
         return this.bookmarkList;
       }
       if (current.type === "folder") {
-        const ids = new Set(this.collectBookmarkIds(current));
-        return this.bookmarkList.filter((item) => ids.has(item.id));
+        return this.bookmarksByFolder[current.id] || [];
       }
       if (current.type === "bookmark") {
         return this.bookmarkList.filter((item) => item.id === current.id);
       }
       return this.bookmarkList;
+    },
+    visibleBookmarks() {
+      return this.displayBookmarks.slice(0, this.renderLimit);
+    },
+    hasMoreBookmarks() {
+      return this.displayBookmarks.length > this.renderLimit;
+    },
+    remainingBookmarkCount() {
+      return Math.max(0, this.displayBookmarks.length - this.renderLimit);
     },
     listTitle() {
       // 如果处于搜索模式，显示搜索结果数量
@@ -512,6 +526,46 @@ const app = createApp({
       if (node.user_id === undefined || node.user_id === null) return true;
       return node.user_id === this.ownUserId;
     },
+	 rebuildBookmarkCache() {
+		const bookmarkList = [];
+		const bookmarksByFolder = Object.create(null);
+		const nodeIndex = Object.create(null);
+		const visit = (nodes, trail = [], folderIDs = []) => {
+			for (const node of nodes) {
+				nodeIndex[node.id] = node;
+				if (node.type === "folder") {
+					visit(node.children || [], trail.concat(node.title), folderIDs.concat(node.id));
+					continue;
+				}
+				if (node.type !== "bookmark") continue;
+				const bookmark = {
+					id: node.id,
+					title: node.title,
+					url: node.url,
+					favicon_url: node.favicon_url,
+					remark: node.remark || "",
+					visibility: node.visibility || "private",
+					path: trail.join(" / "),
+					updated_at: node.updated_at,
+					raw: node,
+				};
+				bookmarkList.push(bookmark);
+				for (const folderID of folderIDs) {
+					(bookmarksByFolder[folderID] ||= []).push(bookmark);
+				}
+			}
+		};
+		visit(this.tree);
+		this.bookmarkListCache = bookmarkList;
+		this.bookmarksByFolder = bookmarksByFolder;
+		this.nodeIndex = nodeIndex;
+	},
+	 resetRenderedBookmarks() {
+		this.renderLimit = 100;
+	},
+	 showMoreBookmarks() {
+		this.renderLimit += 100;
+	},
     async checkAuth() {
   const token = localStorage.getItem('token');
   if (token) {
@@ -1661,24 +1715,12 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       });
     },
     getFaviconUrl(item) {
-      // 如果有明确的favicon_url，优先使用，无论是否是内网地址
+      // 只使用已保存的图标。过去这里会对每个缺图标书签直连目标站的
+      // /favicon.ico；大量书签会让一次打开页面变成数百个外网请求。
       if (item.favicon_url && item.favicon_url.trim()) {
         return item.favicon_url.trim();
       }
-      
-      // 如果是内网地址且没有favicon_url，不显示favicon，返回空字符串让前端显示默认图标
-      if (this.isIntranetUrl(item.url)) {
-        return '';
-      }
-      
-      // 如果没有favicon_url且不是内网地址，则使用默认的 /favicon.ico 路径
-      try {
-        const url = new URL(item.url);
-        return `${url.protocol}//${url.host}/favicon.ico`;
-      } catch (error) {
-        // 如果URL解析失败，返回空字符串
-        return '';
-      }
+      return '';
     },
     isIconUrl(s) { return s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:')); },
     onPreviewError(e) { e.target.style.display = 'none'; },
@@ -1699,6 +1741,8 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         const data = await response.json();
         console.log("加载树结构成功，节点数量:", data.length);
         this.tree = Array.isArray(data) ? data : [];
+		this.rebuildBookmarkCache();
+		this.resetRenderedBookmarks();
         if (this.selectedNodeId) {
           const current = this.findNodeById(this.selectedNodeId, this.tree);
           if (!current && this.selectedNodeId !== 'all-bookmarks') {
@@ -1736,6 +1780,9 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       return null;
     },
     findNodeById(id, list) {
+		if (list === this.tree && this.nodeIndex[id]) {
+			return this.nodeIndex[id];
+		}
       for (const item of list) {
         if (item.id === id) {
           return item;
@@ -1753,6 +1800,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.searchResults = [];
       
       this.selectedNodeId = node.id;
+		this.resetRenderedBookmarks();
       if (!this.treeActionsVisible) {
         this.hideContextMenu();
       }
@@ -1765,6 +1813,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.searchResults = [];
       
       this.selectedNodeId = 'all-bookmarks';
+		this.resetRenderedBookmarks();
       // 确保编辑模式下也不会对所有网址文件夹进行操作
       this.treeActionsVisible = false;
       this.hideContextMenu();
@@ -2581,6 +2630,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.searchResultVisible = false;
       this.searchResults = [];
       this.isSearching = false;
+		this.resetRenderedBookmarks();
     },
     handleSearch() {
       if (this.searchQuery.trim().length === 0) {
@@ -2596,7 +2646,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         if (!query) return;
         
         // 收集所有书签
-        const allBookmarks = this.collectBookmarks(this.tree);
+        const allBookmarks = this.bookmarkList;
         
         // 过滤符合条件的书签（搜索标题和URL）
         this.searchResults = allBookmarks.filter(bookmark => 
@@ -2610,6 +2660,7 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         
         // 开启搜索模式
         this.isSearching = true;
+        this.resetRenderedBookmarks();
         this.listTitle = `搜索结果（${this.searchResults.length} 个）`
         
         // 显示搜索结果数量
@@ -2818,4 +2869,3 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
 });
 
 app.mount("#app");
-

@@ -75,6 +75,7 @@ type server struct {
 	securityQuestions *logic.SecurityQuestions
 	verCache          *versionCheckCache
 	verCacheMu        sync.Mutex
+	browserCheckSem   chan struct{}
 }
 
 // 全局配置
@@ -191,6 +192,8 @@ type StatsRequest struct {
 	Hostname   string `json:"hostname"`
 }
 
+var statsHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
 func getDeviceID(dataUrl string) string {
 	hostname, _ := os.Hostname()
 	raw := hostname + runtime.GOOS + runtime.GOARCH + dataUrl
@@ -213,7 +216,12 @@ func startStatsReporter(appName, version, deviceType, dataUrl string) {
 
 	report := func() {
 		body, _ := json.Marshal(req)
-		http.Post("http://techfunway.wycto.cn/api/apps.online/refresh", "application/json", bytes.NewReader(body))
+		resp, err := statsHTTPClient.Post("http://techfunway.wycto.cn/api/apps.online/refresh", "application/json", bytes.NewReader(body))
+		if err != nil {
+			Debug("使用统计上报失败: %v", err)
+			return
+		}
+		resp.Body.Close()
 	}
 
 	ticker := time.NewTicker(60 * time.Minute)
@@ -306,9 +314,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
-	// SQLite 单连接避免多连接写锁竞争；WAL+busy_timeout 已在 DSN 中配置
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	// WAL 允许一个写入与多个读取同时进行。保留一个很小的连接池，避免导入、
+	// 图标后台补全等写入期间把首页的读取请求全部排在同一条连接后面。
+	// SQLite 仍然只会有一个写入者，busy_timeout 会负责短暂的写入竞争。
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(2)
 
 	// 初始化数据库
 	if err := initializeDB(db); err != nil {
@@ -344,6 +354,8 @@ func main() {
 		faviconChan:       make(chan int64, 100), // 缓冲队列，最多100个待处理任务
 		iconPath:          iconPath,              // 设置图标路径
 		securityQuestions: logic.NewSecurityQuestions(db),
+		// headless Chrome 会占用较多 CPU/内存，链接检测时最多同时运行一个。
+		browserCheckSem: make(chan struct{}, 1),
 	}
 
 	// 启动图标获取协程
@@ -500,13 +512,6 @@ func initializeDB(db *sql.DB) error {
 			log.Printf("创建nodes表失败: %v", err)
 		}
 
-		if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);
-CREATE INDEX IF NOT EXISTS idx_nodes_user_id ON nodes(user_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_user_id_parent ON nodes(user_id, parent_id);`); err != nil {
-			log.Printf("创建nodes表索引失败: %v", err)
-		}
-
 		if _, err := db.Exec(`CREATE TRIGGER IF NOT EXISTS trg_nodes_updated_at
 AFTER UPDATE ON nodes
 BEGIN
@@ -518,6 +523,16 @@ END;`); err != nil {
 		log.Println("数据库初始化成功")
 	} else {
 		log.Println("数据库表已存在，跳过初始化")
+	}
+
+	// 对已有安装也补齐索引。首页每次都会按用户读取并排序整棵树；缺少
+	// position 的复合索引时，SQLite 会在书签较多时额外创建临时排序结果。
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_parent_position ON nodes(parent_id, position);
+CREATE INDEX IF NOT EXISTS idx_nodes_user_id ON nodes(user_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_user_id_parent ON nodes(user_id, parent_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_user_parent_position ON nodes(user_id, parent_id, position, id);`); err != nil {
+		return fmt.Errorf("创建nodes表索引失败: %w", err)
 	}
 
 	return nil
@@ -674,18 +689,8 @@ func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
 		favicon = strings.TrimSpace(*req.FaviconURL)
 	}
 
-	if title == "" || favicon == "" {
-		metaTitle, metaIcon, metaErr := s.fetchMetadata(normalizedURL)
-		if metaErr == nil {
-			if title == "" {
-				title = metaTitle
-			}
-			if favicon == "" {
-				favicon = metaIcon
-			}
-		}
-	}
-
+	// 元数据抓取需要访问第三方站点，不能阻塞创建请求；以 URL 作为临时标题，
+	// 由后台队列在抓取成功后补全标题和图标。
 	if title == "" {
 		title = normalizedURL
 	}
@@ -708,6 +713,9 @@ func (s *server) handleCreateBookmark(w http.ResponseWriter, r *http.Request) {
 		}
 		respondError(w, http.StatusInternalServerError, err)
 		return
+	}
+	if newNode.FaviconURL == nil || *newNode.FaviconURL == "" || newNode.Title == normalizedURL {
+		s.queueFaviconFetch(newNode.ID)
 	}
 	respondJSON(w, http.StatusCreated, newNode)
 }
@@ -1622,7 +1630,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 		SELECT id, parent_id, user_id, type, title, url, favicon_url, remark, visibility, position, created_at, updated_at
 		FROM nodes
 		WHERE user_id = ?
-		ORDER BY parent_id IS NOT NULL, parent_id, position, id
+		ORDER BY parent_id, position, id
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -1657,6 +1665,7 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 	}
 
 	nodeMap := make(map[int64]*node, len(rawNodes))
+	orderedNodes := make([]*node, 0, len(rawNodes))
 	var roots []*node
 	var nodesWithoutValidParent []*node
 
@@ -1685,9 +1694,12 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 			n.FaviconURL = &favicon
 		}
 		nodeMap[rn.id] = n
+		orderedNodes = append(orderedNodes, n)
 	}
 
-	for _, n := range nodeMap {
+	// rawNodes 保留了 SQL 的 parent_id/position/id 排序。按该顺序组装树，
+	// 避免从 map 随机遍历后再次对每一个文件夹做 O(n log n) 排序。
+	for _, n := range orderedNodes {
 		if n.ParentID == nil {
 			roots = append(roots, n)
 			continue
@@ -1715,8 +1727,6 @@ func (s *server) loadTree(ctx context.Context, userID int64) ([]*node, error) {
 		}
 	}
 
-	sortNodes(roots)
-
 	// 计算每个文件夹的书签数量
 	calculateBookmarkCounts(roots)
 
@@ -1732,7 +1742,7 @@ func (s *server) loadPublicTree(ctx context.Context) ([]*node, error) {
 		SELECT id, parent_id, user_id, type, title, url, favicon_url, remark, visibility, position, created_at, updated_at
 		FROM nodes
 		WHERE visibility = 'public'
-		ORDER BY parent_id IS NOT NULL, parent_id, position, id
+		ORDER BY parent_id, position, id
 	`)
 	if err != nil {
 		return nil, err
@@ -1767,6 +1777,7 @@ func (s *server) loadPublicTree(ctx context.Context) ([]*node, error) {
 	}
 
 	nodeMap := make(map[int64]*node, len(rawNodes))
+	orderedNodes := make([]*node, 0, len(rawNodes))
 	var roots []*node
 	var nodesWithoutValidParent []*node
 
@@ -1795,9 +1806,10 @@ func (s *server) loadPublicTree(ctx context.Context) ([]*node, error) {
 			n.FaviconURL = &favicon
 		}
 		nodeMap[rn.id] = n
+		orderedNodes = append(orderedNodes, n)
 	}
 
-	for _, n := range nodeMap {
+	for _, n := range orderedNodes {
 		if n.ParentID == nil {
 			roots = append(roots, n)
 			continue
@@ -1817,7 +1829,6 @@ func (s *server) loadPublicTree(ctx context.Context) ([]*node, error) {
 		roots = append(roots, nodesWithoutValidParent...)
 	}
 
-	sortNodes(roots)
 	calculateBookmarkCounts(roots)
 
 	if roots == nil {
@@ -1858,23 +1869,6 @@ func calculateBookmarkCounts(nodes []*node) {
 					}
 				}
 			}
-		}
-	}
-}
-
-// sortNodes 对节点进行排序
-// 注意：SQL查询已经按parent_id, position, id排序，理论上此函数是冗余的
-// 但为了确保数据一致性，保留此函数作为额外的保障
-func sortNodes(nodes []*node) {
-	sort.Slice(nodes, func(i, j int) bool {
-		if nodes[i].Position == nodes[j].Position {
-			return nodes[i].ID < nodes[j].ID
-		}
-		return nodes[i].Position < nodes[j].Position
-	})
-	for _, child := range nodes {
-		if len(child.Children) > 0 {
-			sortNodes(child.Children)
 		}
 	}
 }
@@ -3122,6 +3116,16 @@ func (s *server) checkURL(ctx context.Context, rawURL string) (code int, categor
 
 	// HTTP 返回 403 时，用 headless Chrome 重试——可能是 Cloudflare JS 挑战
 	if code == 403 && ctx.Err() == nil {
+		if s.browserCheckSem != nil {
+			select {
+			case s.browserCheckSem <- struct{}{}:
+				defer func() { <-s.browserCheckSem }()
+			default:
+				// 已有一个 Chrome 复检在运行，保留本次 HTTP 结果，避免低配设备
+				// 同时派生多个浏览器进程而拖慢整个应用。
+				return code, category, reason, errorType
+			}
+		}
 		browserCode := checkURLWithBrowser(ctx, rawURL)
 		if browserCode >= 200 && browserCode < 400 {
 			return browserCode, "ok", "", ""
@@ -3169,7 +3173,7 @@ func (s *server) handleCheckLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const concurrency = 10
+	const concurrency = 5
 	sem := make(chan struct{}, concurrency)
 	results := make([]linkResult, len(req.Bookmarks))
 	var wg sync.WaitGroup
@@ -4254,17 +4258,6 @@ func (s *server) handleAdminCreateBookmark(w http.ResponseWriter, r *http.Reques
 	}
 	title := req.Title
 	favicon := req.FaviconURL
-	if title == "" || favicon == "" {
-		metaTitle, metaIcon, metaErr := s.fetchMetadata(normalizedURL)
-		if metaErr == nil {
-			if title == "" {
-				title = metaTitle
-			}
-			if favicon == "" {
-				favicon = metaIcon
-			}
-		}
-	}
 	if title == "" {
 		title = normalizedURL
 	}
@@ -4285,6 +4278,9 @@ func (s *server) handleAdminCreateBookmark(w http.ResponseWriter, r *http.Reques
 		}
 		respondError(w, http.StatusInternalServerError, err)
 		return
+	}
+	if newNode.FaviconURL == nil || *newNode.FaviconURL == "" || newNode.Title == normalizedURL {
+		s.queueFaviconFetch(newNode.ID)
 	}
 	adminUserID := getUserID(r)
 	s.logAudit(r.Context(), adminUserID, "", "admin_create_bookmark", "bookmark", newNode.ID,
@@ -4322,8 +4318,6 @@ func (s *server) handleAdminReorderNodes(w http.ResponseWriter, r *http.Request)
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
-
-
 // saveBase64Icon 保存base64图标到本地文件
 func saveBase64Icon(iconData string, iconPath string) (string, error) {
 	// 检查是否是base64数据
@@ -4540,9 +4534,10 @@ func findTitle(n *html.Node) (string, bool) {
 // faviconWorker 异步图标获取工作协程
 func (s *server) faviconWorker() {
 	for nodeID := range s.faviconChan {
-		// 获取书签信息
-		var url string
-		err := s.db.QueryRow("SELECT url FROM nodes WHERE id = ? AND type = ?", nodeID, nodeTypeBookmark).Scan(&url)
+		// 获取书签信息。标题等于 URL 表示创建时尚未抓到元数据。
+		var url, currentTitle string
+		var existingFavicon sql.NullString
+		err := s.db.QueryRow("SELECT url, title, favicon_url FROM nodes WHERE id = ? AND type = ?", nodeID, nodeTypeBookmark).Scan(&url, &currentTitle, &existingFavicon)
 		if err != nil {
 			Error("获取书签 %d 信息失败: %v", nodeID, err)
 			continue
@@ -4554,28 +4549,36 @@ func (s *server) faviconWorker() {
 			continue
 		}
 
-		// 如果已经有图标，跳过
-		var existingFavicon sql.NullString
-		err = s.db.QueryRow("SELECT favicon_url FROM nodes WHERE id = ?", nodeID).Scan(&existingFavicon)
-		if err == nil && existingFavicon.Valid && existingFavicon.String != "" {
-			Debug("书签 %d 已有图标，跳过", nodeID)
+		needsTitle := currentTitle == url
+		if existingFavicon.Valid && existingFavicon.String != "" && !needsTitle {
+			Debug("书签 %d 已有完整元数据，跳过", nodeID)
 			continue
 		}
 
-		// 获取图标
-		_, icon, err := s.fetchMetadata(url)
+		// 获取图标及临时标题的真实标题
+		metadataTitle, icon, err := s.fetchMetadata(url)
 		if err != nil {
 			Debug("获取书签 %d 图标失败: %v", nodeID, err)
 			continue
 		}
 
-		if icon == "" {
-			Debug("书签 %d 没有找到图标", nodeID)
+		fields := make([]string, 0, 2)
+		args := make([]any, 0, 3)
+		if (!existingFavicon.Valid || existingFavicon.String == "") && icon != "" {
+			fields = append(fields, "favicon_url = ?")
+			args = append(args, icon)
+		}
+		if needsTitle && metadataTitle != "" && metadataTitle != url {
+			fields = append(fields, "title = ?")
+			args = append(args, metadataTitle)
+		}
+		if len(fields) == 0 {
+			Debug("书签 %d 没有可更新的元数据", nodeID)
 			continue
 		}
 
-		// 更新数据库
-		_, err = s.db.Exec("UPDATE nodes SET favicon_url = ? WHERE id = ?", icon, nodeID)
+		args = append(args, nodeID)
+		_, err = s.db.Exec("UPDATE nodes SET "+strings.Join(fields, ", ")+" WHERE id = ?", args...)
 		if err != nil {
 			Error("更新书签 %d 图标失败: %v", nodeID, err)
 			continue

@@ -1094,6 +1094,16 @@ button {
   gap: 12px;
 }
 
+.load-more-bookmarks {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 24px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
 /* 网格布局样式 - 每行显示数量 */
 .bookmark-list.grid-1 {
   flex-direction: column;
@@ -3002,4 +3012,3 @@ input:checked + .toggle-slider:before {
   border: none;
   border-top: 1px solid var(--border);
 }
-

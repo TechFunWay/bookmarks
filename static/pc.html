@@ -319,7 +319,7 @@
           <div class="bookmark-scroll-container">
             <ul class="bookmark-list" :class="'grid-' + itemsPerRow">
               <li
-                      v-for="item in displayBookmarks"
+                      v-for="item in visibleBookmarks"
                       :key="item.id"
                       class="bookmark-item"
                       :class="{ 'selected': selectedBookmarks.has(item.id), 'editing': bookmarkEditMode }"
@@ -337,7 +337,7 @@
                 </div>
                 <div class="bookmark-main">
                       <span class="node-icon">
-                        <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" />
+                        <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" alt="favicon" loading="lazy" decoding="async" />
                         <span v-else>🌏</span>
                       </span>
                   <div class="bookmark-info">
@@ -371,6 +371,10 @@
                 </div>
               </li>
             </ul>
+            <div v-if="hasMoreBookmarks" class="load-more-bookmarks">
+              已显示 {{ visibleBookmarks.length }} / {{ displayBookmarks.length }} 个网址
+              <button class="tertiary small" @click="showMoreBookmarks">加载更多（剩余 {{ remainingBookmarkCount }}）</button>
+            </div>
           </div>
         </div>
       </div>
