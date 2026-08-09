@@ -20,6 +20,7 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+.development-note/
 .idea
 .DS_Store
 data.db
