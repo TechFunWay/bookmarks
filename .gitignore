@@ -22,6 +22,7 @@
 # vendor/
 .playwright-mcp/
 .omo/
+.development-note/
 .idea
 .DS_Store
 data.db
