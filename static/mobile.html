@@ -322,6 +322,8 @@
       -webkit-box-orient: vertical;
       word-break: break-all;
     }
+    .load-more-mobile { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; color: var(--text3); font-size: 12px; }
+    .load-more-mobile button { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: var(--surface); color: var(--primary); font: inherit; }
     .bm-grid-more {
       position: absolute; top: 4px; right: 4px;
       width: 22px; height: 22px;
@@ -866,7 +868,7 @@
         <!-- List View -->
         <div v-if="viewMode === 'list'" class="bm-list">
           <div
-            v-for="item in currentFolderBookmarks"
+            v-for="item in renderedBookmarks"
             :key="item.id"
             class="bm-item"
             :class="{ selected: selectedIds.has(item.id) }"
@@ -875,7 +877,7 @@
           >
             <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-checkbox" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
             <div class="bm-favicon">
-              <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
+              <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" loading="lazy" decoding="async" @error="e=>e.target.style.display='none'" />
               <span v-else class="bm-favicon-placeholder">🔖</span>
             </div>
             <div class="bm-info">
@@ -892,7 +894,7 @@
         <!-- Grid View -->
         <div v-else class="bm-grid">
           <div
-            v-for="item in currentFolderBookmarks"
+            v-for="item in renderedBookmarks"
             :key="item.id"
             class="bm-grid-item"
             :class="{ selected: selectedIds.has(item.id) }"
@@ -901,11 +903,15 @@
             <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-grid-check" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
             <button class="bm-grid-more" @click.stop="showBookmarkCtx(item.raw || item, $event)" v-if="!editMode">⋮</button>
             <div class="bm-grid-favicon">
-              <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
+              <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" loading="lazy" decoding="async" @error="e=>e.target.style.display='none'" />
               <span v-else class="bm-grid-favicon-placeholder">🔖</span>
             </div>
             <div class="bm-grid-title">{{ item.title }}</div>
           </div>
+        </div>
+        <div v-if="hasMoreRenderedBookmarks" class="load-more-mobile">
+          已显示 {{ renderedBookmarks.length }} / {{ currentFolderBookmarks.length }} 个网址
+          <button @click="showMoreBookmarks">加载更多（剩余 {{ remainingBookmarkCount }}）</button>
         </div>
       </template>
 
@@ -929,7 +935,7 @@
       <!-- List View -->
       <div v-if="viewMode === 'list'" class="bm-list">
         <div
-          v-for="item in displayBookmarks"
+          v-for="item in renderedBookmarks"
           :key="item.id"
           class="bm-item"
           :class="{ selected: selectedIds.has(item.id) }"
@@ -938,7 +944,7 @@
         >
           <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-checkbox" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
           <div class="bm-favicon">
-            <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
+            <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" loading="lazy" decoding="async" @error="e=>e.target.style.display='none'" />
             <span v-else class="bm-favicon-placeholder">🔖</span>
           </div>
           <div class="bm-info">
@@ -955,7 +961,7 @@
       <!-- Grid View -->
       <div v-else class="bm-grid">
         <div
-          v-for="item in displayBookmarks"
+          v-for="item in renderedBookmarks"
           :key="item.id"
           class="bm-grid-item"
           :class="{ selected: selectedIds.has(item.id) }"
@@ -964,11 +970,16 @@
           <input v-if="editMode && isOwnNode(item.raw || item)" type="checkbox" class="bm-grid-check" :checked="selectedIds.has(item.id)" @click.stop="toggleSelect(item.id)" />
           <button class="bm-grid-more" @click.stop="showBookmarkCtx(item.raw || item, $event)" v-if="!editMode">⋮</button>
           <div class="bm-grid-favicon">
-            <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" @error="e=>e.target.style.display='none'" />
+            <img v-if="getFaviconUrl(item)" :src="getFaviconUrl(item)" loading="lazy" decoding="async" @error="e=>e.target.style.display='none'" />
             <span v-else class="bm-grid-favicon-placeholder">🔖</span>
           </div>
           <div class="bm-grid-title">{{ item.title }}</div>
         </div>
+      </div>
+
+      <div v-if="hasMoreRenderedBookmarks" class="load-more-mobile">
+        已显示 {{ renderedBookmarks.length }} / {{ displayBookmarks.length }} 个网址
+        <button @click="showMoreBookmarks">加载更多（剩余 {{ remainingBookmarkCount }}）</button>
       </div>
 
       <div v-if="displayBookmarks.length === 0" class="empty-state">
@@ -1774,6 +1785,9 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUser: null,
         // Tree
         tree: [],
+		allBookmarksCache: [],
+		nodeIndex: Object.create(null),
+		renderLimit: 100,
         loading: false,
         // Navigation
         currentPath: [],   // array of folder ids
@@ -1851,7 +1865,7 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       // All bookmarks flattened
       allBookmarks() {
-        return this.collectBookmarks(this.tree);
+        return this.allBookmarksCache;
       },
       allBookmarkCount() {
         return this.allBookmarks.length;
@@ -1882,6 +1896,18 @@ document.addEventListener('DOMContentLoaded', () => {
       displayBookmarks() {
         return this.allBookmarks;
       },
+		 renderedBookmarks() {
+			const bookmarks = this.currentView === 'bookmarks' ? this.displayBookmarks : this.currentFolderBookmarks;
+			return bookmarks.slice(0, this.renderLimit);
+		 },
+		 hasMoreRenderedBookmarks() {
+			const bookmarks = this.currentView === 'bookmarks' ? this.displayBookmarks : this.currentFolderBookmarks;
+			return bookmarks.length > this.renderLimit;
+		 },
+		 remainingBookmarkCount() {
+			const bookmarks = this.currentView === 'bookmarks' ? this.displayBookmarks : this.currentFolderBookmarks;
+			return Math.max(0, bookmarks.length - this.renderLimit);
+		 },
       allSelected() {
         const list = this.currentView === 'bookmarks' ? this.displayBookmarks : this.currentFolderBookmarks;
         return list.length > 0 && list.every(item => this.selectedIds.has(item.id));
@@ -1926,6 +1952,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (this.token) h.Authorization = this.token;
         return h;
       },
+		 rebuildBookmarkCache() {
+			const bookmarks = [];
+			const nodeIndex = Object.create(null);
+			const visit = (nodes, trail = []) => {
+				for (const node of nodes) {
+					nodeIndex[node.id] = node;
+					if (node.type === 'folder') {
+						visit(node.children || [], trail.concat(node.title));
+					} else if (node.type === 'bookmark') {
+						bookmarks.push(this.normalizeBookmark(node, trail));
+					}
+				}
+			};
+			visit(this.tree);
+			this.allBookmarksCache = bookmarks;
+			this.nodeIndex = nodeIndex;
+		},
+		 resetRenderedBookmarks() { this.renderLimit = 100; },
+		 showMoreBookmarks() { this.renderLimit += 100; },
       isOwnNode(node) {
         if (!node || node.id === -1) return false;
         if (node.user_id === undefined || node.user_id === null) return true;
@@ -2029,6 +2074,8 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!r.ok) throw new Error('加载失败');
           const data = await r.json();
           this.tree = Array.isArray(data) ? data : [];
+			this.rebuildBookmarkCache();
+			this.resetRenderedBookmarks();
         } catch(e) {
           this.showToast(e.message || '加载失败', 'error');
         } finally {
@@ -2036,6 +2083,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       },
       findNodeById(id, list) {
+		if (list === this.tree && this.nodeIndex[id]) return this.nodeIndex[id];
         for (const n of list) {
           if (n.id === id) return n;
           if (n.children && n.children.length) {
@@ -2090,11 +2138,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return count;
       },
       getFaviconUrl(item) {
-        if (item.favicon_url) return item.favicon_url;
-        try {
-          const u = new URL(item.url);
-          return `${u.protocol}//${u.host}/favicon.ico`;
-        } catch { return ''; }
+        return item.favicon_url || '';
       },
       getAllFolders() {
         const result = [];
@@ -2145,6 +2189,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this.breadcrumb.push({ id: node.id, title: node.title });
         this.currentView = 'folders';
         this.activeTab = 'folders';
+		this.resetRenderedBookmarks();
         this.$refs.mainScroll && (this.$refs.mainScroll.scrollTop = 0);
       },
       enterAllBookmarks() {
@@ -2153,6 +2198,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this.activeTab = 'all';
         this.breadcrumb = [];
         this.currentPath = [];
+		this.resetRenderedBookmarks();
       },
       goBack() {
         this.hideCtx();
@@ -2188,6 +2234,7 @@ document.addEventListener('DOMContentLoaded', () => {
           this.breadcrumb = [];
           this.currentPath = [];
         }
+		this.resetRenderedBookmarks();
       },
 
       // ============ View Mode ============
@@ -2226,17 +2273,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (this.selectedIds.size === 0) return;
         const ok = await this.customConfirm('批量删除', `确定删除选中的 ${this.selectedIds.size} 个项目？此操作不可撤销。`, 'warning', '删除');
         if (!ok) return;
-        let success = 0;
-        for (const id of this.selectedIds) {
-          try {
-            const r = await fetch(`/api/nodes/${id}`, { method: 'DELETE', headers: this.getHeaders() });
-            if (r.ok) success++;
-          } catch {}
+        try {
+          const r = await fetch('/api/nodes/batch-delete', {
+            method: 'POST',
+            headers: this.getHeaders('application/json'),
+            body: JSON.stringify({ ids: Array.from(this.selectedIds) }),
+          });
+          if (!r.ok) {
+            const data = await r.json().catch(() => ({}));
+            throw new Error(data.error || '批量删除失败');
+          }
+          const result = await r.json();
+          const success = result.deleted_count || 0;
+          this.selectedIds = new Set();
+          this.editMode = false;
+          await this.loadTree();
+          this.showToast(`已删除 ${success} 个项目`, 'success');
+        } catch (e) {
+          this.showToast(e.message || '批量删除失败', 'error');
         }
-        this.selectedIds = new Set();
-        this.editMode = false;
-        await this.loadTree();
-        this.showToast(`已删除 ${success} 个项目`, 'success');
       },
 
       // ============ Open Bookmark ============
