@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"bookmark/app/utils"
+
 	"github.com/go-chi/chi/v5"
 
 	_ "modernc.org/sqlite"
@@ -72,6 +74,8 @@ func newTestServer(t *testing.T) (*server, *sql.DB) {
 			is_active INTEGER NOT NULL DEFAULT 1,
 			is_admin INTEGER NOT NULL DEFAULT 0,
 			api_key TEXT,
+			fnos_user_id INTEGER UNIQUE,
+			fnos_username TEXT NOT NULL DEFAULT '',
 			last_login_at DATETIME,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -241,6 +245,97 @@ func runHandler(srv *server, h http.HandlerFunc, r *http.Request) *httptest.Resp
 	rec := httptest.NewRecorder()
 	h(rec, r)
 	return rec
+}
+
+func trustedFnOSRequest(t *testing.T, method, path string, body any, userID int64, username string) *http.Request {
+	t.Helper()
+	req := jsonRequest(t, method, path, body)
+	req.Header.Set("X-Trim-Userid", fmt.Sprint(userID))
+	req.Header.Set("X-Trim-Username", username)
+	return req.WithContext(context.WithValue(req.Context(), fnOSGatewayContextKey{}, true))
+}
+
+func TestFnOSHeadersRequireGatewayConnection(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req := jsonRequest(t, http.MethodPost, "/api/auth/fnos/login", nil)
+	req.Header.Set("X-Trim-Userid", "1001")
+	req.Header.Set("X-Trim-Username", "forged-user")
+	rec := runHandler(srv, srv.handleFnOSLogin, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("untrusted fnOS headers: want 401, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestEnsureFnOSBindingSchemaMigratesExistingUsers(t *testing.T) {
+	dsn := testDBName(t)
+	dbPath := strings.TrimPrefix(strings.TrimSuffix(dsn, "?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000"), "file:")
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer func() {
+		_ = db.Close()
+		_ = os.Remove(dbPath)
+		_ = os.Remove(dbPath + "-wal")
+		_ = os.Remove(dbPath + "-shm")
+	}()
+	mustExec(t, db, `CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE)`)
+	if err := ensureFnOSBindingSchema(db); err != nil {
+		t.Fatalf("ensure fnOS binding schema: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO users (id, username, fnos_user_id, fnos_username) VALUES (1, 'one', 88, 'nas-one')`); err != nil {
+		t.Fatalf("insert bound user: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO users (id, username, fnos_user_id) VALUES (2, 'two', 88)`); err == nil {
+		t.Fatal("duplicate fnOS user ID should be rejected by the unique index")
+	}
+}
+
+func TestFnOSRegisterBindThenOneClickLogin(t *testing.T) {
+	srv, db := newTestServer(t)
+	bindReq := trustedFnOSRequest(t, http.MethodPost, "/api/auth/fnos/bind", map[string]string{
+		"mode": "register", "username": "nas-alice", "password": "client-md5-password",
+	}, 1001, "alice")
+	bindRec := runHandler(srv, srv.handleFnOSBind, bindReq)
+	if bindRec.Code != http.StatusOK {
+		t.Fatalf("register and bind: want 200, got %d (%s)", bindRec.Code, bindRec.Body.String())
+	}
+	var bound authResponse
+	decodeJSON(t, bindRec, &bound)
+	if bound.Token == "" || bound.User == nil || bound.User.Username != "nas-alice" || !bound.User.IsAdmin {
+		t.Fatalf("unexpected bind response: %+v", bound)
+	}
+
+	loginReq := trustedFnOSRequest(t, http.MethodPost, "/api/auth/fnos/login", nil, 1001, "alice-renamed")
+	loginRec := runHandler(srv, srv.handleFnOSLogin, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("one-click login: want 200, got %d (%s)", loginRec.Code, loginRec.Body.String())
+	}
+	var loggedIn authResponse
+	decodeJSON(t, loginRec, &loggedIn)
+	if loggedIn.Token != bound.Token || loggedIn.User == nil || loggedIn.User.ID != bound.User.ID {
+		t.Fatalf("one-click login returned a different account: %+v", loggedIn)
+	}
+	var storedName string
+	if err := db.QueryRow(`SELECT fnos_username FROM users WHERE id = ?`, bound.User.ID).Scan(&storedName); err != nil {
+		t.Fatalf("read stored fnOS username: %v", err)
+	}
+	if storedName != "alice-renamed" {
+		t.Fatalf("fnOS username was not refreshed: got %q", storedName)
+	}
+}
+
+func TestFnOSCannotBindOneAppAccountToDifferentNASUser(t *testing.T) {
+	srv, db := newTestServer(t)
+	passwordMD5 := "client-md5-password"
+	mustExec(t, db, `INSERT INTO users (username, password, nickname, fnos_user_id) VALUES (?, ?, ?, ?)`, "bound-user", utils.MD5Hash(passwordMD5, "bookmarks"), "bound-user", 2001)
+	req := trustedFnOSRequest(t, http.MethodPost, "/api/auth/fnos/bind", map[string]string{
+		"mode": "bind", "username": "bound-user", "password": passwordMD5,
+	}, 2002, "other-user")
+	rec := runHandler(srv, srv.handleFnOSBind, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("bind already-bound app account: want 409, got %d (%s)", rec.Code, rec.Body.String())
+	}
 }
 
 // newAdminRouter returns a chi router that mounts only the admin endpoints
