@@ -3284,7 +3284,7 @@ func checkURLWithBrowser(ctx context.Context, rawURL string) int {
 //
 // 直接用 GET（与浏览器实际打开网页一致），不使用 HEAD：很多服务器/CDN 对
 // HEAD 处理不可靠——会返回 404/403，或干脆超时不响应（即便 GET 完全正常，
-// 如 example.com、example.com），用 HEAD 反而更慢、更易误判。
+// 用 HEAD 反而更慢、更易误判。
 // 传输错误（多为瞬时超时/网络抖动）会重试一次，进一步降低误判。
 // 重定向策略：记录首次请求状态码，若首次为 2xx/3xx 则算「能访问」，避免
 // 中间页（如 /act/redirect → 404）误判为失效。
