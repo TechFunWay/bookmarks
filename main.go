@@ -56,7 +56,9 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v3.3.0"
+	appVersion = "v3.3.5"
+
+	fnOSTicketTTL = 5 * time.Minute
 
 	// 日志模式常量
 	logModeDebug   = "debug"
@@ -79,6 +81,8 @@ type server struct {
 	verCache          *versionCheckCache
 	verCacheMu        sync.Mutex
 	browserCheckSem   chan struct{}
+	fnOSTickets       map[string]fnOSLoginTicket
+	fnOSTicketsMu     sync.Mutex
 }
 
 // 全局配置
@@ -154,6 +158,11 @@ type authResponse struct {
 type fnOSIdentity struct {
 	UserID   int64
 	Username string
+}
+
+type fnOSLoginTicket struct {
+	Identity  fnOSIdentity
+	ExpiresAt time.Time
 }
 
 type fnOSBindRequest struct {
@@ -264,7 +273,7 @@ func main() {
 	insecureTLS := flag.Bool("insecureTLS", false, "抓取网页元数据时跳过TLS证书验证（用于内网自签名证书环境）")
 	disableStats := flag.Bool("disableStats", false, "禁用匿名使用统计上报（也可设置环境变量 DISABLE_STATS=1）")
 	fnOSApp := flag.Bool("fnos-app", false, "以飞牛 fnOS 统一网关应用模式运行")
-	gatewayPrefix := flag.String("gateway-prefix", "/app/techfunway.bookmarks", "飞牛统一网关应用前缀（仅 -fnos-app）")
+	gatewayPrefix := flag.String("gateway-prefix", "/app/techfunway-bookmarks", "飞牛统一网关应用前缀（仅 -fnos-app）")
 	gatewaySocket := flag.String("gateway-socket", "", "飞牛统一网关 Unix Socket 路径（仅 -fnos-app）")
 	flag.Parse()
 
@@ -409,6 +418,7 @@ func main() {
 			r.Post("/register", s.handleRegister)
 			r.Post("/login", s.handleLogin)
 			if *fnOSApp {
+				r.Post("/fnos/ticket", s.handleFnOSTicket)
 				r.Post("/fnos/login", s.handleFnOSLogin)
 				r.Post("/fnos/bind", s.handleFnOSBind)
 			}
@@ -633,7 +643,13 @@ func ensureFnOSBindingSchema(db *sql.DB) error {
 // rewrite root-relative assets and API calls for the iframe environment.
 func fnOSGatewayProxy(prefix string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), fnOSGatewayPrefixContextKey{}, prefix)
+		ctx := r.Context()
+		// The application prefix is also reachable on the normal service port.
+		// Only the Unix-socket listener is the real fnOS gateway and may enable
+		// the one-click-login UI; otherwise the button would always fail safely.
+		if ctx.Value(fnOSGatewayContextKey{}) == true {
+			ctx = context.WithValue(ctx, fnOSGatewayPrefixContextKey{}, prefix)
+		}
 		http.StripPrefix(prefix, next).ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -641,7 +657,7 @@ func fnOSGatewayProxy(prefix string, next http.Handler) http.Handler {
 // fnOSStaticFileServer injects a small compatibility layer only for requests
 // that passed through the fnOS application prefix. The historical frontend
 // uses root-relative paths; the layer scopes assets and fetch('/api/...') to
-// the iframe's /app/techfunway.bookmarks mount while leaving normal port-based
+// the fnOS gateway mount while leaving normal port-based
 // and Docker deployments unchanged.
 func fnOSStaticFileServer(staticFiles fs.FS) http.Handler {
 	fallback := http.FileServer(http.FS(staticFiles))
@@ -5235,11 +5251,74 @@ func fnOSIdentityFromRequest(r *http.Request) (fnOSIdentity, error) {
 	return fnOSIdentity{UserID: userID, Username: username}, nil
 }
 
+func (s *server) handleFnOSTicket(w http.ResponseWriter, r *http.Request) {
+	identity, err := fnOSIdentityFromRequest(r)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, err)
+		return
+	}
+
+	now := time.Now()
+	ticket := uuid.New().String()
+	s.fnOSTicketsMu.Lock()
+	if s.fnOSTickets == nil {
+		s.fnOSTickets = make(map[string]fnOSLoginTicket)
+	}
+	for key, item := range s.fnOSTickets {
+		if !item.ExpiresAt.After(now) {
+			delete(s.fnOSTickets, key)
+		}
+	}
+	s.fnOSTickets[ticket] = fnOSLoginTicket{Identity: identity, ExpiresAt: now.Add(fnOSTicketTTL)}
+	s.fnOSTicketsMu.Unlock()
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"ticket":        ticket,
+		"fnos_username": identity.Username,
+	})
+}
+
+func (s *server) fnOSIdentityFromAuthRequest(r *http.Request) (fnOSIdentity, error) {
+	if r.Context().Value(fnOSGatewayContextKey{}) == true {
+		return fnOSIdentityFromRequest(r)
+	}
+	ticket := strings.TrimSpace(r.Header.Get("X-FnOS-Ticket"))
+	if ticket == "" {
+		return fnOSIdentity{}, errors.New("请从飞牛桌面中的应用入口使用一键登录")
+	}
+
+	now := time.Now()
+	s.fnOSTicketsMu.Lock()
+	item, ok := s.fnOSTickets[ticket]
+	if ok && !item.ExpiresAt.After(now) {
+		delete(s.fnOSTickets, ticket)
+		ok = false
+	}
+	s.fnOSTicketsMu.Unlock()
+	if !ok {
+		return fnOSIdentity{}, errors.New("飞牛登录凭证无效或已过期，请从桌面应用入口重新打开")
+	}
+	return item.Identity, nil
+}
+
+func (s *server) consumeFnOSTicket(r *http.Request) {
+	if r.Context().Value(fnOSGatewayContextKey{}) == true {
+		return
+	}
+	ticket := strings.TrimSpace(r.Header.Get("X-FnOS-Ticket"))
+	if ticket == "" {
+		return
+	}
+	s.fnOSTicketsMu.Lock()
+	delete(s.fnOSTickets, ticket)
+	s.fnOSTicketsMu.Unlock()
+}
+
 // handleFnOSLogin signs in only an account previously bound to the NAS-local
 // UID. A NAS username is display data and can change, so it is refreshed but
 // never used as the binding key.
 func (s *server) handleFnOSLogin(w http.ResponseWriter, r *http.Request) {
-	identity, err := fnOSIdentityFromRequest(r)
+	identity, err := s.fnOSIdentityFromAuthRequest(r)
 	if err != nil {
 		respondError(w, http.StatusUnauthorized, err)
 		return
@@ -5292,13 +5371,14 @@ func (s *server) handleFnOSLogin(w http.ResponseWriter, r *http.Request) {
 
 	loggedIn := userFromAuthRow(dbUser.ID, dbUser.Username, dbUser.Nickname, dbUser.Email, dbUser.Avatar, dbUser.IsActive, dbUser.IsAdmin, apiKey, dbUser.CreatedAt)
 	s.logAudit(r.Context(), dbUser.ID, dbUser.Username, "fnos_login", "user", dbUser.ID, "飞牛 NAS 一键登录", r.RemoteAddr)
+	s.consumeFnOSTicket(r)
 	respondJSON(w, http.StatusOK, authResponse{Token: token, User: loggedIn})
 }
 
 // handleFnOSBind either creates an application account or verifies an existing
 // one, then atomically binds it to the current NAS-local UID.
 func (s *server) handleFnOSBind(w http.ResponseWriter, r *http.Request) {
-	identity, err := fnOSIdentityFromRequest(r)
+	identity, err := s.fnOSIdentityFromAuthRequest(r)
 	if err != nil {
 		respondError(w, http.StatusUnauthorized, err)
 		return
@@ -5470,6 +5550,7 @@ func (s *server) handleFnOSBind(w http.ResponseWriter, r *http.Request) {
 
 	loggedIn := userFromAuthRow(dbUser.ID, dbUser.Username, dbUser.Nickname, dbUser.Email, dbUser.Avatar, dbUser.IsActive, dbUser.IsAdmin, apiKey, dbUser.CreatedAt)
 	s.logAudit(r.Context(), dbUser.ID, dbUser.Username, "fnos_bind", "user", dbUser.ID, "绑定飞牛 NAS 账号", r.RemoteAddr)
+	s.consumeFnOSTicket(r)
 	respondJSON(w, http.StatusOK, authResponse{Token: token, User: loggedIn})
 }
 

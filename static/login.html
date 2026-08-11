@@ -230,15 +230,11 @@
     .links a:hover { color: var(--link-hover); }
     .links-sep { opacity: .3; }
 
-    .fnos-panel { margin-top: 6px; padding: 16px; border: 1px solid var(--brand-border); border-radius: 12px; background: var(--input-bg); }
-    .fnos-panel[hidden] { display: none; }
-    .fnos-title { color: var(--text); font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-    .fnos-desc { color: var(--text-sub); font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
-    .fnos-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-    .fnos-tab { height: 34px; border: 1px solid var(--input-border); border-radius: 8px; background: transparent; color: var(--text-sub); font: inherit; font-size: 13px; cursor: pointer; }
-    .fnos-tab.active { border-color: var(--accent); background: rgba(99,102,241,.10); color: var(--link); font-weight: 600; }
-    .fnos-panel .field { margin-bottom: 12px; }
-    .fnos-panel .btn { margin-top: 3px; }
+    .login-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--text-muted); font-size: 12px; }
+    .login-divider::before, .login-divider::after { content: ''; height: 1px; flex: 1; background: var(--form-border); }
+    .fnos-login { width: 100%; height: 42px; border: 1px solid rgba(99,102,241,.32); border-radius: 10px; background: rgba(99,102,241,.07); color: var(--link); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .2s, border-color .2s, transform .15s; }
+    .fnos-login:hover:not(:disabled) { background: rgba(99,102,241,.14); border-color: var(--accent); transform: translateY(-1px); }
+    .fnos-login:disabled { opacity: .55; cursor: not-allowed; }
 
     @media (max-width: 720px) {
       .brand { display: none; }
@@ -306,25 +302,8 @@
       <button type="submit" class="btn" id="login-btn">登录</button>
     </form>
 
-    <div class="fnos-panel" id="fnos-bind-panel" hidden>
-      <div class="fnos-title">绑定飞牛 NAS 账号</div>
-      <div class="fnos-desc" id="fnos-bind-desc"></div>
-      <div class="fnos-tabs">
-        <button type="button" class="fnos-tab active" data-mode="register">创建新账户</button>
-        <button type="button" class="fnos-tab" data-mode="bind">绑定已有账户</button>
-      </div>
-      <form id="fnos-bind-form" autocomplete="on">
-        <div class="field">
-          <label class="field-label" for="fnos-username">应用用户名</label>
-          <div class="field-wrap"><input class="field-input" type="text" id="fnos-username" required autocomplete="username"></div>
-        </div>
-        <div class="field">
-          <label class="field-label" for="fnos-password">应用密码</label>
-          <div class="field-wrap"><input class="field-input" type="password" id="fnos-password" required autocomplete="current-password"></div>
-        </div>
-        <button type="submit" class="btn" id="fnos-bind-btn">创建并绑定</button>
-      </form>
-    </div>
+    <div class="login-divider" id="fnos-divider" hidden><span>或</span></div>
+    <button type="button" class="fnos-login" id="fnos-login-btn" hidden>飞牛 NAS 一键登录</button>
 
     <div class="links">
       <span>还没有账户？</span><a id="register-link" href="register.html">立即注册</a>
@@ -361,12 +340,17 @@ document.addEventListener('DOMContentLoaded', async function () {
   const uInput = document.getElementById('username');
   const pInput = document.getElementById('password');
   const cbRemember = document.getElementById('remember-me');
-  const fnosPanel = document.getElementById('fnos-bind-panel');
-  const fnosForm = document.getElementById('fnos-bind-form');
-  const fnosUsername = document.getElementById('fnos-username');
-  const fnosPassword = document.getElementById('fnos-password');
-  const fnosButton = document.getElementById('fnos-bind-btn');
-  let fnosMode = 'register';
+  const fnosDivider = document.getElementById('fnos-divider');
+  const fnosLoginButton = document.getElementById('fnos-login-btn');
+  let savedFnOSGatewayURL = '';
+  try {
+    const candidate = new URL(localStorage.getItem('fnos_gateway_url') || '');
+    if ((candidate.protocol === 'http:' || candidate.protocol === 'https:') &&
+        candidate.hostname === window.location.hostname &&
+        candidate.pathname.startsWith('/app/techfunway-bookmarks/')) {
+      savedFnOSGatewayURL = candidate.href;
+    }
+  } catch (e) {}
   document.getElementById('pwdBtn').addEventListener('click', () => { pInput.type = pInput.type === 'text' ? 'password' : 'text'; });
 
   async function autoLogin() {
@@ -389,56 +373,43 @@ document.addEventListener('DOMContentLoaded', async function () {
     window.location.href = 'index.html';
   }
 
-  function setFnOSMode(mode) {
-    fnosMode = mode;
-    document.querySelectorAll('.fnos-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.mode === mode));
-    fnosButton.textContent = mode === 'register' ? '创建并绑定' : '验证并绑定';
-    fnosPassword.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
-  }
-
   async function tryFnOSLogin() {
-    if (!window.__bookmarksFnOSURL || new URLSearchParams(window.location.search).get('force') === '1') return false;
+    if (!window.__bookmarksFnOSURL) {
+      showAlert('请从飞牛 NAS 桌面的应用入口使用一键登录');
+      return false;
+    }
     try {
       const r = await fetch('/api/auth/fnos/login', { method: 'POST' });
       const data = await r.json();
       if (r.ok && data.binding_required) {
-        document.getElementById('fnos-bind-desc').textContent = `飞牛 NAS 用户“${data.fnos_username}”尚未绑定网址收藏夹账户。`;
-        fnosUsername.value = data.fnos_username || '';
-        form.hidden = true;
-        document.querySelector('.links').hidden = true;
-        fnosPanel.hidden = false;
+        sessionStorage.setItem('fnos_username', data.fnos_username || '');
+        window.location.href = 'fnos-bind.html';
         return true;
       }
       if (r.ok && data.token) {
         completeLogin(data);
         return true;
       }
-    } catch (e) {}
+      showAlert(data.error || '飞牛一键登录失败，请稍后重试');
+    } catch (e) { showAlert('网络错误，请稍后重试'); }
     return false;
   }
 
-  document.querySelectorAll('.fnos-tab').forEach(tab => tab.addEventListener('click', () => setFnOSMode(tab.dataset.mode)));
-  fnosForm.addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const username = fnosUsername.value.trim();
-    const password = fnosPassword.value;
-    if (!username || !password) { showAlert('请输入应用用户名和密码'); return; }
-    if (fnosMode === 'register' && password.length < 6) { showAlert('密码长度不能少于 6 位'); return; }
-    fnosButton.disabled = true;
-    fnosButton.textContent = fnosMode === 'register' ? '创建中…' : '验证中…';
-    try {
-      const r = await fetch('/api/auth/fnos/bind', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: fnosMode, username, password: MD5(password) })
-      });
-      const data = await r.json();
-      if (r.ok) { completeLogin(data); return; }
-      showAlert(data.error || '绑定失败，请稍后重试');
-    } catch (e) { showAlert('网络错误，请稍后重试'); }
-    finally { fnosButton.disabled = false; setFnOSMode(fnosMode); }
+  if (window.__bookmarksFnOSURL || savedFnOSGatewayURL) {
+    fnosDivider.hidden = false;
+    fnosLoginButton.hidden = false;
+  }
+  fnosLoginButton.addEventListener('click', async function () {
+    if (!window.__bookmarksFnOSURL && savedFnOSGatewayURL) {
+      window.location.href = savedFnOSGatewayURL;
+      return;
+    }
+    fnosLoginButton.disabled = true;
+    fnosLoginButton.textContent = '正在获取飞牛 NAS 登录信息…';
+    await tryFnOSLogin();
+    fnosLoginButton.disabled = false;
+    fnosLoginButton.textContent = '飞牛 NAS 一键登录';
   });
-
-  if (await tryFnOSLogin()) return;
 
   if (localStorage.getItem('remember_me') === 'true') {
     uInput.value = localStorage.getItem('saved_username') || '';
@@ -450,7 +421,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const r = await fetch('/api/config/system');
     if (r.ok) {
       const cfg = await r.json();
-      if (cfg.no_users === 'true') { window.location.href = 'register.html?first=1'; return; }
+      if (cfg.no_users === 'true' && !window.__bookmarksFnOSURL && !savedFnOSGatewayURL) { window.location.href = 'register.html?first=1'; return; }
       if (cfg.allow_register === 'false') regLink.style.display = 'none';
       if (cfg.require_login === 'false' && !new URLSearchParams(window.location.search).get('force')) {
         window.location.href = 'index.html'; return;
