@@ -20,16 +20,10 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
-.playwright-mcp/
-.omo/
-.development-note/
 .env
 .idea
 .DS_Store
 data.db
-# 其它 AI 工具的本地目录，不纳入版本管理（打包逻辑已迁至 .development-note/skills/release-package）
-.development-note/
-.development-note/
 /static/icons
 /static/downloads
 .vscode
@@ -39,8 +33,5 @@ release
 /bookmarks
 bookmarks
 bookmark
-techfunway.bookmarks/app/server/bookmarks
-techfunway.bookmarks/app/server/reset-password
-techfunway.bookmarks/app/server/edge-extension.zip
 # Playwright 测试产物
 test-results/

@@ -206,7 +206,6 @@ bookmarks/
 │   └── style.css       # Style sheet
 ├── README.md           # Chinese documentation
 ├── README.en.md        # English documentation
-└── techfunway.bookmarks/ # Packaging related files
 ```
 
 ## Development
