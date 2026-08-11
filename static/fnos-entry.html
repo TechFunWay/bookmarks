@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>正在登录 · 网址收藏夹</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; color: #24243a; background: radial-gradient(circle at 20% 35%,rgba(99,102,241,.18),transparent 42%),radial-gradient(circle at 80% 70%,rgba(6,182,212,.15),transparent 40%),#f3f5fa; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .card { width: min(440px,100%); padding: 36px; border: 1px solid rgba(0,0,0,.07); border-radius: 20px; background: rgba(255,255,255,.94); box-shadow: 0 24px 64px rgba(99,102,241,.13); text-align: center; }
+    .icon { width: 52px; height: 52px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(135deg,#6366f1,#06b6d4); font-size: 24px; }
+    h1 { margin: 0 0 10px; font-size: 22px; }
+    p { margin: 0; color: #74748f; font-size: 14px; line-height: 1.65; }
+    .error { color: #e11d48; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="icon">✓</div>
+    <h1>正在使用飞牛 NAS 登录</h1>
+    <p id="status">验证当前 NAS 用户后，将自动打开网址收藏夹应用端口…</p>
+  </main>
+  <script>
+  document.addEventListener('DOMContentLoaded', async function () {
+    const status = document.getElementById('status');
+    const port = new URLSearchParams(window.location.search).get('port');
+    if (!/^[0-9]{1,5}$/.test(port || '') || Number(port) < 1 || Number(port) > 65535) {
+      status.classList.add('error');
+      status.textContent = '应用端口配置无效，请在飞牛应用设置中重新配置端口。';
+      return;
+    }
+    try {
+      const response = await fetch('/api/auth/fnos/ticket', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok || !data.ticket) {
+        throw new Error(data.error || '未获取到飞牛 NAS 登录信息');
+      }
+
+      const gatewayURL = window.location.href;
+      const target = new URL(window.location.href);
+      target.protocol = 'http:';
+      target.port = port;
+      target.pathname = '/fnos-bind.html';
+      target.search = '';
+      target.hash = new URLSearchParams({
+        fnos_ticket: data.ticket,
+        fnos_gateway: gatewayURL
+      }).toString();
+      window.location.replace(target.toString());
+    } catch (error) {
+      status.classList.add('error');
+      status.textContent = error.message || '飞牛 NAS 登录失败，请从桌面应用入口重试。';
+    }
+  });
+  </script>
+</body>
+</html>

@@ -56,6 +56,24 @@
         const TEMPLATE_PAGES = { 'view-sidebar': '/view-sidebar.html', 'view-portal': '/view-portal.html', view: '/view.html', pc: '/pc.html' };
         const VALID_TEMPLATES = ['magazine', 'masonry', 'timeline', 'minimal', 'grid', 'table', 'nav'];
 
+        // The visible fnOS entry opens this page on the application's own
+        // service port. Remember the fnOS desktop origin as the separate,
+        // hidden identity-gateway entry used by the login button.
+        function rememberFnOSGateway() {
+            if (!document.referrer) return;
+            try {
+                const desktop = new URL(document.referrer);
+                if ((desktop.protocol !== 'http:' && desktop.protocol !== 'https:') ||
+                    desktop.hostname !== window.location.hostname ||
+                    desktop.origin === window.location.origin) return;
+                const gateway = new URL('/app/techfunway-bookmarks/fnos-entry.html', desktop.origin);
+                gateway.searchParams.set('port', window.location.port || (window.location.protocol === 'https:' ? '443' : '80'));
+                localStorage.setItem('fnos_gateway_url', gateway.href);
+            } catch (error) {}
+        }
+
+        rememberFnOSGateway();
+
         function resolveDefaultUrl(name) {
             if (!name) return null;
             if (TEMPLATE_PAGES[name]) return TEMPLATE_PAGES[name];

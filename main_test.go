@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -263,6 +264,81 @@ func TestFnOSHeadersRequireGatewayConnection(t *testing.T) {
 	rec := runHandler(srv, srv.handleFnOSLogin, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("untrusted fnOS headers: want 401, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestFnOSTicketBridgesGatewayIdentityToDirectPort(t *testing.T) {
+	srv, _ := newTestServer(t)
+	forgedReq := jsonRequest(t, http.MethodPost, "/api/auth/fnos/ticket", nil)
+	forgedReq.Header.Set("X-Trim-Userid", "1001")
+	forgedReq.Header.Set("X-Trim-Username", "nas-alice")
+	forgedRec := runHandler(srv, srv.handleFnOSTicket, forgedReq)
+	if forgedRec.Code != http.StatusUnauthorized {
+		t.Fatalf("untrusted ticket issue: want 401, got %d (%s)", forgedRec.Code, forgedRec.Body.String())
+	}
+
+	ticketReq := trustedFnOSRequest(t, http.MethodPost, "/api/auth/fnos/ticket", nil, 1001, "nas-alice")
+	ticketRec := runHandler(srv, srv.handleFnOSTicket, ticketReq)
+	if ticketRec.Code != http.StatusOK {
+		t.Fatalf("issue fnOS ticket: want 200, got %d (%s)", ticketRec.Code, ticketRec.Body.String())
+	}
+	var ticketData map[string]string
+	decodeJSON(t, ticketRec, &ticketData)
+	ticket := ticketData["ticket"]
+	if ticket == "" || ticketData["fnos_username"] != "nas-alice" {
+		t.Fatalf("unexpected ticket response: %#v", ticketData)
+	}
+
+	loginReq := jsonRequest(t, http.MethodPost, "/api/auth/fnos/login", nil)
+	loginReq.Header.Set("X-FnOS-Ticket", ticket)
+	loginRec := runHandler(srv, srv.handleFnOSLogin, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("direct-port ticket login: want 200, got %d (%s)", loginRec.Code, loginRec.Body.String())
+	}
+	var loginData map[string]any
+	decodeJSON(t, loginRec, &loginData)
+	if loginData["binding_required"] != true || loginData["fnos_username"] != "nas-alice" {
+		t.Fatalf("unexpected unbound ticket login response: %#v", loginData)
+	}
+
+	bindReq := jsonRequest(t, http.MethodPost, "/api/auth/fnos/bind", map[string]string{
+		"mode": "register", "username": "ticket-user", "password": "client-md5-password",
+	})
+	bindReq.Header.Set("X-FnOS-Ticket", ticket)
+	bindRec := runHandler(srv, srv.handleFnOSBind, bindReq)
+	if bindRec.Code != http.StatusOK {
+		t.Fatalf("direct-port ticket bind: want 200, got %d (%s)", bindRec.Code, bindRec.Body.String())
+	}
+
+	reuseReq := jsonRequest(t, http.MethodPost, "/api/auth/fnos/login", nil)
+	reuseReq.Header.Set("X-FnOS-Ticket", ticket)
+	reuseRec := runHandler(srv, srv.handleFnOSLogin, reuseReq)
+	if reuseRec.Code != http.StatusUnauthorized {
+		t.Fatalf("consumed fnOS ticket: want 401, got %d (%s)", reuseRec.Code, reuseRec.Body.String())
+	}
+}
+
+func TestFnOSLoginUIIsOnlyInjectedForGatewaySocket(t *testing.T) {
+	staticFiles, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		t.Fatalf("open embedded static files: %v", err)
+	}
+	prefix := "/app/techfunway-bookmarks"
+	handler := fnOSGatewayProxy(prefix, fnOSStaticFileServer(staticFiles))
+
+	direct := httptest.NewRequest(http.MethodGet, prefix+"/login.html", nil)
+	directRec := httptest.NewRecorder()
+	handler.ServeHTTP(directRec, direct)
+	if strings.Contains(directRec.Body.String(), "__bookmarksFnOSURL=function") {
+		t.Fatal("direct port request must not receive the fnOS one-click-login bootstrap")
+	}
+
+	trusted := httptest.NewRequest(http.MethodGet, prefix+"/login.html", nil)
+	trusted = trusted.WithContext(context.WithValue(trusted.Context(), fnOSGatewayContextKey{}, true))
+	trustedRec := httptest.NewRecorder()
+	handler.ServeHTTP(trustedRec, trusted)
+	if !strings.Contains(trustedRec.Body.String(), "__bookmarksFnOSURL=function") {
+		t.Fatal("gateway socket request must receive the fnOS one-click-login bootstrap")
 	}
 }
 
