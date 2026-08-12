@@ -4,7 +4,7 @@
 
 ## 应用截图
 
-![网址收藏夹应用界面](./docs/screenshots/app-screenshot.jpg)
+![网址收藏夹应用界面](./docs/screenshots/app-interface.jpg)
 
 _书签卡片网格、文件夹管理与快速搜索_
 
