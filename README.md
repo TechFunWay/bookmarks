@@ -8,8 +8,6 @@
 
 _书签卡片网格、文件夹管理与快速搜索_
 
-![Bookmark Manager](bookmarks.png)
-
 ---
 
 ## 功能特性
