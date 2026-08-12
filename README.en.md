@@ -8,8 +8,6 @@ A simple and easy-to-use bookmark management tool built with Go backend and Vue.
 
 _Bookmark cards, folder management, and quick search_
 
-![Bookmark Manager](bookmarks.png)
-
 ## Features
 
 - 📁 **Folder Management** - Create, edit, delete folders with nested structure support
