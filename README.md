@@ -2,11 +2,15 @@
 
 一个简单易用的网址收藏夹管理工具，基于Go语言后端和Vue.js前端构建。
 
-![Bookmark Manager](bookmarks.png)
-
 ## 应用截图
 
-![网址收藏夹应用界面](docs/screenshots/app-screenshot.jpg)
+<p align="center">
+  <img src="docs/screenshots/app-screenshot.jpg" alt="网址收藏夹应用界面" width="960">
+</p>
+
+<p align="center">书签卡片网格、文件夹管理与快速搜索</p>
+
+![Bookmark Manager](bookmarks.png)
 
 ---
 
