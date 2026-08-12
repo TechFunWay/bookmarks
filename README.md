@@ -4,11 +4,9 @@
 
 ## 应用截图
 
-<p align="center">
-  <img src="docs/screenshots/app-screenshot.jpg" alt="网址收藏夹应用界面" width="960">
-</p>
+![网址收藏夹应用界面](./docs/screenshots/app-screenshot.jpg)
 
-<p align="center">书签卡片网格、文件夹管理与快速搜索</p>
+_书签卡片网格、文件夹管理与快速搜索_
 
 ![Bookmark Manager](bookmarks.png)
 
