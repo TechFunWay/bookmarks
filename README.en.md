@@ -2,11 +2,11 @@
 
 A simple and easy-to-use bookmark management tool built with Go backend and Vue.js frontend.
 
+![Bookmark Manager](bookmarks.png)
+
 ## Application screenshot
 
-![Bookmark manager application](./docs/screenshots/app-interface.jpg)
-
-_Bookmark cards, folder management, and quick search_
+![Bookmark manager application](docs/screenshots/app-screenshot.jpg)
 
 ## Features
 
@@ -206,6 +206,7 @@ bookmarks/
 │   └── style.css       # Style sheet
 ├── README.md           # Chinese documentation
 ├── README.en.md        # English documentation
+└── techfunway.bookmarks/ # Packaging related files
 ```
 
 ## Development

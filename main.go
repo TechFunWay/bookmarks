@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -56,7 +57,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v3.3.5"
+	appVersion = "v3.3.0"
 
 	fnOSTicketTTL = 5 * time.Minute
 
@@ -221,34 +222,107 @@ type StatsRequest struct {
 	DeviceID   string `json:"device_id"`
 	OS         string `json:"os"`
 	Arch       string `json:"arch"`
-	Hostname   string `json:"hostname"`
+	// Event 区分上报类型：心跳不携带，赞赏点击为 donate_support
+	Event string `json:"event,omitempty"`
 }
 
 var statsHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
+// 统计上报地址，可用 STATS_ENDPOINT 环境变量覆盖（用于本地测试）
+func statsEndpoint() string {
+	if e := os.Getenv("STATS_ENDPOINT"); e != "" {
+		return e
+	}
+	return "https://techfunway.wycto.cn/api/apps.online/refresh"
+}
+
+// statsBaseRequest 保存当前实例的公共上报字段，心跳与赞赏事件共用
+var statsBaseRequest StatsRequest
+
+// processStartedAt 进程启动时间，用于前端区分「本次运行」与「重启后」
+var processStartedAt = time.Now()
+
 func getDeviceID(dataUrl string) string {
+	source := getMachineSignature()
+	if source == "" {
+		source = getPersistentDeviceID(dataUrl)
+	}
+	return fmt.Sprintf("%x", md5.Sum([]byte("bookmarks|"+source)))
+}
+
+// getMachineSignature 读取操作系统安装时生成的机器标识。
+// 卸载重装应用不会变化，仅重装系统才会改变；读取失败返回空串。
+func getMachineSignature() string {
+	switch runtime.GOOS {
+	case "linux":
+		for _, p := range []string{"/etc/machine-id", "/var/lib/dbus/machine-id"} {
+			if b, err := os.ReadFile(p); err == nil {
+				if s := strings.TrimSpace(string(b)); s != "" {
+					return s
+				}
+			}
+		}
+	case "darwin":
+		out, err := exec.Command("ioreg", "-rd1", "-c", "IOPlatformExpertDevice").Output()
+		if err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				if !strings.Contains(line, "IOPlatformUUID") {
+					continue
+				}
+				if i := strings.Index(line, "= \""); i >= 0 {
+					return strings.Trim(line[i+3:], "\" ")
+				}
+			}
+		}
+	case "windows":
+		out, err := exec.Command("reg", "query", `HKLM\SOFTWARE\Microsoft\Cryptography`, "/v", "MachineGuid").Output()
+		if err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.Contains(line, "MachineGuid") {
+					fields := strings.Fields(line)
+					if len(fields) >= 3 {
+						return fields[len(fields)-1]
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// getPersistentDeviceID 无系统机器标识时（常见于容器环境），
+// 在数据目录持久化一个随机 ID，容器重建、主机改名后仍保持同一身份
+func getPersistentDeviceID(dataUrl string) string {
+	path := filepath.Join(dataUrl, "device.id")
+	if b, err := os.ReadFile(path); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
+		}
+	}
+	id := uuid.NewString()
+	if err := os.MkdirAll(dataUrl, 0o755); err == nil {
+		if err := os.WriteFile(path, []byte(id), 0o600); err == nil {
+			return id
+		}
+	}
+	// 数据目录不可写时的最终兜底
 	hostname, _ := os.Hostname()
-	raw := hostname + runtime.GOOS + runtime.GOARCH + dataUrl
-	return fmt.Sprintf("%x", md5.Sum([]byte(raw)))
+	return hostname + runtime.GOOS + runtime.GOARCH
 }
 
 func startStatsReporter(appName, version, deviceType, dataUrl string) {
-	hostname, _ := os.Hostname()
-	deviceID := getDeviceID(dataUrl)
-
-	req := StatsRequest{
+	statsBaseRequest = StatsRequest{
 		AppName:    appName,
 		Version:    version,
 		DeviceType: deviceType,
-		DeviceID:   deviceID,
+		DeviceID:   getDeviceID(dataUrl),
 		OS:         runtime.GOOS,
 		Arch:       runtime.GOARCH,
-		Hostname:   hostname,
 	}
 
 	report := func() {
-		body, _ := json.Marshal(req)
-		resp, err := statsHTTPClient.Post("http://techfunway.wycto.cn/api/apps.online/refresh", "application/json", bytes.NewReader(body))
+		body, _ := json.Marshal(statsBaseRequest)
+		resp, err := statsHTTPClient.Post(statsEndpoint(), "application/json", bytes.NewReader(body))
 		if err != nil {
 			Debug("使用统计上报失败: %v", err)
 			return
@@ -263,6 +337,26 @@ func startStatsReporter(appName, version, deviceType, dataUrl string) {
 			report()
 		}
 	}()
+}
+
+// handleDonateSupport 用户在赞赏弹窗点击“已支持”后，复用统计通道
+// 发送一次匿名支持计数（仅设备统计信息，不含任何用户数据）
+func (s *server) handleDonateSupport(w http.ResponseWriter, r *http.Request) {
+	req := statsBaseRequest
+	req.Event = "donate_support"
+	body, _ := json.Marshal(req)
+	resp, err := statsHTTPClient.Post(statsEndpoint(), "application/json", bytes.NewReader(body))
+	if err != nil {
+		respondError(w, http.StatusBadGateway, errors.New("支持计数发送失败，请稍后再试"))
+		return
+	}
+	resp.Body.Close()
+	// 统计服务返回非 2xx 视为发送失败（Go 的 http.Post 不把 4xx/5xx 当作 err）
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respondError(w, http.StatusBadGateway, errors.New("支持计数发送失败，请稍后再试"))
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func main() {
@@ -462,6 +556,7 @@ func main() {
 		r.Get("/metadata", s.handleMetadata)
 		r.Get("/version", s.handleGetVersion)
 		r.Get("/version/check", s.tokenAuthMiddleware(s.handleCheckVersion))
+		r.Post("/donate/support", s.tokenAuthMiddleware(s.handleDonateSupport))
 		r.Post("/folders", s.optionalAuthMiddleware(s.handleCreateFolder))
 		r.Post("/bookmarks", s.optionalAuthMiddleware(s.handleCreateBookmark))
 		r.Put("/nodes/{id}", s.optionalAuthMiddleware(s.handleUpdateNode))
@@ -2988,7 +3083,10 @@ func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 // handleGetVersion 返回应用版本信息
 func (s *server) handleGetVersion(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"version": appVersion})
+	respondJSON(w, http.StatusOK, map[string]string{
+		"version":    appVersion,
+		"started_at": processStartedAt.Format(time.RFC3339),
+	})
 }
 
 // handleCheckVersion 检查是否有新版本（结果缓存 24 小时）
@@ -3284,7 +3382,7 @@ func checkURLWithBrowser(ctx context.Context, rawURL string) int {
 //
 // 直接用 GET（与浏览器实际打开网页一致），不使用 HEAD：很多服务器/CDN 对
 // HEAD 处理不可靠——会返回 404/403，或干脆超时不响应（即便 GET 完全正常，
-// 用 HEAD 反而更慢、更易误判。
+// 如 codebuddy.cn、aistudio.xiaomimimo.com），用 HEAD 反而更慢、更易误判。
 // 传输错误（多为瞬时超时/网络抖动）会重试一次，进一步降低误判。
 // 重定向策略：记录首次请求状态码，若首次为 2xx/3xx 则算「能访问」，避免
 // 中间页（如 /act/redirect → 404）误判为失效。

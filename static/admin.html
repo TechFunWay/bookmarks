@@ -581,6 +581,87 @@
     .folder-option:hover { background: var(--bg-elev-3); }
     .folder-option .check { margin-left: auto; color: var(--accent); font-weight: bold; }
 
+    /* AI Assistant */
+    .ai-fab {
+      position: fixed; bottom: 24px; right: 24px; z-index: 90;
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--gradient-primary);
+      color: #fff;
+      display: grid; place-items: center;
+      font-size: 24px;
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+      cursor: pointer;
+      transition: transform .2s;
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+    .ai-fab:hover { transform: scale(1.08); }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3); }
+      50% { box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4), 0 0 0 12px rgba(99, 102, 241, 0); }
+    }
+    .ai-panel {
+      position: fixed; bottom: 96px; right: 24px; z-index: 91;
+      width: 400px; height: 580px; max-height: calc(100vh - 120px);
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      animation: aiIn .25s ease;
+    }
+    @keyframes aiIn { from { transform: translateY(20px) scale(.95); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+    .ai-hd {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--gradient-card);
+    }
+    .ai-avatar { width: 32px; height: 32px; border-radius: 8px; background: var(--gradient-primary); display: grid; place-items: center; font-size: 16px; color: #fff; }
+    .ai-name { font-weight: 600; font-size: 14px; }
+    .ai-status { font-size: 11px; color: var(--emerald); display: flex; align-items: center; gap: 4px; }
+    .ai-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--emerald); }
+    .ai-close { margin-left: auto; }
+    .ai-stream { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .ai-msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; word-wrap: break-word; }
+    .ai-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .ai-msg.bot { align-self: flex-start; background: var(--bg-elev-2); color: var(--text-primary); border-bottom-left-radius: 4px; }
+    .ai-msg.bot.error { background: var(--rose-soft); color: var(--rose); }
+    .ai-msg .ai-thinking { display: inline-flex; gap: 3px; }
+    .ai-msg .ai-thinking span { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: bounce 1.2s ease-in-out infinite; }
+    .ai-msg .ai-thinking span:nth-child(2) { animation-delay: .15s; }
+    .ai-msg .ai-thinking span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .5; } 40% { transform: translateY(-6px); opacity: 1; } }
+    .ai-suggest { display: flex; gap: 6px; padding: 0 16px 8px; flex-wrap: wrap; }
+    .ai-chip { font-size: 11.5px; padding: 5px 10px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; transition: all .15s; }
+    .ai-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+    .ai-input-area { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+    .ai-input-area .input { font-size: 13px; }
+
+    /* AI insight cards */
+    .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .insight-card {
+      background: var(--bg-elev-1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .insight-card::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: var(--gradient-primary);
+    }
+    .insight-card.warn::before { background: var(--amber); }
+    .insight-card.danger::before { background: var(--rose); }
+    .insight-card.success::before { background: var(--emerald); }
+    .insight-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .insight-icon { font-size: 16px; }
+    .insight-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; }
+    .insight-body { font-size: 13px; line-height: 1.6; }
+    .insight-body strong { color: var(--text-primary); font-weight: 600; }
+    .insight-body code { background: var(--bg-elev-2); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+
     /* Settings section */
     .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
     .setting-row:last-child { border-bottom: none; }
@@ -600,7 +681,7 @@
 <body>
 <div id="app" v-cloak>
   <div class="app-shell">
-    <button class="development-note mobile-toggle" style="display:none;" @click="sidebarOpen = !sidebarOpen">☰</button>
+    <button class="ai-fab mobile-toggle" style="display:none;" @click="sidebarOpen = !sidebarOpen">☰</button>
     <div class="sidebar-backdrop" :class="{ open: sidebarOpen }" @click="sidebarOpen = false"></div>
     <aside class="sidebar" :class="{ open: sidebarOpen }">
       <div class="sidebar-brand">
@@ -696,6 +777,9 @@
           <a href="/templates.html?selector=1" class="btn btn-ghost">
             <span>🎨</span><span>模版选择</span>
           </a>
+          <button class="btn btn-grad" @click="openAiAssistant">
+            <span>✨</span><span>AI 助手</span>
+          </button>
         </div>
       </header>
 
@@ -705,6 +789,14 @@
           <a :href="updateBanner.downloadUrl" target="_blank">前往下载</a>
         </span>
         <span class="update-banner-close" @click="updateBanner.visible = false" title="关闭">×</span>
+      </div>
+
+      <!-- 赞赏提示条：仅管理员可见，每个版本只出现一次，支持过则永不再显示 -->
+      <div class="update-banner" v-if="donateBanner.visible">
+        <span>☕ 网址收藏夹免费、无广告、数据都在你自己的设备上。如果它帮到了你，欢迎请作者喝杯咖啡——1 元也是心意，完全自愿，不影响任何功能。
+          <a href="javascript:;" @click="openDonateModal">去赞赏</a>
+        </span>
+        <span class="update-banner-close" @click="dismissDonateBanner" title="关闭">×</span>
       </div>
 
       <div class="content">
@@ -743,6 +835,17 @@
         <!-- 管理员仪表盘 -->
         <transition name="fade">
         <div v-if="currentTab === 'dashboard' && currentUser?.is_admin">
+          <!-- AI insight cards -->
+          <div class="insight-grid">
+            <div class="insight-card" v-for="i in aiInsights" :key="i.title" :class="i.level">
+              <div class="insight-hd">
+                <span class="insight-icon">{{ i.icon }}</span>
+                <span class="insight-title">{{ i.title }}</span>
+              </div>
+              <div class="insight-body" v-html="i.body"></div>
+            </div>
+          </div>
+
           <!-- Stat cards -->
           <div class="stat-grid" v-if="!loading.stats">
             <div class="stat-card" v-for="s in statCards" :key="s.label">
@@ -1116,6 +1219,17 @@
               <label class="toggle"><input type="checkbox" v-model="config.showFullTitle" @change="saveConfigDebounced" /><span class="toggle-slider"></span></label>
             </div>
           </div>
+          <div v-if="currentUser?.is_admin" class="card card-pad" style="margin-top: 16px;">
+            <div class="section-title">支持开发者</div>
+            <div class="setting-row" style="align-items: center;">
+              <div class="setting-info">
+                <div class="lbl">☕ 请作者喝杯咖啡</div>
+                <div class="desc">本应用免费、无广告、持续更新。如果它帮到了你，欢迎请作者喝杯咖啡，金额随意，1 元也是心意，完全自愿。</div>
+              </div>
+              <button class="btn btn-secondary" @click="openDonateModal">{{ donateSupported ? '再次赞赏' : '去赞赏' }}</button>
+            </div>
+            <p v-if="donateSupported" style="font-size: 12px; color: var(--emerald); margin-top: 8px;">❤ 谢谢你曾经的支持，你的鼓励是持续更新的最大动力。</p>
+          </div>
         </div>
         </transition>
 
@@ -1181,6 +1295,28 @@
       </div>
     </div>
   </div>
+
+  <!-- Donate Modal -->
+  <transition name="fade">
+    <div v-if="donateModal.visible" class="modal-overlay" @mousedown.self="closeDonateModal">
+      <div class="modal" @click.stop style="max-width: 380px;">
+        <div class="modal-hd"><div class="modal-title">☕ 请作者喝杯咖啡</div><button class="icon-btn" @click="closeDonateModal">✕</button></div>
+        <div class="modal-bd" style="text-align: center;">
+          <img src="/img/donate-wechat.png" alt="微信收款码" style="width: 250px; height: auto; border-radius: 8px; border: 1px solid var(--border);" />
+          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px; line-height: 1.7;">
+            本应用完全免费、无广告，数据存储在你自己的设备上。<br/>
+            如果它帮到了你，欢迎请作者喝杯咖啡。<br/>
+            <strong>金额随意，1 元也是心意。</strong>
+          </p>
+          <p style="font-size: 12px; color: var(--text-tertiary, #999); margin-top: 8px; line-height: 1.6;">不赞赏也完全可以，所有功能不受任何影响。<br/>支付后可点击下方按钮发送一次匿名支持计数（仅设备统计信息，与你的微信账号和支付记录无任何关联）。</p>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-secondary" @click="closeDonateModal">暂不支持</button>
+          <button class="btn btn-primary" @click="markDonated" :disabled="donateModal.loading">{{ donateModal.loading ? '发送中…' : '❤ 已支持' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
 
   <!-- Create User Modal -->
   <transition name="fade">
@@ -1633,6 +1769,32 @@
     </div>
   </transition>
 
+  <!-- AI Assistant -->
+  <div v-if="aiOpen" class="ai-panel">
+    <div class="ai-hd">
+      <div class="ai-avatar">✨</div>
+      <div>
+        <div class="ai-name">AI 控制台助手</div>
+        <div class="ai-status">在线 · 本地推理</div>
+      </div>
+      <button class="icon-btn ai-close" @click="aiOpen = false">✕</button>
+    </div>
+    <div class="ai-stream" ref="aiStreamRef">
+      <div v-for="m in aiMessages" :key="m.id" :class="['ai-msg', m.role]">
+        <span v-if="m.thinking"><span class="ai-thinking"><span></span><span></span><span></span></span></span>
+        <span v-else v-html="m.html || escapeHtml(m.text)"></span>
+      </div>
+    </div>
+    <div class="ai-suggest" v-if="aiMessages.length <= 1">
+      <span class="ai-chip" v-for="s in aiSuggestions" :key="s" @click="sendAi(s)">{{ s }}</span>
+    </div>
+    <div class="ai-input-area">
+      <input class="input" v-model="aiInput" @keyup.enter="sendAi()" placeholder="问我任何事，例如：今天有几个新用户？" />
+      <button class="btn btn-grad" @click="sendAi()" :disabled="!aiInput.trim()">发送</button>
+    </div>
+  </div>
+  <div v-else class="ai-fab" @click="aiOpen = true" title="AI 助手">✨</div>
+
   <!-- Hidden file inputs -->
   <input type="file" ref="adminImportFile" accept=".json" style="display:none" @change="importBookmarks" />
   <input type="file" ref="adminEdgeImportFile" accept=".html" style="display:none" @change="importEdgeBookmarks" />
@@ -1692,7 +1854,11 @@ const app = createApp({
       deleteModal: { visible: false, user: null, loading: false, error: '' },
       confirmDialog: { visible: false, title: '', message: '', icon: '⚠️', type: 'danger', loading: false, onConfirm: null },
       appVersion: '',
+      serverStartedAt: '',
       updateBanner: { visible: false, version: '', current: '', downloadUrl: '' },
+      donateBanner: { visible: false },
+      donateSupported: (function() { try { return localStorage.getItem('donate_supported') === '1'; } catch { return false; } })(),
+      donateModal: { visible: false, loading: false },
       toasts: [],
       changePasswordModal: { visible: false, oldPassword: '', newPassword: '', confirmPassword: '', loading: false, error: '' },
       securityQuestionsModal: { visible: false, question1: '', answer1: '', question2: '', answer2: '', question3: '', answer3: '', loading: false, error: '', hasQuestions: false, savedQuestions: {} },
@@ -1720,6 +1886,10 @@ const app = createApp({
       bmCreateBookmarkModal: { visible: false, url: '', title: '', parentId: null, favicon_url: '', visibility: 'private', remark: '', metadataLoading: false, loading: false, error: '' },
       folderIconDialog: { visible: false, node: null, selectedIcon: '', customIcon: '', presets: FOLDER_ICON_PRESETS },
       al: { logs: [], total: 0, page: 1, limit: 20, loading: false, filterAction: '', filterDateFrom: '', filterDateTo: '', filterSearch: '' },
+      aiOpen: false,
+      aiInput: '',
+      aiMessages: [{ id: 0, role: 'bot', text: '你好！我是你的控制台助手 ✨ 我可以帮你：\n• 查看统计概览\n• 查询特定用户\n• 分析操作日志\n• 检测异常活动\n试着问我"今天发生了什么"或点击下方建议开始。' }],
+      aiSuggestions: ['用户总览', '今日活跃', '异常检测', '最近登录', '操作总结'],
     };
   },
   computed: {
@@ -1727,7 +1897,7 @@ const app = createApp({
       return { dashboard: '仪表盘', users: '用户管理', bookmarks: '我的书签', userbookmarks: '用户书签', logs: '操作日志', settings: this.currentUser?.is_admin ? '系统设置' : '个性化设置', background: '背景外观', deadlinks: '清理失效', duplicate: '去重复' }[this.currentTab] || '';
     },
     pageSub() {
-      return { dashboard: '系统关键指标', users: '创建、编辑、启用/禁用用户', bookmarks: '管理你的书签与文件夹', userbookmarks: '选择用户，查看与管理其书签', logs: '审计日志 + 异常检测', settings: this.currentUser?.is_admin ? '全局与显示配置' : '显示配置与个性化', background: '自定义背景与主题', deadlinks: '检测并清理打不开的书签', duplicate: '按网址查找并清理重复书签' }[this.currentTab] || '';
+      return { dashboard: '系统关键指标 + AI 智能洞察', users: '创建、编辑、启用/禁用用户', bookmarks: '管理你的书签与文件夹', userbookmarks: '选择用户，查看与管理其书签', logs: '审计日志 + 异常检测', settings: this.currentUser?.is_admin ? '全局与显示配置' : '显示配置与个性化', background: '自定义背景与主题', deadlinks: '检测并清理打不开的书签', duplicate: '按网址查找并清理重复书签' }[this.currentTab] || '';
     },
     userInitial() { return (this.currentUser?.username || '?').charAt(0).toUpperCase(); },
     allSelected() { return this.pageUsers.length > 0 && this.pageUsers.every(u => this.selectedUsers.includes(u.id) || (u.is_admin && u.id === this.currentUserId)); },
@@ -1771,7 +1941,7 @@ const app = createApp({
         { label: '公开书签', value: this.stats.public_bookmarks, icon: '🌐', tone: 'emerald', trend: this.publicTrend(), spark: this.sparkFor(this.actionSeries, 2) },
       ];
     },
-    development-note() {
+    aiInsights() {
       const insights = [];
       const totalUsers = this.stats.total_users;
       const activeUsers = this.users.filter(u => u.is_active).length;
@@ -1796,6 +1966,110 @@ const app = createApp({
     currentTab() { this.sidebarOpen = false; },
   },
   methods: {
+    /* AI Assistant */
+    openAiAssistant() { this.aiOpen = !this.aiOpen; if (this.aiOpen) this.$nextTick(() => this.$refs.aiStreamRef?.scrollTo(0, 99999)); },
+    sendAi(text) {
+      const q = (text || this.aiInput || '').trim();
+      if (!q) return;
+      this.aiInput = '';
+      this.aiMessages.push({ id: Date.now(), role: 'user', text: q });
+      const thinkingId = Date.now() + 1;
+      this.aiMessages.push({ id: thinkingId, role: 'bot', thinking: true });
+      this.$nextTick(() => this.$refs.aiStreamRef?.scrollTo(0, 99999));
+      setTimeout(() => {
+        const reply = this.aiProcess(q);
+        const idx = this.aiMessages.findIndex(m => m.id === thinkingId);
+        if (idx >= 0) this.aiMessages.splice(idx, 1, { id: thinkingId, role: 'bot', html: reply });
+        this.$nextTick(() => this.$refs.aiStreamRef?.scrollTo(0, 99999));
+      }, 600);
+    },
+    aiProcess(q) {
+      const lower = q.toLowerCase();
+      // Intent detection
+      if (this.aiMatch(lower, ['统计', '概览', 'overview', 'stats', '总数', '总览'])) {
+        return this.aiStatsOverview();
+      }
+      if (this.aiMatch(lower, ['用户', 'user', '账号'])) {
+        if (this.aiMatch(lower, ['最近', '刚', '新', 'new', 'today'])) return this.aiRecentUsers();
+        if (this.aiMatch(lower, ['不活跃', 'inactive', '没登录', '未登录', '休眠'])) return this.aiInactiveUsers();
+        if (this.aiMatch(lower, ['管理员', 'admin'])) return this.aiAdminUsers();
+        const target = this.aiFindUser(q);
+        if (target) return this.aiUserInfo(target);
+        return this.aiUserList();
+      }
+      if (this.aiMatch(lower, ['日志', 'log', '审计', 'audit'])) {
+        if (this.aiMatch(lower, ['异常', 'anomaly', '可疑', '危险'])) return this.aiAnomalies();
+        return this.aiLogsSummary();
+      }
+      if (this.aiMatch(lower, ['书签', 'bookmark', '收藏'])) return this.aiBookmarksSummary();
+      if (this.aiMatch(lower, ['登录', 'login', '活跃', 'active'])) return this.aiActivitySummary();
+      if (this.aiMatch(lower, ['总结', 'summary', '今天', 'today', '发生'])) return this.aiDailySummary();
+      if (this.aiMatch(lower, ['你好', 'hello', 'hi', '在吗'])) return '你好！我是控制台助手，可以问任何关于用户、日志、统计的问题 ✨';
+      if (this.aiMatch(lower, ['帮助', 'help', '能做什么', '功能'])) return '我能帮你：<br/>• <code>用户概览</code> / <code>最近用户</code> / <code>休眠用户</code><br/>• <code>今日活动</code> / <code>异常检测</code><br/>• <code>操作总结</code> / <code>书签统计</code><br/>• 直接问我某个用户的信息，比如"用户zhang"';
+      return `没理解你的问题 🤔 试着问：<br/>• <code>${this.aiSuggestions.join('</code> · <code>')}</code>`;
+    },
+    aiMatch(s, keywords) { return keywords.some(k => s.includes(k)); },
+    aiFindUser(q) {
+      const cleaned = q.replace(/(用户|user|账号|是谁|的信息|怎么样)/gi, '').trim();
+      if (!cleaned) return null;
+      return this.users.find(u => u.username.toLowerCase().includes(cleaned.toLowerCase()) || (u.nickname || '').toLowerCase().includes(cleaned.toLowerCase()) || (u.email || '').toLowerCase().includes(cleaned.toLowerCase()) || String(u.id) === cleaned);
+    },
+    aiStatsOverview() {
+      const s = this.stats;
+      return `📊 <strong>系统概览</strong><br/>• 用户：<strong>${s.total_users}</strong>（启用 ${this.users.filter(u=>u.is_active).length}）<br/>• 书签：<strong>${s.total_bookmarks}</strong><br/>• 文件夹：<strong>${s.total_folders}</strong><br/>• 公开书签：<strong>${s.public_bookmarks}</strong><br/>• 当前日志条数：<strong>${this.al.logs.length}</strong>`;
+    },
+    aiUserList() {
+      const top = this.users.slice(0, 5).map(u => `<code>${u.username}</code>${u.is_admin ? ' 👑' : ''}${!u.is_active ? ' ⛔' : ''}`).join(', ');
+      return `👥 <strong>用户列表</strong>（前 5 名）<br/>${top}<br/><br/>共 <strong>${this.users.length}</strong> 名用户，告诉我具体名字查询详情。`;
+    },
+    aiRecentUsers() {
+      const sorted = [...this.users].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+      const list = sorted.map(u => `<code>${u.username}</code> · ${this.relativeTime(u.created_at)}`).join('<br/>');
+      return `🆕 <strong>最近注册</strong><br/>${list}`;
+    },
+    aiInactiveUsers() {
+      const inactive = this.users.filter(u => { if (u.is_admin) return false; if (!u.last_login_at) return true; return (Date.now() - new Date(u.last_login_at).getTime()) > 30 * 86400000; });
+      if (!inactive.length) return '✅ 没有发现休眠用户';
+      const list = inactive.slice(0, 8).map(u => `<code>${u.username}</code> · ${u.last_login_at ? this.relativeTime(u.last_login_at) : '从未登录'}`).join('<br/>');
+      return `⏳ <strong>${inactive.length} 名休眠用户</strong>（30+ 天未登录）<br/>${list}${inactive.length > 8 ? '<br/>...' : ''}`;
+    },
+    aiAdminUsers() {
+      const admins = this.users.filter(u => u.is_admin);
+      const list = admins.map(u => `<code>${u.username}</code> · ${u.last_login_at ? this.relativeTime(u.last_login_at) : '从未'}`).join('<br/>');
+      return `🛡️ <strong>${admins.length} 名管理员</strong><br/>${list}`;
+    },
+    aiUserInfo(u) {
+      return `👤 <strong>${u.username}</strong>${u.is_admin ? ' <span style="color:var(--accent)">[管理员]</span>' : ''}<br/>• ID: <code>${u.id}</code><br/>• 昵称：${u.nickname || '—'}<br/>• 邮箱：${u.email || '—'}<br/>• 状态：${u.is_active ? '<span style="color:var(--emerald)">启用</span>' : '<span style="color:var(--rose)">禁用</span>'}<br/>• 注册：${this.formatDateTime(u.created_at)}<br/>• 最后登录：${u.last_login_at ? this.relativeTime(u.last_login_at) : '从未登录'}`;
+    },
+    aiLogsSummary() {
+      const byAction = {};
+      this.al.logs.forEach(l => { byAction[l.action] = (byAction[l.action] || 0) + 1; });
+      const top = Object.entries(byAction).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([a, c]) => `<code>${this.getActionLabel(a)}</code> × ${c}`).join('<br/>');
+      return `📋 <strong>日志概览</strong>（当前页 ${this.al.logs.length} 条）<br/>${top || '无数据'}`;
+    },
+    aiAnomalies() {
+      const anomalies = this.al.logs.filter(l => this.isAnomaly(l));
+      if (!anomalies.length) return '✅ 未检测到异常活动';
+      const list = anomalies.slice(0, 5).map(l => `• <code>${l.username || '#'+l.user_id}</code> · ${this.getActionLabel(l.action)} · ${this.formatDateTime(l.created_at)}`).join('<br/>');
+      return `🚨 <strong>${anomalies.length} 条异常</strong><br/>${list}`;
+    },
+    aiBookmarksSummary() {
+      return `🔖 <strong>书签</strong>：${this.stats.total_bookmarks} 个，分布在 ${this.stats.total_folders} 个文件夹中。公开 ${this.stats.public_bookmarks} 个，私密 ${this.stats.total_bookmarks - this.stats.public_bookmarks} 个。`;
+    },
+    aiActivitySummary() {
+      const today = new Date().toDateString();
+      const logins = this.al.logs.filter(l => l.action === 'login' && new Date(l.created_at).toDateString() === today).length;
+      const total = this.actionSeries.reduce((a, b) => a + b, 0);
+      return `📈 <strong>活动概览</strong><br/>• 今日登录：<strong>${logins}</strong> 次<br/>• 14 天操作总数：<strong>${total}</strong><br/>• 当前显示日志：<strong>${this.al.logs.length}</strong> 条`;
+    },
+    aiDailySummary() {
+      const today = new Date().toDateString();
+      const todaysLogs = this.al.logs.filter(l => new Date(l.created_at).toDateString() === today);
+      const loginCount = todaysLogs.filter(l => l.action === 'login').length;
+      const newUsers = this.users.filter(u => new Date(u.created_at).toDateString() === today).length;
+      const anomalies = this.anomalyCount;
+      return `📅 <strong>今日总结</strong><br/>• 登录：<strong>${loginCount}</strong> 次<br/>• 新注册：<strong>${newUsers}</strong><br/>• 操作总数：<strong>${todaysLogs.length}</strong><br/>• 异常：<strong style="color:${anomalies > 0 ? 'var(--rose)' : 'var(--emerald)'}">${anomalies}</strong>`;
+    },
     isAnomaly(log) {
       // Detect anomalies: rapid delete operations, login from multiple IPs in short time
       if (log.action === 'admin_delete_node' || log.action === 'user_delete') return true;
@@ -1963,6 +2237,57 @@ const app = createApp({
       this.confirmDialog = { visible: true, title, message, icon, type, loading: false, onConfirm };
     },
     closeConfirm() { this.confirmDialog.visible = false; },
+    // 赞赏顶部横幅：每个版本只出现一次，支持过则永不再显示
+    maybeShowDonateBanner() {
+      if (!this.currentUser?.is_admin) return;
+      if (this.donateSupported) return;
+      if (localStorage.getItem('donate_banner_dismissed') === this.appVersion) return;
+      this.donateBanner.visible = true;
+    },
+    dismissDonateBanner() {
+      this.donateBanner.visible = false;
+      if (this.appVersion) localStorage.setItem('donate_banner_dismissed', this.appVersion);
+    },
+    // 赞赏弹窗：应用每次启动后首次进入控制台时弹一次；
+    // 点【暂不支持】后本次运行内（刷新页面）不再弹，应用重启后再次提示；
+    // 点【已支持】发送成功后永不再弹
+    scheduleDonateModal(attempt = 0) {
+      if (!this.currentUser?.is_admin) return;
+      if (this.donateSupported) return;
+      if (this.serverStartedAt && localStorage.getItem('donate_dismissed_start') === this.serverStartedAt) return;
+      if (this.confirmDialog.visible && attempt < 5) {
+        setTimeout(() => this.scheduleDonateModal(attempt + 1), 2000);
+        return;
+      }
+      this.openDonateModal();
+    },
+    openDonateModal() { this.donateModal.visible = true; },
+    closeDonateModal() {
+      this.donateModal.visible = false;
+      // 暂不支持 / 关闭：本次应用运行内不再弹出
+      if (this.serverStartedAt) localStorage.setItem('donate_dismissed_start', this.serverStartedAt);
+    },
+    async markDonated() {
+      this.donateModal.loading = true;
+      let ok = false;
+      try {
+        const res = await fetch('/api/donate/support', { method: 'POST', headers: this.getHeaders() });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          ok = data.ok !== false;
+        }
+      } catch {}
+      this.donateModal.loading = false;
+      if (ok) {
+        // 仅在请求成功后记住，失败则下次启动继续提示
+        this.donateSupported = true;
+        localStorage.setItem('donate_supported', '1');
+        this.donateModal.visible = false;
+        this.toast('谢谢你的心意，这也太暖了 ❤', 'success');
+      } else {
+        this.toast('支持计数发送失败，请稍后重试（不影响你的支持 ❤）', 'error');
+      }
+    },
     async checkForUpdate() {
       try {
         const res = await fetch('/api/version/check', { headers: this.getHeaders() });
@@ -2194,7 +2519,12 @@ const app = createApp({
     document.documentElement.dataset.theme = this.theme;
     const authed = await this.checkAuth();
     if (!authed) return;
-    fetch('/api/version').then(r => r.json()).then(d => { this.appVersion = d.version || ''; }).catch(() => {});
+    fetch('/api/version').then(r => r.json()).then(d => {
+      this.appVersion = d.version || '';
+      this.serverStartedAt = d.started_at || '';
+      this.maybeShowDonateBanner();
+      setTimeout(() => this.scheduleDonateModal(), 1500);
+    }).catch(() => {});
     this.checkForUpdate();
     document.addEventListener('click', (e) => {
       if (this.userMenuOpen && !e.target.closest('.user-chip') && !e.target.closest('.user-menu')) {
