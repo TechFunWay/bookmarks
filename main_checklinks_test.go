@@ -86,7 +86,7 @@ func TestCheckURL(t *testing.T) {
 	}))
 	defer headBlockedSrv.Close()
 
-	// 对 HEAD 返回 404、对 GET 返回 200 —— 某些真实站点的行为。
+	// 对 HEAD 返回 404、对 GET 返回 200 —— 真实站点(如 codebuddy.cn)的行为。
 	// 检测只用 GET，绝不能因 HEAD 的 404 就误判为失效。
 	headNotFoundSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {

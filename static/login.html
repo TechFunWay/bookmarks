@@ -232,8 +232,9 @@
 
     .login-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--text-muted); font-size: 12px; }
     .login-divider::before, .login-divider::after { content: ''; height: 1px; flex: 1; background: var(--form-border); }
-    .fnos-login { width: 100%; height: 42px; border: 1px solid rgba(99,102,241,.32); border-radius: 10px; background: rgba(99,102,241,.07); color: var(--link); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .2s, border-color .2s, transform .15s; }
-    .fnos-login:hover:not(:disabled) { background: rgba(99,102,241,.14); border-color: var(--accent); transform: translateY(-1px); }
+    .fnos-login { width: 100%; min-height: 44px; border: 1px solid var(--form-border); border-radius: 10px; background: transparent; color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .2s, border-color .2s; }
+    .fnos-login:hover:not(:disabled) { background: rgba(99,102,241,.08); border-color: var(--accent); }
+    .fnos-login:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .fnos-login:disabled { opacity: .55; cursor: not-allowed; }
 
     @media (max-width: 720px) {
@@ -303,7 +304,7 @@
     </form>
 
     <div class="login-divider" id="fnos-divider" hidden><span>或</span></div>
-    <button type="button" class="fnos-login" id="fnos-login-btn" hidden>飞牛 NAS 一键登录</button>
+    <button type="button" class="fnos-login" id="fnos-login-btn" hidden>使用飞牛 NAS 登录</button>
 
     <div class="links">
       <span>还没有账户？</span><a id="register-link" href="register.html">立即注册</a>
@@ -408,7 +409,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     fnosLoginButton.textContent = '正在获取飞牛 NAS 登录信息…';
     await tryFnOSLogin();
     fnosLoginButton.disabled = false;
-    fnosLoginButton.textContent = '飞牛 NAS 一键登录';
+    fnosLoginButton.textContent = '使用飞牛 NAS 登录';
   });
 
   if (localStorage.getItem('remember_me') === 'true') {
