@@ -57,7 +57,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v3.3.2"
+	appVersion = "v3.4.0"
 
 	fnOSTicketTTL = 5 * time.Minute
 
@@ -225,6 +225,8 @@ type StatsRequest struct {
 	Arch       string `json:"arch"`
 	// Event 区分上报类型：心跳不携带，赞赏点击为 donate_support
 	Event string `json:"event,omitempty"`
+	// Amount 赞赏金额（元）：仅 donate_support 事件携带，心跳不传
+	Amount float64 `json:"amount,omitempty"`
 }
 
 var statsHTTPClient = &http.Client{Timeout: 5 * time.Second}
@@ -343,8 +345,19 @@ func startStatsReporter(appName, version, deviceType, dataUrl string) {
 // handleDonateSupport 用户在赞赏弹窗点击“已支持”后，复用统计通道
 // 发送一次匿名支持计数（仅设备统计信息，不含任何用户数据）
 func (s *server) handleDonateSupport(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Amount float64 `json:"amount"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	if payload.Amount < 0 {
+		payload.Amount = 0
+	}
 	req := statsBaseRequest
 	req.Event = "donate_support"
+	req.Amount = payload.Amount
 	body, _ := json.Marshal(req)
 	resp, err := statsHTTPClient.Post(statsEndpoint(), "application/json", bytes.NewReader(body))
 	if err != nil {
