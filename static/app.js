@@ -244,6 +244,7 @@ const app = createApp({
         },
         metadataLoading: false,
         metadataError: "",
+        iconUploading: false,
         toast: {
           visible: false,
           message: "",
@@ -1891,6 +1892,20 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
         this.metadataLoading = false;
       }
     },
+    async onIconFilePicked(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      this.iconUploading = true;
+      try {
+        const url = await window.bookmarksIconFile.upload(file, this.getHeaders("application/json"));
+        this.modal.form.favicon_url = url;
+      } catch (error) {
+        this.showToast(error.message || "上传失败", "error");
+      } finally {
+        this.iconUploading = false;
+      }
+    },
     closeModal() {
       this.modal.visible = false;
       this.modal.type = "";
@@ -2258,6 +2273,12 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       const node = this.contextNode;
       if (!node) return;
       this.openEdit(node);
+    },
+    contextAddToHome() {
+      const node = this.contextNode;
+      this.hideContextMenu();
+      if (!node || node.type !== "bookmark") return;
+      window.open("go/" + node.id, "_blank");
     },
     contextDelete() {
       const node = this.contextNode;
