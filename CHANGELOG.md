@@ -7,9 +7,59 @@
 
 ---
 
-## 📌 最新版本：v3.3.0
+## 📌 最新版本：v3.3.2
 
-> 本版本汇总自 v3.2.0 之后的全部功能与修复。
+> 本版本汇总自 v3.3.0 之后的全部功能与修复。
+
+### 🚀 快速开始
+
+**方式一：下载安装包**
+- 📥 [前往 Gitee Releases 下载 v3.3.2](https://gitee.com/TechFunWay/bookmarks/releases/tag/v3.3.2)
+
+**方式二：Docker 一键部署**
+```bash
+git clone https://gitee.com/TechFunWay/bookmarks.git
+cd bookmarks
+docker-compose up -d
+```
+
+### 📥 下载链接
+
+| 平台 | 架构 | 下载地址 |
+|------|------|----------|
+| Linux | amd64 | [bookmarks-v3.3.2-linux-amd64.tar.gz](https://gitee.com/TechFunWay/bookmarks/releases/download/v3.3.2/bookmarks-v3.3.2-linux-amd64.tar.gz) |
+| Linux | arm64 | [bookmarks-v3.3.2-linux-arm64.tar.gz](https://gitee.com/TechFunWay/bookmarks/releases/download/v3.3.2/bookmarks-v3.3.2-linux-arm64.tar.gz) |
+| macOS | amd64 | [bookmarks-v3.3.2-macos-amd64.tar.gz](https://gitee.com/TechFunWay/bookmarks/releases/download/v3.3.2/bookmarks-v3.3.2-macos-amd64.tar.gz) |
+| macOS | arm64 | [bookmarks-v3.3.2-macos-arm64.tar.gz](https://gitee.com/TechFunWay/bookmarks/releases/download/v3.3.2/bookmarks-v3.3.2-macos-arm64.tar.gz) |
+| Windows | amd64 | [bookmarks-v3.3.2-windows-amd64.tar.gz](https://gitee.com/TechFunWay/bookmarks/releases/download/v3.3.2/bookmarks-v3.3.2-windows-amd64.tar.gz) |
+| Windows | arm64 | [bookmarks-v3.3.2-windows-arm64.tar.gz](https://gitee.com/TechFunWay/bookmarks/releases/download/v3.3.2/bookmarks-v3.3.2-windows-arm64.tar.gz) |
+
+### ✨ 更新内容
+
+**书签支持自定义图标**
+- 电脑端、手机端、后台编辑书签时均可上传本地图片作为图标，自动居中裁方并压缩成 512×512。
+- 手机端长按书签新增「自定义图标」直达入口：一键上传或恢复自动获取，不用再进编辑表单。
+- 修改书签网址不再覆盖已上传的自定义图标。
+
+**桌面快捷方式**
+- 新增「添加到桌面」：为每个书签生成专用跳转页，手机浏览器「添加到主屏幕」即得到带自定义图标的快捷方式，点开直达网站；iPhone、安卓、电脑分别有操作引导。
+- 支持浏览器首页快捷方式：复制跳转链接添加到浏览器首页，图标同样使用自定义图。
+
+**应用图标可以换了**
+- 后台「系统设置」新增「应用图标」：上传一张方图，即可自定义「网址收藏夹」本身的图标，手机添加到主屏幕时显示的就是它。
+- 修复飞牛网关下添加到主屏幕时应用图标失效的问题。
+
+**图标更清晰**
+- 网站图标自动抓取优先高清来源（apple-touch-icon、大尺寸图标），应用内书签图标显示更清晰。
+- 抓取到的图标自动保存到本地，展示更稳定。
+
+**其他**
+- 赞赏提示改为按版本记忆：支持过后应用升级，还会再提示一次。
+- 修复发行压缩包混入 macOS 资源叉文件的问题。
+
+---
+
+## v3.3.0
 
 ### 🚀 快速开始
 

@@ -8,6 +8,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/app-icons/icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <script src="/js/md5.js"></script>
+  <script src="/js/icon-file.js"></script>
   <script src="/vue.global.prod.js"></script>
   <style>
     /* ============ CSS Variables ============ */
@@ -1068,6 +1069,12 @@
         <button class="ctx-item" @click="ctxRemark">
           <span class="ctx-icon">📝</span>{{ ctxMenu.node.remark ? '查看/编辑备注' : '添加备注' }}
         </button>
+        <button class="ctx-item" @click="ctxAddToHome">
+          <span class="ctx-icon">📱</span>添加到桌面
+        </button>
+        <button class="ctx-item" @click="ctxIcon">
+          <span class="ctx-icon">🖼️</span>自定义图标
+        </button>
       </template>
       <div class="ctx-sep"></div>
       <button class="ctx-item danger" @click="ctxDelete">
@@ -1087,6 +1094,40 @@
   </transition>
 
   <!-- ============ Modals ============ -->
+
+  <!-- Icon Quick Modal -->
+  <transition name="fade">
+    <div v-if="iconModal.visible" class="modal-backdrop" @click="closeIconModal">
+      <transition name="slide-up">
+        <div class="modal-sheet" @click.stop>
+          <div class="modal-handle"></div>
+          <div class="modal-title">🖼️ 自定义图标</div>
+          <div class="modal-body">
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 0 4px;">
+              <img v-if="iconModal.node && isIconUrl(iconModal.node.favicon_url)" :src="iconModal.node.favicon_url" style="width:56px;height:56px;border-radius:14px;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);" @error="onIconPreviewError" />
+              <div v-else-if="iconModal.node && iconModal.node.favicon_url" style="font-size:40px;line-height:56px;text-align:center;width:56px;">{{ iconModal.node.favicon_url }}</div>
+              <div v-else style="width:56px;height:56px;border-radius:14px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;">🌐</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ iconModal.node && iconModal.node.title }}</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px;">图标用于书签展示与桌面快捷方式</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button class="modal-btn primary" style="flex:1;" @click="$refs.quickIconFile.click()" :disabled="iconModal.uploading">{{ iconModal.uploading ? '处理中…' : '上传图片' }}</button>
+              <button class="modal-btn secondary" style="flex:1;" @click="restoreAutoIcon" :disabled="iconModal.uploading">恢复自动获取</button>
+            </div>
+            <input ref="quickIconFile" type="file" accept="image/*" style="display:none" @change="onQuickIconFilePicked" />
+            <div style="font-size:12px;color:var(--text3);line-height:1.6;margin-top:10px;">
+              建议选 512×512 的方图，会自动居中裁方并压缩。保存后长按书签选「添加到桌面」重新添加快捷方式即可换上新图标。
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="modal-btn secondary" @click="closeIconModal">关闭</button>
+          </div>
+        </div>
+      </transition>
+    </div>
+  </transition>
 
   <!-- Add/Edit Node Modal -->
   <transition name="fade">
@@ -1125,8 +1166,22 @@
             </div>
             <!-- Favicon -->
             <div class="form-group" v-if="nodeModal.type.includes('bookmark')">
-              <label class="form-label">图标地址（可选）</label>
-              <input class="form-input" v-model="nodeModal.form.favicon_url" type="text" placeholder="留空自动获取" />
+              <label class="form-label">图标（可选）</label>
+              <div class="form-row">
+                <input class="form-input" v-model="nodeModal.form.favicon_url" type="text" placeholder="留空自动获取" style="flex:1" />
+                <button
+                  style="padding:0 12px;background:var(--primary);color:#fff;border-radius:var(--radius-md);font-size:13px;white-space:nowrap;"
+                  @click="$refs.iconFileInput.click()"
+                  :disabled="iconUploading"
+                >{{ iconUploading ? '上传中…' : '上传图片' }}</button>
+              </div>
+              <div v-if="nodeModal.form.favicon_url" style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                <img v-if="isIconUrl(nodeModal.form.favicon_url)" :src="nodeModal.form.favicon_url" style="width:24px;height:24px;border-radius:6px;object-fit:cover;" @error="onIconPreviewError" />
+                <span v-else style="font-size:20px;">{{ nodeModal.form.favicon_url }}</span>
+                <button style="padding:2px 10px;font-size:12px;background:var(--border);color:var(--text2);border-radius:8px;" @click="nodeModal.form.favicon_url = ''">清除</button>
+              </div>
+              <input ref="iconFileInput" type="file" accept="image/*" style="display:none" @change="onIconFilePicked" />
+              <div style="font-size:11px;color:var(--text3);margin-top:6px;">上传的图标会同时用于「添加到桌面」的快捷方式图标</div>
             </div>
             <!-- Visibility -->
             <div class="form-group" v-if="nodeModal.type.includes('bookmark')">
@@ -1817,6 +1872,8 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         metaLoading: false,
         metaError: '',
+        iconUploading: false,
+        iconModal: { visible: false, node: null, uploading: false },
         // Remark modal
         remarkModal: { visible: false, nodeId: null, title: '', remark: '' },
         // Move modal
@@ -2324,6 +2381,60 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!n) return;
         this.openEdit(n);
       },
+      ctxAddToHome() {
+        const n = this.ctxMenu.node; this.hideCtx();
+        if (!n || n.type !== 'bookmark') return;
+        window.open('go/' + n.id, '_blank');
+      },
+      ctxIcon() {
+        const n = this.ctxMenu.node; this.hideCtx();
+        if (!n || n.type !== 'bookmark') return;
+        this.iconModal = { visible: true, node: n, uploading: false };
+      },
+      closeIconModal() {
+        this.iconModal.visible = false;
+        this.iconModal.node = null;
+      },
+      async onQuickIconFilePicked(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!file || !this.iconModal.node) return;
+        this.iconModal.uploading = true;
+        try {
+          const url = await window.bookmarksIconFile.upload(file, this.getHeaders('application/json'));
+          await this.saveBookmarkIcon(url);
+        } catch(err) {
+          this.showToast(err.message || '上传失败', 'error');
+        } finally {
+          this.iconModal.uploading = false;
+        }
+      },
+      async restoreAutoIcon() {
+        const n = this.iconModal.node;
+        if (!n || !n.url) return;
+        this.iconModal.uploading = true;
+        try {
+          const r = await fetch(`/api/metadata?url=${encodeURIComponent(n.url)}`);
+          if (!r.ok) throw new Error('获取网站图标失败');
+          const d = await r.json();
+          await this.saveBookmarkIcon(d.favicon_url || '');
+          if (!d.favicon_url) this.showToast('该网站没有可用的图标，已清空', 'success');
+        } catch(err) {
+          this.showToast(err.message || '恢复自动获取失败', 'error');
+        } finally {
+          this.iconModal.uploading = false;
+        }
+      },
+      async saveBookmarkIcon(favicon) {
+        const n = this.iconModal.node;
+        const r = await fetch(`/api/nodes/${n.id}`, {
+          method: 'PUT', headers: this.getHeaders('application/json'),
+          body: JSON.stringify({ favicon_url: favicon || '' })
+        });
+        if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || '保存失败');
+        this.showToast('图标已保存，重新「添加到桌面」即可用新图标', 'success');
+        await this.loadTree();
+      },
       ctxAddFolder() {
         const n = this.ctxMenu.node; this.hideCtx();
         this.openAddFolder(n.id);
@@ -2441,6 +2552,22 @@ document.addEventListener('DOMContentLoaded', () => {
           this.metaLoading = false;
         }
       },
+      async onIconFilePicked(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        this.iconUploading = true;
+        try {
+          const url = await window.bookmarksIconFile.upload(file, this.getHeaders('application/json'));
+          this.nodeModal.form.favicon_url = url;
+        } catch(err) {
+          this.showToast(err.message || '上传失败', 'error');
+        } finally {
+          this.iconUploading = false;
+        }
+      },
+      isIconUrl(s) { return !!s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:')); },
+      onIconPreviewError(e) { e.target.style.display = 'none'; },
 
       // ============ Delete ============
       async deleteNode(node) {

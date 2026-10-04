@@ -6,6 +6,7 @@
   <title>控制台 - 网址收藏夹</title>
   <link rel="icon" href="/favicon.ico" />
   <script src="js/md5.js"></script>
+  <script src="js/icon-file.js"></script>
   <script src="/vue.global.prod.js"></script>
   <script src="js/admin-duplicate-panel.js"></script>
   <script src="js/admin-deadlinks-panel.js"></script>
@@ -791,7 +792,7 @@
         <span class="update-banner-close" @click="updateBanner.visible = false" title="关闭">×</span>
       </div>
 
-      <!-- 赞赏提示条：仅管理员可见，每个版本只出现一次，支持过则永不再显示 -->
+      <!-- 赞赏提示条：仅管理员可见，未支持当前版本前常驻展示（关闭不记忆，升级后再次出现） -->
       <div class="update-banner" v-if="donateBanner.visible">
         <span>☕ 网址收藏夹免费、无广告、数据都在你自己的设备上。如果它帮到了你，欢迎请作者喝杯咖啡——1 元也是心意，完全自愿，不影响任何功能。
           <a href="javascript:;" @click="openDonateModal">去赞赏</a>
@@ -1167,6 +1168,21 @@
                 <option value="view-portal">门户</option>
                 <option value="pc">旧版首页（仅电脑端）</option>
               </select>
+            </div>
+          </div>
+          <div v-if="currentUser?.is_admin" class="card card-pad" style="margin-bottom: 16px;">
+            <div class="section-title">应用图标</div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="lbl">自定义应用图标</div>
+                <div class="desc">手机浏览器把「网址收藏夹」添加到主屏幕时显示的图标，建议 512×512 方图。更换后需删除桌面上旧的快捷方式重新添加。</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <img :src="'/app-icons/icon-512.png?t=' + appIconCacheBust" style="width: 48px; height: 48px; border-radius: 12px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,.15);" />
+                <button class="btn btn-primary btn-sm" style="white-space: nowrap;" @click="$refs.appIconFile.click()" :disabled="appIconUploading">{{ appIconUploading ? '处理中…' : '上传图片' }}</button>
+                <button class="btn btn-sm" style="white-space: nowrap;" @click="resetAppIcon" :disabled="appIconUploading">恢复默认</button>
+                <input type="file" accept="image/*" ref="appIconFile" style="display: none;" @change="onAppIconFilePicked" />
+              </div>
             </div>
           </div>
           <div class="card card-pad">
@@ -1653,6 +1669,9 @@
             <label class="label">图标</label>
             <div style="display: flex; gap: 8px; align-items: center;">
               <input class="input" v-model="bmEditModal.favicon_url" placeholder="Emoji 或图片 URL" style="flex: 1;" />
+              <button class="btn btn-primary btn-sm" style="white-space: nowrap;" @click="$refs.bmEditIconFile.click()" :disabled="bmIconUploading">{{ bmIconUploading ? '上传中…' : '上传图片' }}</button>
+              <button class="btn btn-sm" v-if="bmEditModal.favicon_url" @click="bmEditModal.favicon_url = ''">清除</button>
+              <input type="file" accept="image/*" ref="bmEditIconFile" style="display: none;" @change="onBmIconFilePicked('edit')" />
               <span v-if="bmEditModal.favicon_url" style="font-size: 22px;">
                 <img v-if="isIconUrl(bmEditModal.favicon_url)" :src="bmEditModal.favicon_url" style="width: 22px; height: 22px; border-radius: 4px; vertical-align: middle;" @error="onPreviewError" />
                 <span v-else>{{ bmEditModal.favicon_url }}</span>
@@ -1718,6 +1737,9 @@
             <label class="label">图标</label>
             <div style="display: flex; gap: 8px; align-items: center;">
               <input class="input" v-model="bmCreateBookmarkModal.favicon_url" placeholder="自动获取或手动输入" style="flex: 1;" />
+              <button class="btn btn-primary btn-sm" style="white-space: nowrap;" @click="$refs.bmCreateIconFile.click()" :disabled="bmIconUploading">{{ bmIconUploading ? '上传中…' : '上传图片' }}</button>
+              <button class="btn btn-sm" v-if="bmCreateBookmarkModal.favicon_url" @click="bmCreateBookmarkModal.favicon_url = ''">清除</button>
+              <input type="file" accept="image/*" ref="bmCreateIconFile" style="display: none;" @change="onBmIconFilePicked('create')" />
               <span v-if="bmCreateBookmarkModal.favicon_url" style="font-size: 22px;">
                 <img v-if="isIconUrl(bmCreateBookmarkModal.favicon_url)" :src="bmCreateBookmarkModal.favicon_url" style="width: 22px; height: 22px; border-radius: 4px; vertical-align: middle;" @error="onPreviewError" />
                 <span v-else>{{ bmCreateBookmarkModal.favicon_url }}</span>
@@ -1857,7 +1879,10 @@ const app = createApp({
       serverStartedAt: '',
       updateBanner: { visible: false, version: '', current: '', downloadUrl: '' },
       donateBanner: { visible: false },
-      donateSupported: (function() { try { return localStorage.getItem('donate_supported') === '1'; } catch { return false; } })(),
+      // 支持记录按版本号记忆（donate_supported_version）：支持过当前版本后
+      // 本版本内不再提示；升级到新版本后旧记录失效，横幅与弹窗重新出现
+      supportedVersion: (function() { try { return localStorage.getItem('donate_supported_version') || ''; } catch { return ''; } })(),
+      donateBannerClosed: false,
       donateModal: { visible: false, loading: false },
       toasts: [],
       changePasswordModal: { visible: false, oldPassword: '', newPassword: '', confirmPassword: '', loading: false, error: '' },
@@ -1884,6 +1909,9 @@ const app = createApp({
       bmEditModal: { visible: false, node: null, isFolder: false, title: '', url: '', favicon_url: '', remark: '', visibility: 'private', metadataLoading: false, loading: false, error: '' },
       bmCreateFolderModal: { visible: false, title: '', parentId: null, icon: '', loading: false, error: '' },
       bmCreateBookmarkModal: { visible: false, url: '', title: '', parentId: null, favicon_url: '', visibility: 'private', remark: '', metadataLoading: false, loading: false, error: '' },
+      bmIconUploading: false,
+      appIconUploading: false,
+      appIconCacheBust: Date.now(),
       folderIconDialog: { visible: false, node: null, selectedIcon: '', customIcon: '', presets: FOLDER_ICON_PRESETS },
       al: { logs: [], total: 0, page: 1, limit: 20, loading: false, filterAction: '', filterDateFrom: '', filterDateTo: '', filterSearch: '' },
       aiOpen: false,
@@ -1893,6 +1921,10 @@ const app = createApp({
     };
   },
   computed: {
+    // 当前版本是否已支持过（支持记录按版本号记忆）
+    donateSupported() {
+      return !!this.appVersion && !!this.supportedVersion && this.supportedVersion === this.appVersion;
+    },
     pageTitle() {
       return { dashboard: '仪表盘', users: '用户管理', bookmarks: '我的书签', userbookmarks: '用户书签', logs: '操作日志', settings: this.currentUser?.is_admin ? '系统设置' : '个性化设置', background: '背景外观', deadlinks: '清理失效', duplicate: '去重复' }[this.currentTab] || '';
     },
@@ -2237,24 +2269,34 @@ const app = createApp({
       this.confirmDialog = { visible: true, title, message, icon, type, loading: false, onConfirm };
     },
     closeConfirm() { this.confirmDialog.visible = false; },
-    // 赞赏顶部横幅：每个版本只出现一次，支持过则永不再显示
+    // 赞赏顶部横幅：未支持当前版本前常驻展示（关闭不记忆，刷新后再次出现，
+    // 升级到新版本后也会再次出现）
     maybeShowDonateBanner() {
       if (!this.currentUser?.is_admin) return;
       if (this.donateSupported) return;
-      if (localStorage.getItem('donate_banner_dismissed') === this.appVersion) return;
       this.donateBanner.visible = true;
     },
     dismissDonateBanner() {
+      // 关闭不持久化：本次会话隐藏，刷新浏览器后再次出现
       this.donateBanner.visible = false;
-      if (this.appVersion) localStorage.setItem('donate_banner_dismissed', this.appVersion);
+      this.donateBannerClosed = true;
     },
     // 赞赏弹窗：应用每次启动后首次进入控制台时弹一次；
-    // 点【暂不支持】后本次运行内（刷新页面）不再弹，应用重启后再次提示；
-    // 点【已支持】发送成功后永不再弹
+    // 点【暂不支持】后同版本同次运行内不再弹，应用重启后再次提示；
+    // 点【已支持】发送成功后本版本内不再提示，升级到新版本后会再次提示。
+    // 抑制记录必须「同版本 + 同次运行」才有效：升级换版本后旧记录失效。
     scheduleDonateModal(attempt = 0) {
       if (!this.currentUser?.is_admin) return;
       if (this.donateSupported) return;
-      if (this.serverStartedAt && localStorage.getItem('donate_dismissed_start') === this.serverStartedAt) return;
+      let dismissedStart = null, dismissedVersion = null;
+      try {
+        dismissedStart = localStorage.getItem('donate_dismissed_start');
+        dismissedVersion = localStorage.getItem('donate_dismissed_version');
+      } catch {}
+      const sameRun = !!this.serverStartedAt && dismissedStart === this.serverStartedAt;
+      const sameVersion = !!this.appVersion && dismissedVersion === this.appVersion;
+      if (sameRun && sameVersion) return;
+      if (sameRun && !this.appVersion) return;
       if (this.confirmDialog.visible && attempt < 5) {
         setTimeout(() => this.scheduleDonateModal(attempt + 1), 2000);
         return;
@@ -2264,8 +2306,9 @@ const app = createApp({
     openDonateModal() { this.donateModal.visible = true; },
     closeDonateModal() {
       this.donateModal.visible = false;
-      // 暂不支持 / 关闭：本次应用运行内不再弹出
-      if (this.serverStartedAt) localStorage.setItem('donate_dismissed_start', this.serverStartedAt);
+      // 暂不支持 / 关闭：同版本同次运行内不再弹出
+      if (this.serverStartedAt) { try { localStorage.setItem('donate_dismissed_start', this.serverStartedAt); } catch {} }
+      if (this.appVersion) { try { localStorage.setItem('donate_dismissed_version', this.appVersion); } catch {} }
     },
     async markDonated() {
       this.donateModal.loading = true;
@@ -2279,10 +2322,11 @@ const app = createApp({
       } catch {}
       this.donateModal.loading = false;
       if (ok) {
-        // 仅在请求成功后记住，失败则下次启动继续提示
-        this.donateSupported = true;
-        localStorage.setItem('donate_supported', '1');
+        // 仅在请求成功后记住当前版本，失败则下次启动继续提示；升级到新版本后重新提示
+        this.supportedVersion = this.appVersion;
+        try { if (this.appVersion) localStorage.setItem('donate_supported_version', this.appVersion); } catch {}
         this.donateModal.visible = false;
+        this.donateBanner.visible = false;
         this.toast('谢谢你的心意，这也太暖了 ❤', 'success');
       } else {
         this.toast('支持计数发送失败，请稍后重试（不影响你的支持 ❤）', 'error');
@@ -2483,6 +2527,44 @@ const app = createApp({
       });
     },
     isIconUrl(s) { return s && (s.startsWith('http') || s.startsWith('/') || s.startsWith('data:')); },
+    async onBmIconFilePicked(mode) {
+      const input = mode === 'edit' ? this.$refs.bmEditIconFile : this.$refs.bmCreateIconFile;
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      this.bmIconUploading = true;
+      try {
+        const url = await window.bookmarksIconFile.upload(file, this.getHeaders('application/json'));
+        if (mode === 'edit') this.bmEditModal.favicon_url = url; else this.bmCreateBookmarkModal.favicon_url = url;
+        this.toast('图标已上传', 'success');
+      } catch (e) { this.toast(e.message || '上传失败', 'error'); }
+      this.bmIconUploading = false;
+    },
+    async onAppIconFilePicked() {
+      const input = this.$refs.appIconFile;
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      this.appIconUploading = true;
+      try {
+        const dataUrl = await window.bookmarksIconFile.toDataUrl(file, 512);
+        const res = await fetch('/api/appicon', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ data: dataUrl }) });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '上传失败'); }
+        this.toast('应用图标已更新，删除桌面旧快捷方式重新添加即可生效', 'success');
+        this.appIconCacheBust = Date.now();
+      } catch (e) { this.toast(e.message || '上传失败', 'error'); }
+      this.appIconUploading = false;
+    },
+    async resetAppIcon() {
+      this.appIconUploading = true;
+      try {
+        const res = await fetch('/api/appicon', { method: 'DELETE', headers: this.getHeaders() });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '操作失败'); }
+        this.toast('已恢复默认应用图标', 'success');
+        this.appIconCacheBust = Date.now();
+      } catch (e) { this.toast(e.message || '操作失败', 'error'); }
+      this.appIconUploading = false;
+    },
     bmEditNode(node) { this.bmEditModal = { visible: true, node: node, isFolder: node.type === 'folder', title: node.title || '', url: node.url || '', favicon_url: node.favicon_url || '', remark: node.remark || '', visibility: node.visibility || 'private', metadataLoading: false, loading: false, error: '' }; },
     closeBmEditModal() { this.bmEditModal.visible = false; },
     async saveBmEditNode() { const m = this.bmEditModal; if (!m.title.trim()) { m.error = '名称不能为空'; return; } if (!m.isFolder && !m.url.trim()) { m.error = '网址不能为空'; return; } m.loading = true; m.error = ''; try { const body = { title: m.title.trim(), favicon_url: m.favicon_url || null }; if (!m.isFolder) { body.url = m.url.trim(); body.visibility = m.visibility; } body.remark = m.remark; const res = await fetch(this.bmApi('/nodes/' + m.node.id), { method: 'PUT', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '保存失败'); } this.toast('已更新', 'success'); this.closeBmEditModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
@@ -2495,7 +2577,7 @@ const app = createApp({
     bmAddFolder() { this.bmCreateFolderModal = { visible: true, title: '', parentId: null, icon: '', loading: false, error: '' }; },
     closeBmCreateFolderModal() { this.bmCreateFolderModal.visible = false; },
     async confirmBmCreateFolder() { const m = this.bmCreateFolderModal; if (!m.title.trim()) { m.error = '文件夹名称不能为空'; return; } m.loading = true; m.error = ''; try { const body = { title: m.title.trim(), parent_id: m.parentId, icon: m.icon.trim() }; if (this.bm.mode === 'admin') body.user_id = this.bm.selectedUserId; const res = await fetch(this.bmApi('/folders'), { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); } this.toast('文件夹已创建', 'success'); this.closeBmCreateFolderModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
-    bmAddBookmark() { this.bmCreateBookmarkModal = { visible: true, url: '', title: '', parentId: null, loading: false, error: '' }; },
+    bmAddBookmark() { this.bmCreateBookmarkModal = { visible: true, url: '', title: '', favicon_url: '', parentId: null, loading: false, error: '' }; },
     closeBmCreateBookmarkModal() { this.bmCreateBookmarkModal.visible = false; },
     async confirmBmCreateBookmark() { const m = this.bmCreateBookmarkModal; if (!m.url.trim()) { m.error = '网址不能为空'; return; } m.loading = true; m.error = ''; try { const body = { url: m.url.trim(), title: m.title.trim(), favicon_url: m.favicon_url.trim(), parent_id: m.parentId, visibility: m.visibility, remark: m.remark }; if (this.bm.mode === 'admin') body.user_id = this.bm.selectedUserId; const res = await fetch(this.bmApi('/bookmarks'), { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify(body) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '创建失败'); } this.toast('书签已创建', 'success'); this.closeBmCreateBookmarkModal(); this.loadBookmarkUserTree(); } catch (e) { m.error = e.message; } m.loading = false; },
     onPreviewError(e) { e.target.style.display = 'none'; },

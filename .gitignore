@@ -20,10 +20,16 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+.playwright-mcp/
+.omo/
+.mimocode/
 .env
 .idea
 .DS_Store
 data.db
+# 其它 AI 工具的本地目录，不纳入版本管理（打包逻辑已迁至 .claude/skills/release-package）
+.codebuddy/
+.trae/
 /static/icons
 /static/downloads
 .vscode
@@ -33,5 +39,17 @@ release
 /bookmarks
 bookmarks
 bookmark
+techfunway.bookmarks/app/server/bookmarks
+techfunway.bookmarks/app/server/reset-password
+techfunway.bookmarks/app/server/edge-extension.zip
 # Playwright 测试产物
 test-results/
+
+# ---------- 本地临时目录 ----------
+# 临时测试与调试文件统一放这里，目录内内容不入库（仅保留 .gitkeep 占位）
+tmp/*
+!tmp/.gitkeep
+
+# AI 工具本地目录
+.zcode/
+gui-test-screenshots/

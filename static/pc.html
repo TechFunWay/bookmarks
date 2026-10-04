@@ -9,6 +9,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/style.css" />
   <script src="/js/md5.js"></script>
+  <script src="/js/icon-file.js"></script>
   <script src="/vue.global.prod.js"></script>
   <script defer src="/app.js"></script>
 </head>
@@ -417,6 +418,10 @@
         <span class="action-icon">✏️</span>
         <span class="action-text">编辑</span>
       </button>
+      <button type="button" v-if="contextNode.type === 'bookmark'" @click="contextAddToHome">
+        <span class="action-icon">📱</span>
+        <span class="action-text">添加到桌面</span>
+      </button>
       <button type="button" v-if="contextNode.type === 'bookmark'" @click="showRemarkPopup(contextNode, $event); hideContextMenu()">
         <span class="action-icon">📝</span>
         <span class="action-text">{{ contextNode.remark ? '查看/编辑备注' : '添加备注' }}</span>
@@ -574,11 +579,19 @@
                       :placeholder="modal.type.includes('bookmark') ? '自动获取或手动输入（支持网址、base64、本地路径）' : '输入 Emoji 或图片 URL（如 🌟）'"
                       style="flex:1;"
               />
+              <button type="button" class="tertiary" @click="$refs.iconFileInput.click()" :disabled="iconUploading">
+                {{ iconUploading ? '上传中…' : '上传图片' }}
+              </button>
+              <button type="button" class="tertiary" v-if="modal.form.favicon_url" @click="modal.form.favicon_url = ''">清除</button>
+              <input ref="iconFileInput" type="file" accept="image/*" style="display:none" @change="onIconFilePicked" />
               <span v-if="modal.form.favicon_url" style="font-size:22px;min-width:30px;text-align:center;line-height:1;">
                 <img v-if="isIconUrl(modal.form.favicon_url)" :src="modal.form.favicon_url" style="width:22px;height:22px;border-radius:4px;vertical-align:middle;" @error="onPreviewError" />
                 <span v-else>{{ modal.form.favicon_url }}</span>
               </span>
             </div>
+            <p v-if="modal.type.includes('bookmark')" style="font-size:12px;color:#8a9099;margin:6px 0 0;">
+              上传的图标会同时用于「添加到桌面」的快捷方式图标
+            </p>
           </div>
           <div class="form-group" v-if="modal.type.includes('bookmark')">
             <label>可见性</label>

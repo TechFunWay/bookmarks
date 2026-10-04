@@ -57,7 +57,7 @@ const (
 	nodeTypeBookmark = "bookmark"
 
 	// 应用版本
-	appVersion = "v3.3.0"
+	appVersion = "v3.3.2"
 
 	fnOSTicketTTL = 5 * time.Minute
 
@@ -78,6 +78,7 @@ type server struct {
 	httpClient        *http.Client
 	faviconChan       chan int64 // 图标获取任务队列
 	iconPath          string     // 图标存储路径
+	appIconPath       string     // 应用自定义图标路径（data/appicon.png），用于 PWA 图标与 favicon
 	securityQuestions *logic.SecurityQuestions
 	verCache          *versionCheckCache
 	verCacheMu        sync.Mutex
@@ -388,6 +389,7 @@ func main() {
 		dataPath += "/"
 	}
 	iconPath := dataPath + "icons/"
+	appIconPath := dataPath + "appicon.png"
 	dbPath := dataPath + "db/"
 	logPath := dataPath + "logs/"
 
@@ -485,6 +487,7 @@ func main() {
 		},
 		faviconChan:       make(chan int64, 100), // 缓冲队列，最多100个待处理任务
 		iconPath:          iconPath,              // 设置图标路径
+		appIconPath:       appIconPath,           // 应用自定义图标路径
 		securityQuestions: logic.NewSecurityQuestions(db),
 		// headless Chrome 会占用较多 CPU/内存，链接检测时最多同时运行一个。
 		browserCheckSem: make(chan struct{}, 1),
@@ -571,6 +574,9 @@ func main() {
 		r.Post("/config", s.optionalAuthMiddleware(s.handleUpdateConfig))
 		r.Get("/check-duplicates", s.optionalAuthMiddleware(s.handleCheckDuplicates))
 		r.Post("/check-links", s.optionalAuthMiddleware(s.handleCheckLinks))
+		r.Post("/icons/upload", s.optionalAuthMiddleware(s.handleIconUpload))
+		r.Post("/appicon", s.optionalAuthMiddleware(s.handleAppIconUpload))
+		r.Delete("/appicon", s.optionalAuthMiddleware(s.handleAppIconReset))
 	})
 
 	// 浏览器书签同步接口（使用 API Key 认证）
@@ -607,12 +613,25 @@ func main() {
 		r.Get(prefix, func(w http.ResponseWriter, req *http.Request) {
 			http.Redirect(w, req, prefix+"/", http.StatusTemporaryRedirect)
 		})
+		// 带前缀直达时 fnOSGatewayProxy 会剥掉前缀且上下文无前缀信息，
+		// 跳转页要自己在原始路径里识别，因此在前缀下再注册一份
+		r.Get(prefix+"/go/{id}", s.handleGoJump)
+		r.Get(prefix+"/go/{id}/manifest.webmanifest", s.handleGoManifest)
 		r.Handle(prefix+"/*", fnOSGatewayProxy(prefix, r))
 	}
-	r.Get("/manifest.webmanifest", func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/manifest+json")
-		fileServer.ServeHTTP(w, req)
+	// 桌面快捷方式跳转页：携带书签标题与图标（apple-touch-icon + manifest），
+	// 供手机浏览器“添加到主屏幕”时取用，然后进入目标网站
+	r.Get("/go/{id}", s.handleGoJump)
+	r.Get("/go/{id}/manifest.webmanifest", s.handleGoManifest)
+	// 应用图标：后台可上传自定义图标（data/appicon.png），动态接管
+	// PWA 图标与 favicon，未设置时回退到内嵌默认图
+	r.Get("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
+		s.serveAppIcon(w, req, "favicon.ico")
 	})
+	r.Get("/app-icons/{name}", func(w http.ResponseWriter, req *http.Request) {
+		s.serveAppIcon(w, req, chi.URLParam(req, "name"))
+	})
+	r.Get("/manifest.webmanifest", s.handleAppManifest)
 	r.Handle("/*", fileServer)
 	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
@@ -2349,7 +2368,10 @@ func (s *server) updateNode(ctx context.Context, userID int64, id int64, req upd
 				targetTitle = metaTitle
 				titleSet = true
 			}
-			if req.FaviconURL == nil && metaIcon != "" {
+			// 已有本地保存的图标（上传的自定义图或此前下载的）时不自动覆盖；
+			// 想换回自动获取，在编辑里清空图标后保存即可
+			if req.FaviconURL == nil && metaIcon != "" &&
+				!(current.Favicon.Valid && strings.HasPrefix(current.Favicon.String, "/icons/")) {
 				targetFavicon = metaIcon
 				faviconValid = true
 				faviconSet = true
@@ -2763,7 +2785,7 @@ func (s *server) fetchMetadataOnce(rawURL, hostname, baseIconURL string) (string
 
 	iconURL := baseIconURL
 	if parseErr == nil && doc != nil {
-		if iconHref := extractIconHref(doc); iconHref != "" {
+		if iconHref := pickBestIconHref(collectLinkIconCandidates(doc)); iconHref != "" {
 			if resolved, resolveErr := resolveURL(rawURL, iconHref); resolveErr == nil {
 				iconURL = resolved
 			}
@@ -2847,27 +2869,92 @@ func extractTitle(n *html.Node) string {
 	return ""
 }
 
-func extractIconHref(n *html.Node) string {
-	if n.Type == html.ElementNode && n.Data == "link" {
-		var rel, href string
-		for _, attr := range n.Attr {
-			if attr.Key == "rel" {
-				rel = strings.ToLower(attr.Val)
+// linkIconCandidate 描述页面中一个 <link rel=...icon...> 候选图标。
+type linkIconCandidate struct {
+	rel   string
+	href  string
+	sizes string
+}
+
+// collectLinkIconCandidates 收集页面里全部 rel 含 icon 的 link 标签，
+// 跳过 Safari 的 mask-icon（单色 SVG，不适合做收藏图标）。
+func collectLinkIconCandidates(n *html.Node) []linkIconCandidate {
+	var icons []linkIconCandidate
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "link" {
+			var rel, href, sizes string
+			for _, attr := range n.Attr {
+				switch attr.Key {
+				case "rel":
+					rel = strings.ToLower(attr.Val)
+				case "href":
+					href = attr.Val
+				case "sizes":
+					sizes = attr.Val
+				}
 			}
-			if attr.Key == "href" {
-				href = attr.Val
+			if href != "" && strings.Contains(rel, "icon") && !strings.Contains(rel, "mask-icon") {
+				icons = append(icons, linkIconCandidate{rel: rel, href: href, sizes: sizes})
 			}
 		}
-		if href != "" && strings.Contains(rel, "icon") {
-			return href
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
 		}
 	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if href := extractIconHref(c); href != "" {
-			return href
+	walk(n)
+	return icons
+}
+
+// iconDeclaredArea 把 sizes="WxH ..." 解析成像素面积；"any"（SVG 等可缩放图标）
+// 按 512 见方计；apple-touch-icon 未声明尺寸时按 180 见方计（手机桌面标准）。
+func iconDeclaredArea(sizes string, isAppleTouch bool) int {
+	if strings.Contains(strings.ToLower(sizes), "any") {
+		return 512 * 512
+	}
+	best := 0
+	for _, token := range strings.Fields(sizes) {
+		parts := strings.SplitN(strings.ToLower(token), "x", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		w, errW := strconv.Atoi(strings.TrimSpace(parts[0]))
+		h, errH := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if errW != nil || errH != nil || w <= 0 || h <= 0 {
+			continue
+		}
+		if area := w * h; area > best {
+			best = area
 		}
 	}
-	return ""
+	if best == 0 && isAppleTouch {
+		best = 180 * 180
+	}
+	return best
+}
+
+// pickBestIconHref 从候选里挑最清晰的图标：apple-touch-icon 专为手机桌面
+// 设计、优先选取；同类之间按 sizes 面积取最大，避免抓到 16x16 的小图标。
+func pickBestIconHref(candidates []linkIconCandidate) string {
+	best := ""
+	bestArea := -1
+	bestTouch := false
+	for _, c := range candidates {
+		if strings.Contains(c.rel, "mask-icon") {
+			continue
+		}
+		isTouch := strings.Contains(c.rel, "apple-touch-icon")
+		area := iconDeclaredArea(c.sizes, isTouch)
+		if isTouch != bestTouch {
+			if !isTouch {
+				continue
+			}
+		} else if area <= bestArea {
+			continue
+		}
+		best, bestArea, bestTouch = c.href, area, isTouch
+	}
+	return best
 }
 
 func resolveURL(baseURL, href string) (string, error) {
@@ -2990,6 +3077,12 @@ func (s *server) handleGetSystemConfig(w http.ResponseWriter, r *http.Request) {
 	var userCount int
 	if err := s.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users").Scan(&userCount); err == nil && userCount == 0 {
 		config["no_users"] = "true"
+	}
+
+	if s.appIconPath != "" {
+		if _, err := os.Stat(s.appIconPath); err == nil {
+			config["app_icon_custom"] = "true"
+		}
 	}
 
 	respondJSON(w, http.StatusOK, config)
@@ -4698,6 +4791,454 @@ func saveBase64Icon(iconData string, iconPath string) (string, error) {
 	return fmt.Sprintf("/icons/%s/%s", dateDir, filename), nil
 }
 
+// ============ 自定义图标上传与“添加到桌面”跳转页 ============
+
+type iconUploadRequest struct {
+	Data string `json:"data"`
+}
+
+// handleIconUpload 保存前端压缩好的自定义图标（PNG data URL），返回站内访问路径。
+func (s *server) handleIconUpload(w http.ResponseWriter, r *http.Request) {
+	var req iconUploadRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	data := strings.TrimSpace(req.Data)
+	if !strings.HasPrefix(data, "data:image/") {
+		respondError(w, http.StatusBadRequest, errors.New("仅支持上传图片文件"))
+		return
+	}
+	if len(data) > 6<<20 {
+		respondError(w, http.StatusBadRequest, errors.New("图片过大，请控制在 4MB 以内"))
+		return
+	}
+	savedPath, err := saveBase64Icon(data, s.iconPath)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("保存图标失败: %w", err))
+		return
+	}
+	respondJSON(w, http.StatusCreated, map[string]string{"url": savedPath})
+}
+
+// ============ 应用自定义图标（PWA / 桌面快捷方式） ============
+
+// appIconNames 由自定义应用图标接管的应用图标文件名。
+var appIconNames = map[string]bool{
+	"favicon.ico":  true,
+	"icon-180.png": true,
+	"icon-192.png": true,
+	"icon-512.png": true,
+}
+
+// serveAppIcon 输出应用图标：设置了自定义图标（data/appicon.png）时统一用
+// 自定义图，否则回退到内嵌默认图。no-cache 保证换图后重新添加桌面快捷
+// 方式能立刻拿到新图。
+func (s *server) serveAppIcon(w http.ResponseWriter, r *http.Request, name string) {
+	if !appIconNames[name] {
+		http.NotFound(w, r)
+		return
+	}
+	if s.appIconPath != "" {
+		if f, err := os.Open(s.appIconPath); err == nil {
+			defer f.Close()
+			st, _ := f.Stat()
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeContent(w, r, name, st.ModTime(), f)
+			return
+		}
+	}
+	path := "app-icons/" + name
+	contentType := "image/png"
+	if name == "favicon.ico" {
+		path = "favicon.ico"
+		contentType = "image/x-icon"
+	}
+	raw, err := staticFS.ReadFile("static/" + path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(raw)
+}
+
+// handleAppManifest 输出 PWA manifest：图标路径带网关前缀（静态文件里的
+// 根相对路径在飞牛网关下会解析到网关根，导致 PWA 图标失效），设置了自定义
+// 应用图标时替换为自定义图。
+func (s *server) handleAppManifest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "no-cache")
+	raw, err := staticFS.ReadFile("static/manifest.webmanifest")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		_, _ = w.Write(raw)
+		return
+	}
+	base := goBasePrefix(r)
+	manifest["icons"] = []map[string]string{
+		{"src": base + "/app-icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+		{"src": base + "/app-icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+	}
+	_ = json.NewEncoder(w).Encode(manifest)
+}
+
+type appIconRequest struct {
+	Data string `json:"data"`
+}
+
+// handleAppIconUpload 上传应用自定义图标（前端压好的 512 见方 PNG），保存
+// 为 data/appicon.png，供 PWA 图标与 favicon 动态接管。
+func (s *server) handleAppIconUpload(w http.ResponseWriter, r *http.Request) {
+	if err := s.requireAdmin(r); err != nil {
+		respondError(w, http.StatusForbidden, err)
+		return
+	}
+	if s.appIconPath == "" {
+		respondError(w, http.StatusInternalServerError, errors.New("应用图标路径未配置"))
+		return
+	}
+	var req appIconRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("invalid body: %w", err))
+		return
+	}
+	data := strings.TrimSpace(req.Data)
+	if !strings.HasPrefix(data, "data:image/png;base64,") {
+		respondError(w, http.StatusBadRequest, errors.New("仅支持 PNG 图片"))
+		return
+	}
+	if len(data) > 6<<20 {
+		respondError(w, http.StatusBadRequest, errors.New("图片过大，请控制在 4MB 以内"))
+		return
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(data, "data:image/png;base64,"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Errorf("图片解码失败: %w", err))
+		return
+	}
+	if err := os.WriteFile(s.appIconPath, decoded, 0644); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Errorf("保存图标失败: %w", err))
+		return
+	}
+	respondJSON(w, http.StatusCreated, map[string]string{"message": "success"})
+}
+
+// handleAppIconReset 删除自定义应用图标，恢复内嵌默认图。
+func (s *server) handleAppIconReset(w http.ResponseWriter, r *http.Request) {
+	if err := s.requireAdmin(r); err != nil {
+		respondError(w, http.StatusForbidden, err)
+		return
+	}
+	if s.appIconPath != "" {
+		if err := os.Remove(s.appIconPath); err != nil && !os.IsNotExist(err) {
+			respondError(w, http.StatusInternalServerError, fmt.Errorf("删除图标失败: %w", err))
+			return
+		}
+	}
+	respondJSON(w, http.StatusOK, map[string]string{"message": "success"})
+}
+
+// requireAdmin 校验当前登录用户是管理员。
+func (s *server) requireAdmin(r *http.Request) error {
+	userID := getUserID(r)
+	var isAdmin int
+	if err := s.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("账号不存在，请重新登录")
+		}
+		return fmt.Errorf("校验权限失败: %w", err)
+	}
+	if isAdmin != 1 {
+		return errors.New("需要管理员权限")
+	}
+	return nil
+}
+
+// goBasePrefix 返回跳转页内部链接要带的网关前缀：飞牛网关 socket 请求的前缀
+// 在上下文里；普通端口带前缀访问时（-fnos-app 注册的 prefix/* 路由）从请求
+// 路径里取；直连服务端口时为空。
+func goBasePrefix(r *http.Request) string {
+	if p, ok := r.Context().Value(fnOSGatewayPrefixContextKey{}).(string); ok && p != "" {
+		return strings.TrimSuffix(p, "/")
+	}
+	if strings.HasPrefix(r.URL.Path, "/app/") {
+		rest := strings.TrimPrefix(r.URL.Path, "/app/")
+		if i := strings.Index(rest, "/"); i >= 0 {
+			return "/app/" + rest[:i]
+		}
+	}
+	return ""
+}
+
+// goShortcutIcon 把书签的 favicon_url 分拆成跳转页图标与 manifest 图标：
+// 本地保存的图标和远程 URL 两边都用；data: 图标只有 iOS 的 apple-touch-icon
+// 认，manifest 留空走应用兜底；emoji 或空值两边都走兜底。空串表示用应用自带图标。
+func goShortcutIcon(favicon string) (pageIcon, manifestIcon string) {
+	f := strings.TrimSpace(favicon)
+	switch {
+	case strings.HasPrefix(f, "/icons/"):
+		return f, f
+	case strings.HasPrefix(f, "data:image/"):
+		return f, ""
+	case strings.HasPrefix(f, "http://"), strings.HasPrefix(f, "https://"):
+		return f, f
+	default:
+		return "", ""
+	}
+}
+
+// goSitePath 给站内绝对路径图标（/icons/... 等）拼上网关前缀；远程 URL 与 data: 原样返回。
+func goSitePath(base, icon string) string {
+	if strings.HasPrefix(icon, "/") {
+		return base + icon
+	}
+	return icon
+}
+
+// iconMIMEFromPath 按扩展名猜图标的 MIME 类型，猜不出返回空串（manifest 里省略 type）。
+func iconMIMEFromPath(iconURL string) string {
+	clean := iconURL
+	if i := strings.IndexAny(clean, "?#"); i >= 0 {
+		clean = clean[:i]
+	}
+	dot := strings.LastIndex(clean, ".")
+	if dot < 0 {
+		return ""
+	}
+	switch strings.ToLower(clean[dot:]) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	case ".ico":
+		return "image/x-icon"
+	case ".svg":
+		return "image/svg+xml"
+	default:
+		return ""
+	}
+}
+
+// goManifestIcons 组装 manifest 的 icons 数组：本地图标（上传图统一压成
+// 512 见方 PNG）按 512 声明，其余尺寸不明就声明 any 由浏览器自行缩放。
+func goManifestIcons(iconURL string) []map[string]string {
+	icon := map[string]string{"src": iconURL, "sizes": "any"}
+	if strings.HasSuffix(strings.ToLower(strings.SplitN(iconURL, "?", 2)[0]), ".png") {
+		icon["sizes"] = "512x512"
+	}
+	if mime := iconMIMEFromPath(iconURL); mime != "" {
+		icon["type"] = mime
+	}
+	return []map[string]string{icon}
+}
+
+// handleGoJump 书签跳转页：手机浏览器在本页“添加到主屏幕”时，会取本页的
+// apple-touch-icon / manifest 图标与标题，做成桌面快捷方式；之后从桌面打开
+// 本页即自动跳进目标网站。桌面端浏览器的“创建快捷方式”同样适用。
+func (s *server) handleGoJump(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	var title, rawURL, favicon string
+	err = s.db.QueryRowContext(r.Context(),
+		"SELECT title, url, COALESCE(favicon_url, '') FROM nodes WHERE id = ? AND type = ?",
+		id, nodeTypeBookmark).Scan(&title, &rawURL, &favicon)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	target := strings.TrimSpace(rawURL)
+	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
+		http.NotFound(w, r)
+		return
+	}
+
+	base := goBasePrefix(r)
+	pageIcon, _ := goShortcutIcon(favicon)
+	appleTouchIcon := goSitePath(base, pageIcon)
+	emoji := ""
+	if appleTouchIcon == "" {
+		if favicon != "" {
+			// favicon 是 emoji 之类非 URL 值：卡片上直接展示，图标走应用兜底
+			emoji = favicon
+		}
+		appleTouchIcon = base + "/app-icons/icon-180.png"
+	}
+	host := ""
+	if u, parseErr := url.Parse(target); parseErr == nil {
+		host = u.Hostname()
+	}
+	displayTitle := title
+	if displayTitle == "" {
+		displayTitle = host
+	}
+
+	idStr := strconv.FormatInt(id, 10)
+	targetJSON, _ := json.Marshal(target)
+	flagJSON, _ := json.Marshal("go_added_" + idStr)
+	cardIcon := fmt.Sprintf(`<img class="icon" src="%s" alt="" onerror="this.style.display='none'">`, html.EscapeString(appleTouchIcon))
+	if emoji != "" {
+		cardIcon = fmt.Sprintf(`<div class="icon icon-emoji">%s</div>`, html.EscapeString(emoji))
+	}
+
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>%s</title>
+<link rel="manifest" href="%s">
+<link rel="apple-touch-icon" sizes="180x180" href="%s">
+<link rel="icon" href="%s">
+<meta name="theme-color" content="#0078d4">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  background:#f5f6f8; color:#1f2329; padding:24px; text-align:center; }
+.card { background:#fff; border-radius:20px; box-shadow:0 4px 24px rgba(0,0,0,.08);
+  padding:32px 24px; max-width:380px; width:100%%; }
+.icon { width:84px; height:84px; border-radius:20px; object-fit:cover; background:#fff;
+  box-shadow:0 2px 10px rgba(0,0,0,.10); }
+.icon-emoji { font-size:52px; line-height:84px; overflow:hidden; }
+h1 { font-size:18px; margin:14px 0 4px; word-break:break-all; }
+.host { font-size:13px; color:#8a9099; word-break:break-all; }
+.guide { display:none; margin-top:18px; text-align:left; }
+.guide p { font-size:14px; line-height:1.7; color:#5a6068; margin:4px 0; }
+.guide b { color:#1f2329; }
+.btn { display:block; margin-top:16px; background:#0078d4; color:#fff; text-decoration:none;
+  border-radius:12px; padding:12px 16px; font-size:15px; font-weight:500; text-align:center; }
+.jumping { display:none; margin-top:18px; font-size:14px; color:#5a6068; }
+.jumping a { color:#0078d4; }
+.noscript-link { margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="card">
+  %s
+  <h1>%s</h1>
+  <p class="host">%s</p>
+  <div class="guide" id="guide">
+    <p><b>添加到手机桌面后，点图标即可直达本站，图标就是上面这张。</b></p>
+    <p id="tip-ios">📱 iPhone：点 Safari 底部「分享」按钮，选「添加到主屏幕」。</p>
+    <p id="tip-android">🤖 安卓：点浏览器右上角「⋮」菜单，选「添加到主屏幕」。</p>
+    <p id="tip-desktop">💻 电脑：浏览器菜单里选「创建快捷方式」或「安装应用」。</p>
+    <p id="tip-home">🌐 浏览器首页快捷方式：复制本页网址，添加到浏览器首页的快捷方式里，图标就用上面这张。</p>
+    <a class="btn" id="open-btn" href="%s">直接打开「%s」</a>
+  </div>
+  <p class="jumping" id="jumping">正在打开，若无反应可<a href="%s">点此进入</a>。</p>
+  <noscript><p class="noscript-link"><a href="%s">打开「%s」</a></p></noscript>
+</div>
+<script>
+(function () {
+  var target = %s;
+  var flag = %s;
+  var guide = document.getElementById('guide');
+  var jumping = document.getElementById('jumping');
+  function openTarget() {
+    jumping.style.display = 'block';
+    location.replace(target);
+  }
+  var standalone = navigator.standalone === true
+    || matchMedia('(display-mode: standalone)').matches
+    || matchMedia('(display-mode: minimal-ui)').matches;
+  if (standalone) { openTarget(); return; }
+  try {
+    // 已经从本页点过「直接打开」：视为添加完成，之后再开本页直接进站
+    if (localStorage.getItem(flag) === '1') { setTimeout(openTarget, 600); return; }
+  } catch (e) {}
+  // 首次引导：停留本页，等用户用浏览器菜单添加到桌面
+  guide.style.display = 'block';
+  var ua = navigator.userAgent;
+  var first = /iPhone|iPad|iPod/.test(ua) ? 'tip-ios'
+    : /Android|Mobile/i.test(ua) ? 'tip-android' : 'tip-desktop';
+  ['tip-ios', 'tip-android', 'tip-desktop'].forEach(function (id) {
+    if (id === first) document.getElementById(id).style.fontWeight = '600';
+  });
+  document.getElementById('open-btn').addEventListener('click', function () {
+    try { localStorage.setItem(flag, '1'); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
+`,
+		html.EscapeString(displayTitle),
+		html.EscapeString(base+"/go/"+idStr+"/manifest.webmanifest"),
+		html.EscapeString(appleTouchIcon),
+		html.EscapeString(appleTouchIcon),
+		cardIcon,
+		html.EscapeString(displayTitle),
+		html.EscapeString(host),
+		html.EscapeString(target),
+		html.EscapeString(displayTitle),
+		html.EscapeString(target),
+		html.EscapeString(target),
+		html.EscapeString(displayTitle),
+		string(targetJSON),
+		string(flagJSON),
+	)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(w, page)
+}
+
+// handleGoManifest 输出单个书签的 PWA manifest，供安卓浏览器“添加到主屏幕”
+// 时读取名称与图标。
+func (s *server) handleGoManifest(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	var title, favicon string
+	err = s.db.QueryRowContext(r.Context(),
+		"SELECT title, COALESCE(favicon_url, '') FROM nodes WHERE id = ? AND type = ?",
+		id, nodeTypeBookmark).Scan(&title, &favicon)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	base := goBasePrefix(r)
+	_, manifestIcon := goShortcutIcon(favicon)
+	manifestIcon = goSitePath(base, manifestIcon)
+	if manifestIcon == "" {
+		manifestIcon = base + "/app-icons/icon-512.png"
+	}
+	shortName := []rune(strings.TrimSpace(title))
+	if len(shortName) > 12 {
+		shortName = shortName[:12]
+	}
+	manifest := map[string]any{
+		"name":             title,
+		"short_name":       string(shortName),
+		"start_url":        base + "/go/" + strconv.FormatInt(id, 10),
+		"scope":            base + "/",
+		"display":          "standalone",
+		"background_color": "#ffffff",
+		"theme_color":      "#0078d4",
+		"icons":            goManifestIcons(manifestIcon),
+	}
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(manifest)
+}
+
 // downloadAndSaveIcon 下载图标URL并保存到本地文件
 func (s *server) downloadAndSaveIcon(iconURL string, iconPath string) (string, error) {
 	// 检查是否是HTTP/HTTPS URL
@@ -4885,6 +5426,10 @@ func (s *server) faviconWorker() {
 		fields := make([]string, 0, 2)
 		args := make([]any, 0, 3)
 		if (!existingFavicon.Valid || existingFavicon.String == "") && icon != "" {
+			// 图标顺手保存到本地，桌面快捷方式跳转页才能稳定取到
+			if saved, saveErr := s.downloadAndSaveIcon(icon, s.iconPath); saveErr == nil {
+				icon = saved
+			}
 			fields = append(fields, "favicon_url = ?")
 			args = append(args, icon)
 		}
