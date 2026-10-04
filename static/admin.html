@@ -1318,17 +1318,35 @@
       <div class="modal" @click.stop style="max-width: 380px;">
         <div class="modal-hd"><div class="modal-title">☕ 请作者喝杯咖啡</div><button class="icon-btn" @click="closeDonateModal">✕</button></div>
         <div class="modal-bd" style="text-align: center;">
-          <img src="/img/donate-wechat.png" alt="微信收款码" style="width: 250px; height: auto; border-radius: 8px; border: 1px solid var(--border);" />
-          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px; line-height: 1.7;">
-            本应用完全免费、无广告，数据存储在你自己的设备上。<br/>
-            如果它帮到了你，欢迎请作者喝杯咖啡。<br/>
-            <strong>金额随意，1 元也是心意。</strong>
+          <img src="/img/donate-wechat.png" alt="微信赞赏码" style="width: 150px; height: auto; border-radius: 10px; border: 1px solid var(--border); background: #fff; padding: 4px;" />
+          <div style="font-size: 11px; color: var(--text-tertiary, #999); margin-top: 4px;">微信扫码赞赏</div>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 10px; line-height: 1.7;">
+            应用免费无广告、数据保存在本机。若对你有帮助，欢迎赞赏——<strong>金额随意，1 元也是心意</strong>。
           </p>
-          <p style="font-size: 12px; color: var(--text-tertiary, #999); margin-top: 8px; line-height: 1.6;">不赞赏也完全可以，所有功能不受任何影响。<br/>支付后可点击下方按钮发送一次匿名支持计数（仅设备统计信息，与你的微信账号和支付记录无任何关联）。</p>
         </div>
         <div class="modal-ft">
           <button class="btn btn-secondary" @click="closeDonateModal">暂不支持</button>
-          <button class="btn btn-primary" @click="markDonated" :disabled="donateModal.loading">{{ donateModal.loading ? '发送中…' : '❤ 已支持' }}</button>
+          <button class="btn btn-primary" @click="openDonateAmount" :disabled="donateModal.loading">{{ donateModal.loading ? '发送中…' : '❤ 已支持' }}</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- 金额输入弹窗（浮于赞赏弹窗之上） -->
+  <transition name="fade">
+    <div v-if="donateAmountModal.visible" class="modal-overlay" style="z-index: 1100;" @mousedown.self="closeDonateAmount">
+      <div class="modal" @click.stop style="max-width: 320px; text-align: center;">
+        <div class="modal-hd"><div class="modal-title">填写赞赏金额</div><button class="icon-btn" @click="closeDonateAmount">✕</button></div>
+        <div class="modal-bd">
+          <p style="font-size: 12px; color: var(--text-tertiary, #999); margin: 0 0 10px;">仅用于统计，不做支付核验</p>
+          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;">
+            <span v-for="p in [1,5,10,50]" :key="p" @click="donateAmountModal.amount = p; donateAmountModal.custom = ''" style="padding: 5px 14px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; cursor: pointer;" :style="donateAmountModal.amount === p ? 'border-color: var(--primary); color: var(--primary); background: rgba(0,120,212,.08);' : ''">{{ p }} 元</span>
+          </div>
+          <input class="input" type="number" min="0" step="0.01" placeholder="自定义金额（元）" style="margin-top: 12px;" v-model.number="donateAmountModal.custom" @input="donateAmountModal.amount = Number(donateAmountModal.custom) || 0" />
+          <p v-if="!donateAmountModal.amount" style="font-size: 11px; color: #b8860b; margin: 6px 0 0;">未填写将以 0 元上报</p>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-primary" style="width: 100%;" @click="confirmDonateAmount" :disabled="donateModal.loading">{{ donateModal.loading ? '发送中…' : '确认上报' }}</button>
         </div>
       </div>
     </div>
@@ -1910,6 +1928,7 @@ const app = createApp({
       bmCreateFolderModal: { visible: false, title: '', parentId: null, icon: '', loading: false, error: '' },
       bmCreateBookmarkModal: { visible: false, url: '', title: '', parentId: null, favicon_url: '', visibility: 'private', remark: '', metadataLoading: false, loading: false, error: '' },
       bmIconUploading: false,
+      donateAmountModal: { visible: false, amount: 0, custom: '' },
       appIconUploading: false,
       appIconCacheBust: Date.now(),
       folderIconDialog: { visible: false, node: null, selectedIcon: '', customIcon: '', presets: FOLDER_ICON_PRESETS },
@@ -2310,16 +2329,20 @@ const app = createApp({
       if (this.serverStartedAt) { try { localStorage.setItem('donate_dismissed_start', this.serverStartedAt); } catch {} }
       if (this.appVersion) { try { localStorage.setItem('donate_dismissed_version', this.appVersion); } catch {} }
     },
-    async markDonated() {
+    openDonateAmount() { this.donateAmountModal = { visible: true, amount: 0, custom: '' }; },
+    closeDonateAmount() { this.donateAmountModal.visible = false; },
+    async confirmDonateAmount() { await this.markDonated(this.donateAmountModal.amount || 0); },
+    async markDonated(amount = 0) {
       this.donateModal.loading = true;
       let ok = false;
       try {
-        const res = await fetch('/api/donate/support', { method: 'POST', headers: this.getHeaders() });
+        const res = await fetch('/api/donate/support', { method: 'POST', headers: this.getHeaders('application/json'), body: JSON.stringify({ amount: amount || 0 }) });
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           ok = data.ok !== false;
         }
       } catch {}
+      if (ok) this.donateAmountModal.visible = false;
       this.donateModal.loading = false;
       if (ok) {
         // 仅在请求成功后记住当前版本，失败则下次启动继续提示；升级到新版本后重新提示

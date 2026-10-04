@@ -262,6 +262,9 @@ const app = createApp({
         supportModal: {
           visible: false
         },
+        supportSending: false,
+        supportError: "",
+        amountModal: { visible: false, amount: 0, custom: "" },
         bookmarkEditMode: false,
         selectedBookmarks: new Set(),
         moveModal: {
@@ -2279,6 +2282,38 @@ ${indent}<DT><A HREF="${href}" ADD_DATE="${now}"${iconAttr}>${title}</A>`;
       this.hideContextMenu();
       if (!node || node.type !== "bookmark") return;
       window.open("go/" + node.id, "_blank");
+    },
+    openAmountModal() {
+      this.amountModal = { visible: true, amount: 0, custom: "" };
+      this.supportError = "";
+    },
+    closeAmountModal() {
+      this.amountModal.visible = false;
+      this.amountModal.amount = 0;
+      this.amountModal.custom = "";
+    },
+    async confirmSupport() {
+      if (this.supportSending) return;
+      this.supportSending = true;
+      this.supportError = "";
+      try {
+        const res = await fetch("/api/donate/support", {
+          method: "POST",
+          headers: this.getHeaders("application/json"),
+          body: JSON.stringify({ amount: this.amountModal.amount || 0 }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "发送失败，请稍后再试");
+        }
+        this.showToast("感谢支持，已匿名上报 ❤", "success");
+        this.closeAmountModal();
+        this.supportModal.visible = false;
+      } catch (error) {
+        this.supportError = error.message || "发送失败，请稍后再试";
+      } finally {
+        this.supportSending = false;
+      }
     },
     contextDelete() {
       const node = this.contextNode;

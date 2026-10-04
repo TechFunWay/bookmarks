@@ -125,3 +125,52 @@ func TestHandleDonateSupport_Unauthorized(t *testing.T) {
 		t.Fatalf("want 401 without token, got %d", rec.Code)
 	}
 }
+
+// TestHandleDonateSupport_WithAmount 验证金额随事件透传：
+// 请求体携带 amount 时原样到达统计服务器，负数钳制为 0，空请求体按 0。
+func TestHandleDonateSupport_WithAmount(t *testing.T) {
+	received := make(chan StatsRequest, 2)
+	statsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req StatsRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		received <- req
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer statsSrv.Close()
+
+	t.Setenv("STATS_ENDPOINT", statsSrv.URL)
+	origBase := statsBaseRequest
+	statsBaseRequest = StatsRequest{AppName: "bookmarks", Version: "vTest", DeviceID: "abc123", OS: "linux", Arch: "amd64"}
+	defer func() { statsBaseRequest = origBase }()
+
+	srv, db := newTestServer(t)
+	insertTestUser(t, db, "root", true)
+	r := chi.NewRouter()
+	r.Post("/api/donate/support", srv.tokenAuthMiddleware(srv.handleDonateSupport))
+
+	post := func(body string) {
+		req := httptest.NewRequest("POST", "/api/donate/support", strings.NewReader(body))
+		req.Header.Set("Authorization", userTokenFor("root"))
+		rec := do(t, r, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d (body=%q)", rec.Code, rec.Body.String())
+		}
+	}
+
+	post(`{"amount":12.5}`)
+	got := <-received
+	if got.Amount != 12.5 {
+		t.Fatalf("amount: want 12.5, got %v", got.Amount)
+	}
+
+	post(`{"amount":-3}`)
+	got = <-received
+	if got.Amount != 0 {
+		t.Fatalf("negative amount should clamp to 0, got %v", got.Amount)
+	}
+
+	post(``)
+	if got := <-received; got.Amount != 0 {
+		t.Fatalf("empty body should default to 0, got %v", got.Amount)
+	}
+}

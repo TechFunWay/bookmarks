@@ -28,7 +28,7 @@
 >
 > **📥 下载地址**：[Gitee Releases](https://gitee.com/TechFunWay/bookmarks/releases) | [GitHub Releases](https://github.com/TechFunWay/bookmarks/releases)
 
-**最新版本：v3.3.2** - 链接检测更准确，低配设备使用更流畅 | [查看详情](CHANGELOG.md) | [立即下载 (Gitee)](https://gitee.com/TechFunWay/bookmarks/releases/tag/v3.3.2)
+**最新版本：v3.4.0** - 书签与应用图标支持自定义，支持作者弹窗统一升级 | [查看详情](CHANGELOG.md) | [立即下载 (Gitee)](https://gitee.com/TechFunWay/bookmarks/releases/tag/v3.4.0)
 
 ---
 
